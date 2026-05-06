@@ -222,6 +222,37 @@ defaults delete com.categorizedtodo.app
 
 Y reabrí la app.
 
+### Configurar Jira (modo Jira)
+
+1. Generá un API token en
+   <https://id.atlassian.com/manage-profile/security/api-tokens>.
+2. Abrí la configuración (icono de engranaje en el popup) → pestaña **Jira**.
+3. Completá:
+   - URL: `https://<tu-org>.atlassian.net` (sin `/` final).
+   - Email: el de tu cuenta Atlassian.
+   - API token: pegá el token generado (queda guardado en el Keychain).
+   - JQL: pegá tu consulta (ver ejemplos en `README.md`).
+4. Click en **Probar conexión** — debe mostrar `Conectado como <Nombre>` en verde.
+5. Cambiá a la pestaña **General** → **Modo: Jira**.
+6. (Opcional) En **Categorías Jira** ajustá los filtros que prefieras.
+
+El token nunca se guarda en `UserDefaults`. Para borrarlo manualmente:
+
+```bash
+security delete-generic-password -s com.categorizedtodo.app -a jira.token
+```
+
+### Logs de Jira
+
+Activá **Diagnóstico → Logs detallados** en la pestaña Jira y ejecutá:
+
+```bash
+log stream --predicate 'process == "CategorizedToDo"' --info
+```
+
+Vas a ver cada fetch, cuántos issues llegaron y cuántos cayeron en cada
+pestaña. Útil para iterar JQL y filtros.
+
 ### Falla `swift build` con "platforms" en macOS antiguo
 
 `Package.swift` requiere macOS 14+. En versiones anteriores hay que bajar

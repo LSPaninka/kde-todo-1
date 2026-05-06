@@ -3,18 +3,21 @@ import SwiftUI
 import Combine
 
 /// Owns the menu-bar status item and the popover that contains the popup.
-/// Re-renders the menu-bar icon whenever the store or settings change.
+/// Re-renders the menu-bar icon whenever the store, the jira store or the
+/// settings change.
 final class StatusBarController {
     private let statusItem: NSStatusItem
     private let popover: NSPopover
     private var cancellables = Set<AnyCancellable>()
 
     private let store: TaskStore
+    private let jira: JiraStore
     private let settings: AppSettings
     private weak var settingsWindowController: NSWindowController?
 
-    init(store: TaskStore, settings: AppSettings) {
+    init(store: TaskStore, jira: JiraStore, settings: AppSettings) {
         self.store = store
+        self.jira = jira
         self.settings = settings
 
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -24,7 +27,7 @@ final class StatusBarController {
         popover.contentSize = NSSize(width: settings.popupWidth,
                                      height: settings.popupHeight)
 
-        let popup = PopupView(store: store, settings: settings,
+        let popup = PopupView(store: store, settings: settings, jira: jira,
                               onOpenSettings: { [weak self] in
             self?.openSettings()
         })
@@ -34,6 +37,10 @@ final class StatusBarController {
 
         // Refresh the menu-bar icon on any change.
         store.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.refreshIcon() }
+            .store(in: &cancellables)
+        jira.objectWillChange
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.refreshIcon() }
             .store(in: &cancellables)
@@ -56,7 +63,6 @@ final class StatusBarController {
         button.target = self
         button.action = #selector(togglePopover(_:))
         button.imagePosition = .imageOnly
-        // Important: don't tint the image — we want the white square as-is.
         button.image?.isTemplate = false
     }
 
@@ -74,10 +80,8 @@ final class StatusBarController {
 
     // MARK: - Icon rendering
 
-    /// Render the SwiftUI MenuBarIcon to an NSImage and assign it to the
-    /// status-item button.
     func refreshIcon() {
-        let view = MenuBarIcon(store: store, settings: settings)
+        let view = MenuBarIcon(store: store, jira: jira, settings: settings)
             .frame(height: 18)
             .padding(.horizontal, 1)
         let renderer = ImageRenderer(content: view)
@@ -89,7 +93,8 @@ final class StatusBarController {
         } else {
             // Fallback if renderer fails: just text.
             statusItem.button?.image = nil
-            statusItem.button?.title = "\(store.totalPending)"
+            let n = settings.mode == .todo ? store.totalPending : jira.issues.count
+            statusItem.button?.title = "\(n)"
         }
     }
 
@@ -101,19 +106,18 @@ final class StatusBarController {
             NSApp.activate(ignoringOtherApps: true)
             return
         }
-        let view = SettingsView(store: store, settings: settings)
+        let view = SettingsView(store: store, jira: jira, settings: settings)
         let hosting = NSHostingController(rootView: view)
         let window = NSWindow(contentViewController: hosting)
         window.title = "Categorized ToDo — Configuración"
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-        window.setContentSize(NSSize(width: 540, height: 480))
+        window.setContentSize(NSSize(width: 580, height: 520))
         window.center()
         let wc = NSWindowController(window: window)
         settingsWindowController = wc
         wc.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
 
-        // Close popover so the user can interact with the window.
         if popover.isShown { popover.performClose(nil) }
     }
 }

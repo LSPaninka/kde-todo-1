@@ -1,9 +1,14 @@
 import SwiftUI
 
-/// Configuración (Preferences) — equivalent to KDE's config dialog.
-/// Three tabs: General, Categorías, Apariencia.
+/// Configuración (Preferences). Five pestañas:
+///   - General (modo, popup, etc.)
+///   - Categorías locales
+///   - Apariencia (menubar / popup)
+///   - Jira (conexión + JQL)
+///   - Categorías Jira (filtros por pestaña)
 struct SettingsView: View {
     @ObservedObject var store: TaskStore
+    @ObservedObject var jira: JiraStore
     @ObservedObject var settings: AppSettings
 
     var body: some View {
@@ -14,8 +19,12 @@ struct SettingsView: View {
                 .tabItem { Label("Categorías", systemImage: "tag") }
             appearanceTab
                 .tabItem { Label("Apariencia", systemImage: "paintbrush") }
+            JiraSettingsView(jira: jira, settings: settings)
+                .tabItem { Label("Jira", systemImage: "ant") }
+            JiraCategoriesSettingsView(settings: settings)
+                .tabItem { Label("Categorías Jira", systemImage: "rectangle.3.group") }
         }
-        .frame(width: 520, height: 460)
+        .frame(width: 580, height: 520)
         .padding()
     }
 
@@ -23,7 +32,18 @@ struct SettingsView: View {
 
     private var generalTab: some View {
         Form {
-            Section("Categorías") {
+            Section("Modo") {
+                Picker("Fuente de tareas", selection: $settings.mode) {
+                    Text("Lista local (ToDo)").tag(AppMode.todo)
+                    Text("Jira").tag(AppMode.jira)
+                }
+                .pickerStyle(.segmented)
+                Text("ToDo = lista local guardada en este equipo. Jira = lee issues de tu cuenta vía API.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Section("Categorías locales") {
                 Stepper(value: Binding(
                     get: { settings.categoryCount },
                     set: { newValue in

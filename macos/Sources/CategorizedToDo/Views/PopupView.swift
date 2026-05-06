@@ -1,8 +1,35 @@
 import SwiftUI
 
-/// Main popup. Tabs across the top: one per visible category + Archive.
-/// Toolbar at the bottom: settings, quit.
+/// Outer popup. Switches between the local ToDo view and the Jira view based
+/// on `settings.mode`. The fixed frame size from settings is applied here.
 struct PopupView: View {
+    @ObservedObject var store: TaskStore
+    @ObservedObject var settings: AppSettings
+    @ObservedObject var jira: JiraStore
+    var onOpenSettings: () -> Void
+
+    var body: some View {
+        Group {
+            switch settings.mode {
+            case .todo:
+                TodoPopupView(store: store,
+                              settings: settings,
+                              onOpenSettings: onOpenSettings)
+            case .jira:
+                JiraView(jira: jira,
+                         settings: settings,
+                         onOpenSettings: onOpenSettings)
+            }
+        }
+        .frame(width: CGFloat(settings.popupWidth),
+               height: CGFloat(settings.popupHeight))
+    }
+}
+
+/// The original local-todo popup (tabs per category + Archive). Identical to
+/// the pre-Jira behavior; renamed so it can sit alongside `JiraView` inside
+/// the new `PopupView` switcher.
+struct TodoPopupView: View {
     @ObservedObject var store: TaskStore
     @ObservedObject var settings: AppSettings
     var onOpenSettings: () -> Void
@@ -19,8 +46,6 @@ struct PopupView: View {
             Divider()
             toolbar
         }
-        .frame(width: CGFloat(settings.popupWidth),
-               height: CGFloat(settings.popupHeight))
         .onAppear { clampSelection() }
         .onChange(of: settings.categoryCount) { _ in clampSelection() }
     }
