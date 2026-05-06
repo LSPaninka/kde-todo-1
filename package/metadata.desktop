@@ -1,0 +1,24 @@
+[Desktop Entry]
+Name=Categorized ToDo
+Name[es]=Lista de tareas por categorías
+Comment=A categorized to-do list with priorities, subtasks and archive
+Comment[es]=Lista de tareas por categorías con prioridades, subtareas y archivo
+Icon=view-task
+Type=Service
+ServiceTypes=Plasma/Applet
+
+X-Plasma-API=declarativeappletscript
+X-Plasma-MainScript=ui/main.qml
+X-Plasma-StandAloneApp=false
+X-Plasma-ProvidesTaskManager=false
+X-Plasma-NotificationArea=false
+
+X-KDE-PluginInfo-Author=Claude (Anthropic) for LSPaninka
+X-KDE-PluginInfo-Email=
+X-KDE-PluginInfo-Name=org.kde.plasma.categorizedtodo
+X-KDE-PluginInfo-Version=1.0.0
+X-KDE-PluginInfo-Website=https://github.com/lspaninka/kde-todo-1
+X-KDE-PluginInfo-Category=Utilities
+X-KDE-PluginInfo-License=MIT
+X-KDE-PluginInfo-EnabledByDefault=true
+X-KDE-ServiceTypes=Plasma/Applet

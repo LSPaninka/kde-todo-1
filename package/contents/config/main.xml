@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE kcfg SYSTEM "http://www.kde.org/standards/kcfg/1.0/kcfg.dtd">
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0
+                          http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+
+    <kcfgfile name="categorizedtodorc"/>
+
+    <group name="General">
+        <entry name="mode" type="String">
+            <label>Operating mode: "todo" (local task list) or "jira" (read assigned issues from Jira)</label>
+            <default>todo</default>
+        </entry>
+
+        <entry name="categoryCount" type="Int">
+            <label>Number of active categories (1..4)</label>
+            <default>4</default>
+            <min>1</min>
+            <max>4</max>
+        </entry>
+
+        <entry name="categoryNames" type="StringList">
+            <label>Names for each category</label>
+            <default>Personal,Trabajo,Estudio,Otros</default>
+        </entry>
+
+        <entry name="categoryColors" type="StringList">
+            <label>Hex colors for each category</label>
+            <default>#2ecc71,#f1c40f,#3498db,#e74c3c</default>
+        </entry>
+
+        <entry name="showPriorityIcons" type="Bool">
+            <label>Show priority badges on tasks</label>
+            <default>true</default>
+        </entry>
+
+        <entry name="confirmDelete" type="Bool">
+            <label>Ask for confirmation before deleting archived tasks</label>
+            <default>true</default>
+        </entry>
+
+        <entry name="panelShowLabels" type="Bool">
+            <label>Show category names next to counters in the panel</label>
+            <default>false</default>
+        </entry>
+
+        <entry name="panelShowZero" type="Bool">
+            <label>Show categories with zero pending tasks in the panel</label>
+            <default>true</default>
+        </entry>
+
+        <entry name="panelCounterStyle" type="String">
+            <label>Counter layout in the panel: "right" (number to the right of the swatch) or "inside" (number drawn inside the swatch)</label>
+            <default>right</default>
+        </entry>
+
+        <entry name="panelCounterColors" type="StringList">
+            <label>Per-category counter text color: "white" or "black"</label>
+            <default>white,black,white,white</default>
+        </entry>
+
+        <entry name="popupWidth" type="Int">
+            <label>Popup width in pixels</label>
+            <default>420</default>
+            <min>280</min>
+            <max>900</max>
+        </entry>
+
+        <entry name="popupHeight" type="Int">
+            <label>Popup height in pixels</label>
+            <default>500</default>
+            <min>300</min>
+            <max>1200</max>
+        </entry>
+
+        <!-- Task data is NOT stored here. It lives in JSON files under
+             ~/.local/share/categorizedtodo/ — see docs/PERSISTENCE.md.
+             Only widget configuration (above) is kept by KConfig. -->
+
+        <!-- Jira integration -->
+        <entry name="jiraSite" type="String">
+            <label>Jira Cloud site, e.g. https://your-company.atlassian.net</label>
+            <default></default>
+        </entry>
+        <entry name="jiraEmail" type="String">
+            <label>Jira account email (username for API token auth)</label>
+            <default></default>
+        </entry>
+        <entry name="jiraToken" type="String">
+            <label>Jira API token (NOT your password). Create one at id.atlassian.com. Stored in plain text under ~/.config — see docs/JIRA.md.</label>
+            <default></default>
+        </entry>
+        <entry name="jiraJql" type="String">
+            <label>JQL query for the issues to display</label>
+            <default>assignee = currentUser() AND statusCategory != Done ORDER BY priority DESC, updated DESC</default>
+        </entry>
+        <entry name="jiraRefreshMinutes" type="Int">
+            <label>Auto-refresh interval in minutes (0 = manual only)</label>
+            <default>5</default>
+            <min>0</min>
+            <max>1440</max>
+        </entry>
+        <entry name="jiraMaxResults" type="Int">
+            <label>Maximum number of issues to fetch per call</label>
+            <default>50</default>
+            <min>10</min>
+            <max>200</max>
+        </entry>
+        <entry name="jiraShowDone" type="Bool">
+            <label>(legacy) Show the Done tab — superseded by jiraCategory* entries.</label>
+            <default>false</default>
+        </entry>
+
+        <!-- Configurable Jira categories (tabs in the popup, swatches in
+             the panel). Each i-th element of the parallel StringLists
+             describes one category. -->
+        <entry name="jiraCategoryCount" type="Int">
+            <label>Number of Jira categories (tabs)</label>
+            <default>3</default>
+            <min>1</min>
+            <max>4</max>
+        </entry>
+        <entry name="jiraCategoryNames" type="StringList">
+            <label>Display name of each Jira category</label>
+            <default>Por hacer,En curso,Hechas,Otras</default>
+        </entry>
+        <entry name="jiraCategoryColors" type="StringList">
+            <label>Hex color of each Jira category</label>
+            <default>#42526e,#f5a623,#2ecc71,#9b59b6</default>
+        </entry>
+        <entry name="jiraCategoryTextColors" type="StringList">
+            <label>"white" or "black" text color for each Jira category swatch</label>
+            <default>white,white,white,white</default>
+        </entry>
+        <!-- Filter field per category: one of
+             "statusCategory" (new/indeterminate/done),
+             "issuetype"      (Story/Bug/Task/Sub-task/...),
+             "status"         (To Do/In Progress/Done/Code Review/...),
+             "priority"       (Highest/High/Medium/Low/Lowest),
+             ""               (no filter -> matches all issues). -->
+        <entry name="jiraCategoryFilterFields" type="StringList">
+            <label>Field that each Jira category filters on</label>
+            <default>statusCategory,statusCategory,statusCategory,</default>
+        </entry>
+        <!-- Filter value per category. Comma-separated values inside a
+             single entry mean "match any of these" — but since this list
+             itself is comma-separated (StringList), use ';' as the
+             intra-entry separator. -->
+        <entry name="jiraCategoryFilterValues" type="StringList">
+            <label>Value to match for each Jira category (use ';' for OR)</label>
+            <default>new,indeterminate,done,</default>
+        </entry>
+
+        <entry name="jiraDebug" type="Bool">
+            <label>Log Jira fetch / parse / filter details to plasmashell stdout</label>
+            <default>true</default>
+        </entry>
+    </group>
+</kcfg>
