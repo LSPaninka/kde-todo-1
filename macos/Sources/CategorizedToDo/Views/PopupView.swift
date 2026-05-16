@@ -1,11 +1,13 @@
 import SwiftUI
 
-/// Outer popup. Switches between the local ToDo view and the Jira view based
+/// Outer popup. Switches between ToDo / Jira / GitHub / Notion views based
 /// on `settings.mode`. The fixed frame size from settings is applied here.
 struct PopupView: View {
     @ObservedObject var store: TaskStore
     @ObservedObject var settings: AppSettings
     @ObservedObject var jira: JiraStore
+    @ObservedObject var gh: GhStore
+    @ObservedObject var notion: NotionStore
     var onOpenSettings: () -> Void
 
     var body: some View {
@@ -19,6 +21,14 @@ struct PopupView: View {
                 JiraView(jira: jira,
                          settings: settings,
                          onOpenSettings: onOpenSettings)
+            case .gh:
+                GhView(gh: gh,
+                       settings: settings,
+                       onOpenSettings: onOpenSettings)
+            case .notion:
+                NotionView(notion: notion,
+                           settings: settings,
+                           onOpenSettings: onOpenSettings)
             }
         }
         .frame(width: CGFloat(settings.popupWidth),
@@ -34,8 +44,12 @@ struct TodoPopupView: View {
     @ObservedObject var settings: AppSettings
     var onOpenSettings: () -> Void
 
-    @State private var selection: Int = 0   // 0..<categoryCount, .max → archive
+    /// Tab selection. Special values:
+    ///   - `archiveTag` (`.max`)        → Archive
+    ///   - `globalTag`  (`.max - 1`)    → Global view
+    @State private var selection: Int = 0
     private let archiveTag: Int = .max
+    private let globalTag: Int = .max - 1
 
     var body: some View {
         VStack(spacing: 0) {
@@ -51,7 +65,8 @@ struct TodoPopupView: View {
     }
 
     private func clampSelection() {
-        if selection != archiveTag && selection >= settings.categoryCount {
+        if selection == archiveTag || selection == globalTag { return }
+        if selection >= settings.categoryCount {
             selection = max(0, settings.categoryCount - 1)
         }
     }
@@ -59,36 +74,64 @@ struct TodoPopupView: View {
     // MARK: - Tab bar
 
     private var tabBar: some View {
-        HStack(spacing: 4) {
-            ForEach(0..<settings.categoryCount, id: \.self) { i in
-                tabButton(index: i, isArchive: false)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 4) {
+                tabButton(index: globalTag, kind: .global)
+                ForEach(0..<settings.categoryCount, id: \.self) { i in
+                    tabButton(index: i, kind: .category)
+                }
+                tabButton(index: archiveTag, kind: .archive)
             }
-            tabButton(index: archiveTag, isArchive: true)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 6)
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 6)
     }
 
+    private enum TabKind { case category, archive, global }
+
     @ViewBuilder
-    private func tabButton(index: Int, isArchive: Bool) -> some View {
+    private func tabButton(index: Int, kind: TabKind) -> some View {
         let selected = (selection == index)
-        let title = isArchive ? "Archivo" : settings.categoryName(index)
-        let count = isArchive ? store.archived.count : store.pendingCount(category: index)
-        let color = isArchive ? Color.gray : settings.categoryColor(index)
+        let title: String
+        let count: Int
+        let color: Color
+
+        switch kind {
+        case .category:
+            title = settings.categoryName(index)
+            count = store.pendingCount(category: index)
+            color = settings.categoryColor(index)
+        case .archive:
+            title = "Archivo"
+            count = store.archived.count
+            color = .gray
+        case .global:
+            title = "Global"
+            count = store.totalPending
+            color = .accentColor
+        }
 
         Button {
             selection = index
         } label: {
             HStack(spacing: 5) {
-                if !isArchive {
+                switch kind {
+                case .category:
                     RoundedRectangle(cornerRadius: 2, style: .continuous)
                         .fill(color)
                         .frame(width: 8, height: 12)
+                case .global:
+                    Image(systemName: "square.grid.2x2")
+                        .font(.system(size: 10))
+                        .foregroundColor(color)
+                case .archive:
+                    EmptyView()
                 }
                 Text(title)
                     .lineLimit(1)
                     .font(.system(size: 12, weight: selected ? .semibold : .regular))
-                badge(count: count, color: color, isArchive: isArchive, index: index)
+                badge(count: count, color: color, isArchive: kind == .archive,
+                      index: kind == .category ? index : -1)
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
@@ -135,6 +178,7 @@ struct TodoPopupView: View {
 
     private func textColor(isArchive: Bool, index: Int) -> Color {
         if isArchive { return .primary }
+        if index < 0 { return .white }     // Global tab badge
         if settings.popupCounterTextColors.indices.contains(index) {
             return settings.popupCounterTextColors[index].color
         }
@@ -147,6 +191,8 @@ struct TodoPopupView: View {
     private var content: some View {
         if selection == archiveTag {
             ArchiveView(store: store, settings: settings)
+        } else if selection == globalTag {
+            GlobalView(store: store, settings: settings)
         } else {
             CategoryView(categoryIndex: selection,
                          store: store,

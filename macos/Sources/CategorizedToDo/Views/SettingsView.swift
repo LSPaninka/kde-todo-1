@@ -1,14 +1,19 @@
 import SwiftUI
 
-/// Configuración (Preferences). Five pestañas:
+/// Configuración (Preferences). Tabs:
 ///   - General (modo, popup, etc.)
-///   - Categorías locales
+///   - Categorías locales (hasta 7)
 ///   - Apariencia (menubar / popup)
 ///   - Jira (conexión + JQL)
 ///   - Categorías Jira (filtros por pestaña)
+///   - GitHub (token + owner + project)
+///   - Categorías GitHub
+///   - Notion (CLI + query)
 struct SettingsView: View {
     @ObservedObject var store: TaskStore
     @ObservedObject var jira: JiraStore
+    @ObservedObject var gh: GhStore
+    @ObservedObject var notion: NotionStore
     @ObservedObject var settings: AppSettings
 
     var body: some View {
@@ -22,9 +27,15 @@ struct SettingsView: View {
             JiraSettingsView(jira: jira, settings: settings)
                 .tabItem { Label("Jira", systemImage: "ant") }
             JiraCategoriesSettingsView(settings: settings)
-                .tabItem { Label("Categorías Jira", systemImage: "rectangle.3.group") }
+                .tabItem { Label("Cat. Jira", systemImage: "rectangle.3.group") }
+            GhSettingsView(gh: gh, settings: settings)
+                .tabItem { Label("GitHub", systemImage: "chevron.left.forwardslash.chevron.right") }
+            GhCategoriesSettingsView(settings: settings)
+                .tabItem { Label("Cat. GH", systemImage: "square.grid.3x3") }
+            NotionSettingsView(notion: notion, settings: settings)
+                .tabItem { Label("Notion", systemImage: "doc.richtext") }
         }
-        .frame(width: 580, height: 520)
+        .frame(width: 620, height: 540)
         .padding()
     }
 
@@ -47,12 +58,12 @@ struct SettingsView: View {
                 Stepper(value: Binding(
                     get: { settings.categoryCount },
                     set: { newValue in
-                        let v = max(1, min(4, newValue))
+                        let v = max(1, min(kMaxLocalCategories, newValue))
                         settings.categoryCount = v
                         store.reassignOutOfRange(newCount: v)
                     }),
-                    in: 1...4) {
-                    Text("Cantidad activa: \(settings.categoryCount)")
+                    in: 1...kMaxLocalCategories) {
+                    Text("Cantidad activa: \(settings.categoryCount) (máx \(kMaxLocalCategories))")
                 }
             }
 
@@ -88,7 +99,7 @@ struct SettingsView: View {
 
     private var categoriesTab: some View {
         Form {
-            ForEach(0..<4, id: \.self) { i in
+            ForEach(0..<kMaxLocalCategories, id: \.self) { i in
                 Section("Categoría \(i + 1)\(i >= settings.categoryCount ? "  (oculta)" : "")") {
                     HStack {
                         TextField("Nombre", text: nameBinding(i))

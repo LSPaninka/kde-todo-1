@@ -13,6 +13,8 @@ import SwiftUI
 struct MenuBarIcon: View {
     @ObservedObject var store: TaskStore
     @ObservedObject var jira: JiraStore
+    @ObservedObject var gh: GhStore
+    @ObservedObject var notion: NotionStore
     @ObservedObject var settings: AppSettings
 
     var body: some View {
@@ -25,8 +27,10 @@ struct MenuBarIcon: View {
 
     private var totalCount: Int {
         switch settings.mode {
-        case .todo: return store.totalPending
-        case .jira: return jira.issues.count
+        case .todo:   return store.totalPending
+        case .jira:   return jira.issues.count
+        case .gh:     return gh.items.count
+        case .notion: return notion.pages.count
         }
     }
 
@@ -73,6 +77,17 @@ struct MenuBarIcon: View {
                             ? settings.jiraCategoryTextColors[i]
                             : .white)
                 }
+            case .gh:
+                ForEach(0..<settings.ghCategoryCount, id: \.self) { i in
+                    cell(color: settings.ghCategoryColor(i),
+                         count: gh.count(forCategory: i),
+                         textColor: settings.ghCategoryTextColors.indices.contains(i)
+                            ? settings.ghCategoryTextColors[i]
+                            : .white)
+                }
+            case .notion:
+                // Notion has no categories; just show the total in one cell.
+                cell(color: .black, count: notion.pages.count, textColor: .white)
             }
         }
     }

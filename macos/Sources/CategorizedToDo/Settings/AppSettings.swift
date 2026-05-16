@@ -23,12 +23,44 @@ enum CounterLayout: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
-/// Whether the popup shows the local todo list ("todo") or pulls from a
-/// Jira instance ("jira"). Mirrors the KDE plasmoid's `mode` setting.
+/// Source of items shown in the popup and counted in the menu-bar icon.
+///
+/// Mirrors the KDE plasmoid's `mode` setting (todo / jira / gh / notion).
+/// `cycle()` returns the next mode in the natural order — used by the
+/// right-click "switch mode" menu on the status item.
 enum AppMode: String, Codable, CaseIterable, Identifiable {
-    case todo, jira
+    case todo, jira, gh, notion
     var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .todo:   return "Lista local"
+        case .jira:   return "Jira"
+        case .gh:     return "GitHub Projects"
+        case .notion: return "Notion"
+        }
+    }
+
+    var sfSymbol: String {
+        switch self {
+        case .todo:   return "checklist"
+        case .jira:   return "ant"
+        case .gh:     return "chevron.left.forwardslash.chevron.right"
+        case .notion: return "doc.richtext"
+        }
+    }
+
+    func cycle(forward: Bool = true) -> AppMode {
+        let all = AppMode.allCases
+        let idx = all.firstIndex(of: self) ?? 0
+        let next = (idx + (forward ? 1 : -1) + all.count) % all.count
+        return all[next]
+    }
 }
+
+/// Maximum number of local categories the user can configure. The KDE
+/// plasmoid raised this from 4 to 7 in the GitHub-Projects branch.
+let kMaxLocalCategories = 7
 
 /// Field used to filter Jira issues into a tab.
 ///
@@ -71,7 +103,7 @@ final class AppSettings: ObservableObject {
 
     @Published var categoryCount: Int {
         didSet {
-            categoryCount = max(1, min(4, categoryCount))
+            categoryCount = max(1, min(kMaxLocalCategories, categoryCount))
             ud.set(categoryCount, forKey: K.categoryCount)
         }
     }
@@ -222,6 +254,125 @@ final class AppSettings: ObservableObject {
         didSet { ud.set(jiraCategoryFilterValues, forKey: K.jiraCategoryFilterValues) }
     }
 
+    // MARK: - GitHub Projects (general)
+
+    /// Personal Access Token (classic: `project`, `read:org`, `repo`; fine-grained:
+    /// Projects read + Issues/PRs read). Stored in the macOS Keychain.
+    @Published var ghToken: String {
+        didSet { Keychain.set(ghToken, for: "gh.token") }
+    }
+
+    /// GitHub user or organization login that owns the project.
+    @Published var ghOwner: String {
+        didSet { ud.set(ghOwner, forKey: K.ghOwner) }
+    }
+
+    /// "user" or "organization".
+    @Published var ghOwnerType: String {
+        didSet { ud.set(ghOwnerType, forKey: K.ghOwnerType) }
+    }
+
+    /// Project v2 number (from URL `…/projects/<N>`).
+    @Published var ghProjectNumber: Int {
+        didSet { ud.set(ghProjectNumber, forKey: K.ghProjectNumber) }
+    }
+
+    /// Single-select field name to use as the "Status" dimension
+    /// (case-insensitive match against the project's custom fields).
+    @Published var ghStatusField: String {
+        didSet { ud.set(ghStatusField, forKey: K.ghStatusField) }
+    }
+
+    /// If true, include closed/merged items in the fetch.
+    @Published var ghIncludeClosed: Bool {
+        didSet { ud.set(ghIncludeClosed, forKey: K.ghIncludeClosed) }
+    }
+
+    @Published var ghRefreshMinutes: Int {
+        didSet {
+            ghRefreshMinutes = max(0, min(1440, ghRefreshMinutes))
+            ud.set(ghRefreshMinutes, forKey: K.ghRefreshMinutes)
+        }
+    }
+
+    @Published var ghMaxResults: Int {
+        didSet {
+            ghMaxResults = max(10, min(300, ghMaxResults))
+            ud.set(ghMaxResults, forKey: K.ghMaxResults)
+        }
+    }
+
+    @Published var ghDebug: Bool {
+        didSet { ud.set(ghDebug, forKey: K.ghDebug) }
+    }
+
+    // MARK: - GitHub Projects (categories)
+
+    @Published var ghCategoryCount: Int {
+        didSet {
+            ghCategoryCount = max(1, min(4, ghCategoryCount))
+            ud.set(ghCategoryCount, forKey: K.ghCategoryCount)
+        }
+    }
+
+    @Published var ghCategoryNames: [String] {
+        didSet { ud.set(ghCategoryNames, forKey: K.ghCategoryNames) }
+    }
+
+    @Published var ghCategoryColorsHex: [String] {
+        didSet { ud.set(ghCategoryColorsHex, forKey: K.ghCategoryColors) }
+    }
+
+    @Published var ghCategoryTextColors: [CounterTextColor] {
+        didSet {
+            ud.set(ghCategoryTextColors.map { $0.rawValue }, forKey: K.ghCategoryTextColors)
+        }
+    }
+
+    /// Filter dimension per category ("status" | "type" | "state" | "repo" | "").
+    @Published var ghCategoryFilterFields: [String] {
+        didSet { ud.set(ghCategoryFilterFields, forKey: K.ghCategoryFilterFields) }
+    }
+
+    @Published var ghCategoryFilterValues: [String] {
+        didSet { ud.set(ghCategoryFilterValues, forKey: K.ghCategoryFilterValues) }
+    }
+
+    // MARK: - Notion
+
+    /// Search query passed to `ntn api v1/search` (empty = list everything).
+    @Published var notionQuery: String {
+        didSet { ud.set(notionQuery, forKey: K.notionQuery) }
+    }
+
+    /// "page" or "database".
+    @Published var notionFilter: String {
+        didSet { ud.set(notionFilter, forKey: K.notionFilter) }
+    }
+
+    @Published var notionMaxResults: Int {
+        didSet {
+            notionMaxResults = max(10, min(200, notionMaxResults))
+            ud.set(notionMaxResults, forKey: K.notionMaxResults)
+        }
+    }
+
+    @Published var notionRefreshMinutes: Int {
+        didSet {
+            notionRefreshMinutes = max(0, min(1440, notionRefreshMinutes))
+            ud.set(notionRefreshMinutes, forKey: K.notionRefreshMinutes)
+        }
+    }
+
+    /// Optional absolute path to the `ntn` binary. Empty = resolve from $PATH.
+    @Published var notionCliPath: String {
+        didSet { ud.set(notionCliPath, forKey: K.notionCliPath) }
+    }
+
+    @Published var notionDebug: Bool {
+        didSet { ud.set(notionDebug, forKey: K.notionDebug) }
+    }
+
     // MARK: - Internals
 
     private let ud = UserDefaults.standard
@@ -257,13 +408,42 @@ final class AppSettings: ObservableObject {
         static let jiraCategoryTextColors   = "jiraCategoryTextColors"
         static let jiraCategoryFilterFields = "jiraCategoryFilterFields"
         static let jiraCategoryFilterValues = "jiraCategoryFilterValues"
+
+        // GitHub Projects
+        static let ghOwner                = "ghOwner"
+        static let ghOwnerType            = "ghOwnerType"
+        static let ghProjectNumber        = "ghProjectNumber"
+        static let ghStatusField          = "ghStatusField"
+        static let ghIncludeClosed        = "ghIncludeClosed"
+        static let ghRefreshMinutes       = "ghRefreshMinutes"
+        static let ghMaxResults           = "ghMaxResults"
+        static let ghDebug                = "ghDebug"
+        static let ghCategoryCount        = "ghCategoryCount"
+        static let ghCategoryNames        = "ghCategoryNames"
+        static let ghCategoryColors       = "ghCategoryColors"
+        static let ghCategoryTextColors   = "ghCategoryTextColors"
+        static let ghCategoryFilterFields = "ghCategoryFilterFields"
+        static let ghCategoryFilterValues = "ghCategoryFilterValues"
+
+        // Notion
+        static let notionQuery            = "notionQuery"
+        static let notionFilter           = "notionFilter"
+        static let notionMaxResults       = "notionMaxResults"
+        static let notionRefreshMinutes   = "notionRefreshMinutes"
+        static let notionCliPath          = "notionCliPath"
+        static let notionDebug            = "notionDebug"
     }
 
     private init() {
+        // Defaults — padded to 7 slots for local categories, 4 for Jira/GH.
+        let localNames  = ["Personal","Trabajo","Estudio","Otros","Hogar","Salud","Hobbies"]
+        let localColors = ["#2ecc71","#f1c40f","#3498db","#e74c3c","#9b59b6","#1abc9c","#e67e22"]
+        let localText   = ["white","black","white","white","white","white","white"]
+
         let defaultsRegistration: [String: Any] = [
             K.categoryCount: 4,
-            K.categoryNames: ["Personal", "Trabajo", "Estudio", "Otros"],
-            K.categoryColors: ["#2ecc71", "#f1c40f", "#3498db", "#e74c3c"],
+            K.categoryNames: localNames,
+            K.categoryColors: localColors,
             K.showPriorityIcons: true,
             K.confirmDelete: true,
             K.popupWidth: 420,
@@ -272,7 +452,7 @@ final class AppSettings: ObservableObject {
             K.menuBarBackground: "#ffffff",
             K.menuBarSingleSquare: true,
             K.popupCounterLayout: CounterLayout.right.rawValue,
-            K.popupCounterTextColors: ["white", "black", "white", "white"],
+            K.popupCounterTextColors: localText,
             K.popupShowZero: true,
 
             K.mode: AppMode.todo.rawValue,
@@ -288,7 +468,29 @@ final class AppSettings: ObservableObject {
             K.jiraCategoryColors:       ["#42526e", "#f5a623", "#2ecc71", "#9b59b6"],
             K.jiraCategoryTextColors:   ["white", "white", "white", "white"],
             K.jiraCategoryFilterFields: ["statusCategory", "statusCategory", "statusCategory", ""],
-            K.jiraCategoryFilterValues: ["new", "indeterminate", "done", ""]
+            K.jiraCategoryFilterValues: ["new", "indeterminate", "done", ""],
+
+            K.ghOwner: "",
+            K.ghOwnerType: "user",
+            K.ghProjectNumber: 1,
+            K.ghStatusField: "Status",
+            K.ghIncludeClosed: false,
+            K.ghRefreshMinutes: 5,
+            K.ghMaxResults: 100,
+            K.ghDebug: false,
+            K.ghCategoryCount: 3,
+            K.ghCategoryNames:        ["Backlog", "In progress", "Done", "Otros"],
+            K.ghCategoryColors:       ["#42526e", "#f5a623", "#2ecc71", "#9b59b6"],
+            K.ghCategoryTextColors:   ["white", "white", "white", "white"],
+            K.ghCategoryFilterFields: ["status", "status", "status", ""],
+            K.ghCategoryFilterValues: ["Todo;Backlog;Triage", "In progress;Doing;Review", "Done", ""],
+
+            K.notionQuery: "",
+            K.notionFilter: "page",
+            K.notionMaxResults: 50,
+            K.notionRefreshMinutes: 10,
+            K.notionCliPath: "",
+            K.notionDebug: false
         ]
         ud.register(defaults: defaultsRegistration)
 
@@ -330,15 +532,54 @@ final class AppSettings: ObservableObject {
         self.jiraCategoryFilterValues = (ud.array(forKey: K.jiraCategoryFilterValues) as? [String])
             ?? ["new","indeterminate","done",""]
 
-        // Pad arrays so we always have 4 entries even after manual edits.
-        while categoryNames.count             < 4 { categoryNames.append("Categoría \(categoryNames.count + 1)") }
-        while categoryColorsHex.count         < 4 { categoryColorsHex.append("#888888") }
-        while popupCounterTextColors.count    < 4 { popupCounterTextColors.append(.white) }
+        // GitHub Projects
+        self.ghToken               = Keychain.get("gh.token") ?? ""
+        self.ghOwner               = ud.string(forKey: K.ghOwner) ?? ""
+        self.ghOwnerType           = ud.string(forKey: K.ghOwnerType) ?? "user"
+        self.ghProjectNumber       = ud.integer(forKey: K.ghProjectNumber)
+        self.ghStatusField         = ud.string(forKey: K.ghStatusField) ?? "Status"
+        self.ghIncludeClosed       = ud.bool(forKey: K.ghIncludeClosed)
+        self.ghRefreshMinutes      = ud.integer(forKey: K.ghRefreshMinutes)
+        self.ghMaxResults          = ud.integer(forKey: K.ghMaxResults)
+        self.ghDebug               = ud.bool(forKey: K.ghDebug)
+        self.ghCategoryCount       = ud.integer(forKey: K.ghCategoryCount)
+        self.ghCategoryNames       = (ud.array(forKey: K.ghCategoryNames) as? [String])
+            ?? defaultsRegistration[K.ghCategoryNames] as! [String]
+        self.ghCategoryColorsHex   = (ud.array(forKey: K.ghCategoryColors) as? [String])
+            ?? defaultsRegistration[K.ghCategoryColors] as! [String]
+        self.ghCategoryTextColors  = ((ud.array(forKey: K.ghCategoryTextColors) as? [String]) ?? ["white","white","white","white"])
+            .map { CounterTextColor(rawValue: $0) ?? .white }
+        self.ghCategoryFilterFields = (ud.array(forKey: K.ghCategoryFilterFields) as? [String])
+            ?? defaultsRegistration[K.ghCategoryFilterFields] as! [String]
+        self.ghCategoryFilterValues = (ud.array(forKey: K.ghCategoryFilterValues) as? [String])
+            ?? defaultsRegistration[K.ghCategoryFilterValues] as! [String]
+
+        // Notion
+        self.notionQuery           = ud.string(forKey: K.notionQuery) ?? ""
+        self.notionFilter          = ud.string(forKey: K.notionFilter) ?? "page"
+        self.notionMaxResults      = ud.integer(forKey: K.notionMaxResults)
+        self.notionRefreshMinutes  = ud.integer(forKey: K.notionRefreshMinutes)
+        self.notionCliPath         = ud.string(forKey: K.notionCliPath) ?? ""
+        self.notionDebug           = ud.bool(forKey: K.notionDebug)
+
+        // Pad arrays to their maximum slot count so out-of-range index
+        // accesses are always safe.
+        let pad = kMaxLocalCategories
+        while categoryNames.count             < pad { categoryNames.append("Categoría \(categoryNames.count + 1)") }
+        while categoryColorsHex.count         < pad { categoryColorsHex.append("#888888") }
+        while popupCounterTextColors.count    < pad { popupCounterTextColors.append(.white) }
+
         while jiraCategoryNames.count         < 4 { jiraCategoryNames.append("Slot \(jiraCategoryNames.count + 1)") }
         while jiraCategoryColorsHex.count     < 4 { jiraCategoryColorsHex.append("#888888") }
         while jiraCategoryTextColors.count    < 4 { jiraCategoryTextColors.append(.white) }
         while jiraCategoryFilterFields.count  < 4 { jiraCategoryFilterFields.append(.none) }
         while jiraCategoryFilterValues.count  < 4 { jiraCategoryFilterValues.append("") }
+
+        while ghCategoryNames.count           < 4 { ghCategoryNames.append("Slot \(ghCategoryNames.count + 1)") }
+        while ghCategoryColorsHex.count       < 4 { ghCategoryColorsHex.append("#888888") }
+        while ghCategoryTextColors.count      < 4 { ghCategoryTextColors.append(.white) }
+        while ghCategoryFilterFields.count    < 4 { ghCategoryFilterFields.append("") }
+        while ghCategoryFilterValues.count    < 4 { ghCategoryFilterValues.append("") }
     }
 
     // MARK: - Helpers
@@ -372,6 +613,23 @@ final class AppSettings: ObservableObject {
     func jiraCategoryTextColor(_ index: Int) -> Color {
         guard index >= 0, index < jiraCategoryTextColors.count else { return .white }
         return jiraCategoryTextColors[index].color
+    }
+
+    // MARK: - Helpers (GitHub)
+
+    func ghCategoryColor(_ index: Int) -> Color {
+        guard index >= 0, index < ghCategoryColorsHex.count else { return .gray }
+        return Color(hex: ghCategoryColorsHex[index]) ?? .gray
+    }
+
+    func ghCategoryName(_ index: Int) -> String {
+        guard index >= 0, index < ghCategoryNames.count else { return "?" }
+        return ghCategoryNames[index]
+    }
+
+    func ghCategoryTextColor(_ index: Int) -> Color {
+        guard index >= 0, index < ghCategoryTextColors.count else { return .white }
+        return ghCategoryTextColors[index].color
     }
 }
 

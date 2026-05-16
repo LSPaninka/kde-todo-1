@@ -143,11 +143,16 @@ final class JiraStore: ObservableObject {
     // MARK: - HTTP
 
     /// Build the search URL for the configured site / JQL / fields.
+    ///
+    /// As of mid-2025 Atlassian removed `/rest/api/3/search`; the supported
+    /// replacement is `/rest/api/3/search/jql` (same auth, same query params,
+    /// slightly different response shape — no `total`, plus `isLast` and
+    /// `nextPageToken`).
     private func searchURL() -> URL? {
         var site = settings.jiraSite.trimmingCharacters(in: .whitespacesAndNewlines)
         while site.hasSuffix("/") { site.removeLast() }
         guard !site.isEmpty,
-              var components = URLComponents(string: site + "/rest/api/3/search") else {
+              var components = URLComponents(string: site + "/rest/api/3/search/jql") else {
             return nil
         }
         components.queryItems = [
@@ -301,8 +306,10 @@ final class JiraStore: ObservableObject {
             throw NSError(domain: "JiraStore", code: 1,
                           userInfo: [NSLocalizedDescriptionKey: "no es JSON"])
         }
-        let total = (obj["total"] as? Int) ?? 0
         let raws = (obj["issues"] as? [[String: Any]]) ?? []
+        // The new `/search/jql` endpoint no longer returns `total`; fall back
+        // to the page size. We don't follow `nextPageToken` for now.
+        let total = (obj["total"] as? Int) ?? raws.count
         var trimmed = site.trimmingCharacters(in: .whitespaces)
         while trimmed.hasSuffix("/") { trimmed.removeLast() }
 

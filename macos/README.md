@@ -44,16 +44,23 @@ Popup (al hacer clic):
 
 ## Modos
 
-La app tiene dos modos, intercambiables desde **Configuración → General**:
+La app tiene cuatro modos, intercambiables desde **Configuración → General**
+o haciendo **clic-derecho** (o **Ctrl-clic**) en el cuadrado de la barra de
+menús:
 
-| Modo  | Fuente de datos                                  | Persistencia |
-|-------|--------------------------------------------------|--------------|
-| ToDo  | Lista local (lo que vos escribís en el popup)    | JSON local   |
-| Jira  | Issues que devuelve una JQL contra Jira Cloud    | Cache JSON + Keychain (token) |
+| Modo   | Fuente de datos                                       | Persistencia                         |
+|--------|-------------------------------------------------------|--------------------------------------|
+| ToDo   | Lista local con hasta **7 categorías** + pestaña Global | JSON local                          |
+| Jira   | Issues que devuelve una JQL contra Jira Cloud          | Cache JSON + Keychain (token)        |
+| GitHub | Items de un Project v2 (GraphQL API)                   | Cache JSON + Keychain (token)        |
+| Notion | Páginas vía el CLI oficial `ntn`                       | Sin cache (siempre fresco); sin token (lo maneja `ntn`) |
 
-Al cambiar a `Jira` por primera vez, la app intenta un fetch automático
-si todavía no hay datos en cache. Después se respeta el intervalo de
-auto-refresh configurado.
+Al cambiar de modo por primera vez la app dispara un fetch automático si
+todavía no hay datos en cache; después se respeta el intervalo de
+auto-refresh configurado por modo.
+
+**Atajo de teclado en el menú contextual**: cada modo está bindeado a `1`,
+`2`, `3`, `4` cuando el menú está abierto.
 
 ---
 
@@ -92,6 +99,19 @@ auto-refresh configurado.
   - Borrar permanentemente (con confirmación opcional).
   - Botón para **vaciar archivo**.
 
+### Popup en modo ToDo — tab Global
+
+Además de la pestaña por cada categoría y la pestaña **Archivo**, hay una
+pestaña **Global** que muestra **todas las tareas activas mezcladas**,
+ordenadas por:
+
+1. Pendientes primero (las hechas al fondo).
+2. Prioridad descendente (XL > L > M > S > XS).
+3. Más recientes primero.
+
+Cada tarea conserva la franja del color de su categoría. La cabecera muestra
+la leyenda de colores y el contador `pendientes / totales`.
+
 ### Popup en modo Jira
 
 - Header con icono Jira, estado (cargando / actualizado hace X / error) y
@@ -113,11 +133,39 @@ auto-refresh configurado.
 - Auto-refresh configurable (0 desactiva).
 - Cache local: `~/Library/Application Support/CategorizedToDo/jira-cache.json`.
 
+### Popup en modo GitHub
+
+- Header con icono GitHub, estado y botón **refrescar**.
+- Pestañas configurables (1 – 4) que filtran los items por una dimensión:
+  - `status` — valor del campo Single-select configurado (default "Status")
+  - `type` — Issue / PullRequest / DraftIssue
+  - `state` — OPEN / CLOSED / MERGED / DRAFT
+  - `repo` — `owner/name`
+  - `label` — nombres de label
+- Cada item muestra: **badge de tipo** (I/P/D coloreado), número `#NN`,
+  título, repo en pequeñito, hasta 6 labels de colores y el chip de status.
+- **Click** en un item abre la URL del Issue / PR en el navegador.
+- Auto-refresh configurable (0 = manual).
+- Cache: `~/Library/Application Support/CategorizedToDo/gh-cache.json`.
+
+### Popup en modo Notion
+
+- Header con icono Notion, estado y botón **refrescar**.
+- Barra de búsqueda con campo de query y selector **Páginas / Bases de datos**.
+- Cada item muestra el icono de Notion (emoji o ícono SF de fallback),
+  título, padre (`workspace` / `page_id` / `database_id`), fecha de última
+  edición, y dos botones:
+  - ✎ — abre un diálogo de edición que **carga el contenido en Markdown**
+    vía `ntn pages get <id>`, permite editar título y cuerpo, y graba con
+    `ntn api v1/pages/<id> -X PATCH` + `ntn pages update <id> --content …`.
+  - ↗ — abre la página en Notion (browser o app oficial si está asociada).
+- **Auth y refresh van por la CLI**: la app nunca toca el token de Notion.
+
 ### Configuración (todo configurable)
 
 Pestaña **General**:
-- **Modo**: ToDo (lista local) / Jira.
-- Cantidad de categorías locales activas (1 – 4).
+- **Modo**: ToDo / Jira / GitHub / Notion.
+- Cantidad de categorías locales activas (**1 – 7**).
 - Mostrar / ocultar insignias de prioridad.
 - Confirmar antes de borrar permanentemente.
 - Tamaño del popup (alto y ancho con sliders).
@@ -138,6 +186,27 @@ Pestaña **Categorías Jira**:
 - Cantidad de pestañas activas (1 – 4).
 - Por cada pestaña: nombre, color, color del número, dimensión de filtro
   y valores (con placeholder de ejemplos según la dimensión elegida).
+
+Pestaña **GitHub**:
+- Personal Access Token (Keychain, cuenta `gh.token`).
+- Tipo de owner (Usuario / Organización) y login.
+- Número de project v2 (`github.com/<owner>/projects/<N>`).
+- Nombre del campo de Status (default `Status`, case-insensitive).
+- Incluir items cerrados / mergeados.
+- Auto-refresh (0 – 1440 min), máximo de items (10 – 300).
+- Logs detallados + botón **Probar token** (GET `/user`).
+
+Pestaña **Categorías GitHub**:
+- 1 – 4 pestañas con nombre, color, dimensión de filtro y valores.
+- Dimensiones: `status`, `type`, `state`, `repo`, `label` o sin filtro.
+
+Pestaña **Notion**:
+- Ruta absoluta a `ntn` (opcional; default = `$PATH`, incluye
+  `/opt/homebrew/bin`, `/usr/local/bin` y `~/.local/bin`).
+- Query y selector Página / Base de datos.
+- Máximo de resultados (10 – 200).
+- Auto-refresh (0 – 1440 min).
+- Logs detallados + botón **Verificar CLI** (corre `ntn --version`).
 
 Pestaña **Categorías**:
 - Nombre y color de las 4 ranuras de categoría (las que excedan la cantidad
@@ -191,34 +260,47 @@ macos/
 └── Sources/
     └── CategorizedToDo/
         ├── CategorizedToDoApp.swift                   # @main + AppDelegate
-        ├── StatusBarController.swift                  # NSStatusItem + popover + ImageRenderer
+        ├── StatusBarController.swift                  # NSStatusItem + popover + NSMenu + ImageRenderer
         │
         ├── Models/
         │   ├── Priority.swift                         # enum XS/S/M/L/XL
-        │   ├── Task.swift                             # TodoTask y Subtask (Codable)
-        │   ├── TaskStore.swift                        # ObservableObject + persistencia JSON
-        │   ├── JiraIssue.swift                        # modelo de issue + filtro
-        │   └── JiraStore.swift                        # URLSession + cache + auto-refresh
+        │   ├── Task.swift                             # TodoTask y Subtask
+        │   ├── TaskStore.swift                        # store local (JSON)
+        │   ├── JiraIssue.swift                        # modelo issue + filtro
+        │   ├── JiraStore.swift                        # cliente Jira (/search/jql)
+        │   ├── GhItem.swift                           # modelo GitHub Project item
+        │   ├── GhStore.swift                          # cliente GraphQL GitHub
+        │   ├── NotionPage.swift                       # modelo página Notion
+        │   └── NotionStore.swift                      # wrapper del CLI `ntn`
         │
         ├── Settings/
-        │   ├── AppSettings.swift                      # ObservableObject + UserDefaults
-        │   └── Keychain.swift                         # wrapper SecItem* para el token
+        │   ├── AppSettings.swift                      # mode + todos los settings
+        │   └── Keychain.swift                         # wrapper SecItem* (jira.token, gh.token)
         │
         ├── Views/
-        │   ├── MenuBarIcon.swift                      # cuadrado blanco con total
-        │   ├── PopupView.swift                        # switch ToDo / Jira
+        │   ├── MenuBarIcon.swift                      # cuadrado con total (4 modos)
+        │   ├── PopupView.swift                        # switch ToDo / Jira / GH / Notion
         │   ├── CategoryView.swift                     # tareas de una categoría
         │   ├── ArchiveView.swift                      # archivadas
-        │   ├── TaskRow.swift                          # delegate de tarea + subtareas
+        │   ├── GlobalView.swift                       # tab Global (todas las tareas)
+        │   ├── TaskRow.swift                          # delegate tarea + subtareas
         │   ├── PriorityBadge.swift                    # chip de prioridad
         │   ├── TaskEditSheet.swift                    # diálogo nueva / editar
         │   ├── SubtaskEditSheet.swift                 # diálogo subtarea
         │   ├── ImportExportSheet.swift                # JSON export / import
-        │   ├── JiraView.swift                         # popup en modo Jira
-        │   ├── JiraIssueRow.swift                     # delegate de issue Jira
-        │   ├── SettingsView.swift                     # tabs: Gen / Cat / Apar / Jira / CatJira
-        │   ├── SettingsJiraView.swift                 # config conexión + JQL
-        │   └── SettingsJiraCategoriesView.swift       # filtros por pestaña Jira
+        │   ├── JiraView.swift                         # popup Jira
+        │   ├── JiraIssueRow.swift                     # delegate issue Jira
+        │   ├── GhView.swift                           # popup GitHub
+        │   ├── GhItemRow.swift                        # delegate item GitHub
+        │   ├── NotionView.swift                       # popup Notion
+        │   ├── NotionPageRow.swift                    # delegate página Notion
+        │   ├── NotionEditSheet.swift                  # editor de página Notion
+        │   ├── SettingsView.swift                     # tabs unificados
+        │   ├── SettingsJiraView.swift                 # config Jira
+        │   ├── SettingsJiraCategoriesView.swift       # filtros pestañas Jira
+        │   ├── SettingsGhView.swift                   # config GitHub
+        │   ├── SettingsGhCategoriesView.swift         # filtros pestañas GitHub
+        │   └── SettingsNotionView.swift               # config Notion / CLI
         │
         └── Resources/
             └── Info.plist                             # LSUIElement + bundle metadata
@@ -232,17 +314,23 @@ macos/
   `~/Library/Application Support/CategorizedToDo/data.json`
 - **Cache de issues Jira**:
   `~/Library/Application Support/CategorizedToDo/jira-cache.json`
+- **Cache de items GitHub**:
+  `~/Library/Application Support/CategorizedToDo/gh-cache.json`
+- **Notion**: sin cache (siempre consulta a la CLI).
 - **Configuración**: `UserDefaults` del bundle `com.categorizedtodo.app`
   (visible con `defaults read com.categorizedtodo.app`).
-- **Token Jira**: macOS Keychain
-  (`security find-generic-password -s com.categorizedtodo.app -a jira.token`).
+- **Tokens en Keychain**:
+  - Jira: `security find-generic-password -s com.categorizedtodo.app -a jira.token`
+  - GitHub: `security find-generic-password -s com.categorizedtodo.app -a gh.token`
+- **Notion**: el token lo maneja `ntn` por separado (en su propio config).
 
-Para empezar de cero borrá los tres:
+Para empezar de cero borrá todo:
 
 ```bash
 rm -rf "$HOME/Library/Application Support/CategorizedToDo"
 defaults delete com.categorizedtodo.app
-security delete-generic-password -s com.categorizedtodo.app -a jira.token
+security delete-generic-password -s com.categorizedtodo.app -a jira.token 2>/dev/null
+security delete-generic-password -s com.categorizedtodo.app -a gh.token   2>/dev/null
 ```
 
 ---
@@ -289,13 +377,18 @@ de tareas. Los IDs se reasignan al importar para evitar colisiones.
 `JiraStore` (en `Models/JiraStore.swift`) es el cliente HTTP. Llama a:
 
 ```
-GET {site}/rest/api/3/search?jql=…&maxResults=…&fields=summary,status,priority,issuetype,parent,updated
+GET {site}/rest/api/3/search/jql?jql=…&maxResults=…&fields=summary,status,priority,issuetype,parent,updated
 ```
 
 con header `Authorization: Basic base64(email:token)`. Parsea la respuesta a
 una lista de `JiraIssue` (Codable) y la guarda en cache JSON.
 La función `testConnection(site:email:token:completion:)` hace `GET
 /rest/api/3/myself` y devuelve el `displayName` para validar credenciales.
+
+> **Nota**: hasta mediados de 2025 el endpoint era `/rest/api/3/search`,
+> pero Atlassian lo removió. La versión actual usa `/search/jql`
+> (respuesta sin campo `total`, con `isLast` y `nextPageToken`; no se sigue
+> la paginación, se trae sólo la primera página de `maxResults` items).
 
 ### JQL: ejemplos útiles
 
@@ -317,9 +410,72 @@ La comparación es **case-insensitive** y **exacta** contra el campo del issue.
 Defaults: 3 pestañas ("Por hacer" / "En curso" / "Hechas") filtrando por
 `statusCategory` con valores `new`, `indeterminate`, `done`.
 
-### Logs
+## Integración con GitHub Projects
 
-Con `Logs detallados` activado en la pestaña Jira de la configuración:
+`GhStore` (en `Models/GhStore.swift`) hace **una sola** consulta GraphQL
+contra `POST https://api.github.com/graphql` con un Bearer token. Pide la
+`projectV2(number: $number)` bajo `user(login: …)` o `organization(login: …)`
+según `ghOwnerType` y trae hasta `ghMaxResults` items.
+
+Por cada item se extraen:
+
+- `content.__typename` → `Issue` / `PullRequest` / `DraftIssue`
+- `number`, `title`, `url`, `state`, `isDraft`, `repository.nameWithOwner`
+- Labels (nombre + color hex)
+- `fieldValues.nodes[]` (hasta 20) — campos custom del project. Se extrae
+  el valor de cada uno por nombre y se busca el que coincide
+  (case-insensitive) con `ghStatusField` como "Status".
+
+Los items se cachean en `gh-cache.json` y se filtran client-side por
+pestaña (dimensiones: `status`, `type`, `state`, `repo`, `label`).
+
+### Configurar el token
+
+1. <https://github.com/settings/tokens> → **Generate new token (classic)**.
+2. Scopes mínimos: `project`, `read:org`, `repo`.
+3. Pegalo en *Configuración → GitHub*.
+4. Click **Probar token** → debería decir `Autenticado como <tu-login>`.
+
+Para fine-grained tokens: permisos de lectura en *Projects*, *Issues* y
+*Pull requests* en los repos relevantes.
+
+---
+
+## Integración con Notion (`ntn` CLI)
+
+`NotionStore` (en `Models/NotionStore.swift`) **no implementa HTTP** —
+delega todo en el binario [`ntn`](https://npm.im/ntn). La app nunca toca
+el token de Notion.
+
+Acciones que ejecuta:
+
+| Acción | Comando equivalente |
+|--------|--------------------|
+| Listar | `ntn api v1/search -X POST -d '<json>'` |
+| Leer contenido | `ntn pages get <id>` |
+| Update título | `ntn api v1/pages/<id> -X PATCH -d '<json>'` |
+| Update contenido | `ntn pages update <id> --content '<md>'` |
+| Verificar | `ntn --version` |
+
+Todo se ejecuta vía `/bin/sh -c '…'` con el PATH augmentado con
+`/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin`. Si `ntn` no está
+en el PATH, configurá la ruta absoluta en *Preferencias → Notion*.
+
+### Setup de Notion
+
+```bash
+npm install -g ntn        # o brew install ntn (si existe el formula)
+ntn login                 # abre el browser de Notion para autorizar
+ntn api v1/search -d '{}' # smoke test, debería devolver JSON
+```
+
+Luego cambiá el modo en la app a **Notion** y deberías ver tus páginas.
+
+---
+
+## Logs
+
+Con `Logs detallados` activado en la pestaña correspondiente:
 
 ```bash
 log stream --predicate 'process == "CategorizedToDo"' --info
@@ -328,13 +484,11 @@ log stream --predicate 'process == "CategorizedToDo"' --info
 Verás líneas tipo:
 
 ```
-[JiraStore] fetch start: GET https://acme.atlassian.net/rest/api/3/search?jql=…
-[JiraStore] fetch ok in 312ms — 17 issue(s) (total in JQL: 42)
-- PROJ-12 [Story] (In Progress / indeterminate) {High} — Refactor login flow
-- PROJ-13 [Bug]   (To Do / new)                 {Medium} — Crash on logout
-[JiraStore] category #0 'Por hacer' [statusCategory = new]: 5 issue(s)
-[JiraStore] category #1 'En curso'  [statusCategory = indeterminate]: 9 issue(s)
-[JiraStore] category #2 'Hechas'    [statusCategory = done]: 3 issue(s)
+[JiraStore]  fetch start: GET https://acme.atlassian.net/rest/api/3/search/jql?jql=…
+[JiraStore]  fetch ok in 312ms — 17 issue(s) (total in JQL: 17)
+[GhStore]    fetch ok in 480ms — 23 item(s)
+[NotionStore] $ ntn api v1/search -X POST -d '{...}'
+[NotionStore] fetch ok: 7 page(s)
 ```
 
 ---

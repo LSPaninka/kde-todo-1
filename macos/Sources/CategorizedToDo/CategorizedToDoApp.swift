@@ -22,7 +22,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let store = TaskStore.shared
         let settings = AppSettings.shared
         let jira = JiraStore.shared
-        statusBar = StatusBarController(store: store, jira: jira, settings: settings)
+        let gh = GhStore.shared
+        let notion = NotionStore.shared
+        statusBar = StatusBarController(store: store,
+                                        jira: jira,
+                                        gh: gh,
+                                        notion: notion,
+                                        settings: settings)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
