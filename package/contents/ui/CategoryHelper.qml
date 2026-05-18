@@ -9,7 +9,7 @@ import org.kde.plasma.plasmoid 2.0
 
 QtObject {
     function count() {
-        return Math.min(4, Math.max(1, plasmoid.configuration.categoryCount || 4));
+        return Math.min(7, Math.max(1, plasmoid.configuration.categoryCount || 4));
     }
     function name(i) {
         var names = plasmoid.configuration.categoryNames || [];

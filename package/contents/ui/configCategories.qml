@@ -23,23 +23,23 @@ ColumnLayout {
     property var cfg_categoryNames: []
     property var cfg_categoryColors: []
 
-    // Fallbacks, so the UI always renders exactly 4 rows.
-    readonly property var _defaultNames:  ["Personal", "Trabajo", "Estudio", "Otros"]
-    readonly property var _defaultColors: ["#2ecc71", "#f1c40f", "#3498db", "#e74c3c"]
+    // Fallbacks, so the UI always renders exactly 7 rows.
+    readonly property var _defaultNames:  ["Personal", "Trabajo", "Estudio", "Otros", "Salud", "Hogar", "Hobbies"]
+    readonly property var _defaultColors: ["#2ecc71", "#f1c40f", "#3498db", "#e74c3c", "#9b59b6", "#1abc9c", "#e67e22"]
 
     function _name(i)  { return (cfg_categoryNames[i]  !== undefined) ? cfg_categoryNames[i]  : _defaultNames[i]; }
     function _color(i) { return (cfg_categoryColors[i] !== undefined) ? cfg_categoryColors[i] : _defaultColors[i]; }
 
     function _setName(i, v) {
         var arr = cfg_categoryNames.slice();
-        while (arr.length < 4) arr.push(_defaultNames[arr.length]);
+        while (arr.length < 7) arr.push(_defaultNames[arr.length]);
         arr[i] = v;
         cfg_categoryNames = arr;
     }
 
     function _setColor(i, v) {
         var arr = cfg_categoryColors.slice();
-        while (arr.length < 4) arr.push(_defaultColors[arr.length]);
+        while (arr.length < 7) arr.push(_defaultColors[arr.length]);
         arr[i] = v;
         cfg_categoryColors = arr;
     }
@@ -47,13 +47,13 @@ ColumnLayout {
     Label {
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
-        text: i18n("Configure up to 4 categories. Each category has a name and a color. "
+        text: i18n("Configure up to 7 categories. Each category has a name and a color. "
                  + "The number of active categories is set in the General tab.")
         opacity: 0.75
     }
 
     Repeater {
-        model: 4
+        model: 7
         delegate: RowLayout {
             Layout.fillWidth: true
             spacing: Kirigami.Units.smallSpacing

@@ -26,9 +26,9 @@ ColumnLayout {
     property string cfg_panelCounterStyle: "right"
     property var    cfg_panelCounterColors: []
 
-    readonly property var _defaultCounterColors: ["white", "black", "white", "white"]
-    readonly property var _defaultNames:  ["Personal", "Trabajo", "Estudio", "Otros"]
-    readonly property var _defaultColors: ["#2ecc71", "#f1c40f", "#3498db", "#e74c3c"]
+    readonly property var _defaultCounterColors: ["white", "black", "white", "white", "white", "white", "white"]
+    readonly property var _defaultNames:  ["Personal", "Trabajo", "Estudio", "Otros", "Salud", "Hogar", "Hobbies"]
+    readonly property var _defaultColors: ["#2ecc71", "#f1c40f", "#3498db", "#e74c3c", "#9b59b6", "#1abc9c", "#e67e22"]
 
     function _counterColor(i) {
         var v = (cfg_panelCounterColors || [])[i];
@@ -36,7 +36,7 @@ ColumnLayout {
     }
     function _setCounterColor(i, v) {
         var arr = (cfg_panelCounterColors || []).slice();
-        while (arr.length < 4) arr.push(_defaultCounterColors[arr.length]);
+        while (arr.length < 7) arr.push(_defaultCounterColors[arr.length]);
         arr[i] = v;
         cfg_panelCounterColors = arr;
     }
@@ -83,7 +83,7 @@ ColumnLayout {
             spacing: Kirigami.Units.smallSpacing
 
             Repeater {
-                model: 4
+                model: 7
                 delegate: RowLayout {
                     Layout.fillWidth: true
                     spacing: Kirigami.Units.smallSpacing

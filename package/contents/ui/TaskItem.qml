@@ -72,7 +72,10 @@ Rectangle {
             PlasmaComponents3.Label {
                 Layout.fillWidth: true
                 text: item.task ? item.task.title : ""
-                elide: Text.ElideRight
+                // Show the full title (soft wrap) when expanded; otherwise
+                // keep a single elided line so collapsed cards stay compact.
+                elide: item.expanded ? Text.ElideNone : Text.ElideRight
+                wrapMode: item.expanded ? Text.WordWrap : Text.NoWrap
                 font.strikeout: item.task && item.task.done
                 opacity: item.task && item.task.done ? 0.6 : 1.0
             }
@@ -115,8 +118,9 @@ Rectangle {
             text: item.task ? item.task.description : ""
             wrapMode: Text.WordWrap
             visible: item.expanded && item.task && item.task.description.length > 0
+            // Gray tint preserved via opacity, italic removed.
             opacity: 0.75
-            font.italic: true
+            font.italic: false
         }
 
         // -------- Subtasks --------

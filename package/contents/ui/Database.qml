@@ -100,6 +100,17 @@ QtObject {
                 } else {
                     tx.executeSql("INSERT INTO schema_version (v) VALUES (1)");
                 }
+                v = 1;
+            }
+            if (v < 2) {
+                tx.executeSql(
+                    "CREATE TABLE IF NOT EXISTS gh_cache (" +
+                    "  item_id TEXT PRIMARY KEY," +
+                    "  data TEXT NOT NULL," +
+                    "  fetched_at INTEGER NOT NULL" +
+                    ")");
+                tx.executeSql("UPDATE schema_version SET v=2");
+                v = 2;
             }
             // Future migrations: bump v and add ALTER TABLE / new tables.
         });
@@ -267,6 +278,39 @@ QtObject {
                 var row = rs.rows.item(i);
                 try {
                     out.issues.push(JSON.parse(row.data));
+                    if (row.fetched_at > out.fetchedAt) out.fetchedAt = row.fetched_at;
+                } catch (e) { /* skip malformed entry */ }
+            }
+        });
+        return out;
+    }
+
+    // ------------------------------------------------------------------
+    // GitHub Projects cache
+    // ------------------------------------------------------------------
+
+    function saveGhItems(items, fetchedAt) {
+        if (!ready) return;
+        _conn.transaction(function(tx) {
+            tx.executeSql("DELETE FROM gh_cache");
+            for (var i = 0; i < items.length; i++) {
+                var it = items[i];
+                tx.executeSql(
+                    "INSERT INTO gh_cache (item_id, data, fetched_at) VALUES (?, ?, ?)",
+                    [it.id || ("?" + i), JSON.stringify(it), fetchedAt | 0]);
+            }
+        });
+    }
+
+    function loadGhItems() {
+        var out = { items: [], fetchedAt: 0 };
+        if (!ready) return out;
+        _conn.readTransaction(function(tx) {
+            var rs = tx.executeSql("SELECT data, fetched_at FROM gh_cache");
+            for (var i = 0; i < rs.rows.length; i++) {
+                var row = rs.rows.item(i);
+                try {
+                    out.items.push(JSON.parse(row.data));
                     if (row.fetched_at > out.fetchedAt) out.fetchedAt = row.fetched_at;
                 } catch (e) { /* skip malformed entry */ }
             }

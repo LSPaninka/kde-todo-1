@@ -27,4 +27,19 @@ ConfigModel {
         icon: "preferences-desktop-color"
         source: "configJiraCategories.qml"
     }
+    ConfigCategory {
+        name: i18n("GitHub")
+        icon: "applications-development"
+        source: "configGh.qml"
+    }
+    ConfigCategory {
+        name: i18n("Categorías GH")
+        icon: "preferences-desktop-color"
+        source: "configGhCategories.qml"
+    }
+    ConfigCategory {
+        name: i18n("Notion")
+        icon: "notes"
+        source: "configNotion.qml"
+    }
 }

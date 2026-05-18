@@ -20,6 +20,11 @@ Item {
 
     CategoryHelper { id: cats }
 
+    // Global + N category tabs + Archive. Each tab is sized to a 1/N share
+    // of the bar so they always fill the popup width.
+    readonly property int _tabCount: 2 + cats.count()
+    readonly property real _tabWidth: tabs.width / Math.max(1, _tabCount)
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: PlasmaCore.Units.smallSpacing
@@ -30,13 +35,45 @@ Item {
             id: tabs
             Layout.fillWidth: true
 
+            // Global: shows every task from every category, color-coded.
+            QQC2.TabButton {
+                id: globalTab
+                width: todoView._tabWidth
+                leftPadding: 6
+                rightPadding: 6
+                property int pending: (store.version, store.totalPending())
+                contentItem: RowLayout {
+                    spacing: 6
+                    PlasmaCore.IconItem {
+                        source: "view-list-tree"
+                        Layout.preferredWidth: 12
+                        Layout.preferredHeight: 12
+                        Layout.alignment: Qt.AlignVCenter
+                    }
+                    PlasmaComponents3.Label {
+                        text: i18n("Global")
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignVCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    TabCountBadge {
+                        visible: globalTab.pending > 0
+                        count: globalTab.pending
+                        badgeColor: PlasmaCore.Theme.highlightColor
+                        Layout.alignment: Qt.AlignVCenter
+                    }
+                }
+            }
+
             Repeater {
                 model: cats.count()
                 QQC2.TabButton {
                     id: catTab
+                    width: todoView._tabWidth
                     property int pending: (store.version, store.pendingCountForCategory(index))
-                    leftPadding: 8
-                    rightPadding: 8
+                    leftPadding: 6
+                    rightPadding: 6
                     contentItem: RowLayout {
                         spacing: 6
                         Rectangle {
@@ -65,8 +102,9 @@ Item {
 
             QQC2.TabButton {
                 id: archiveTab
-                leftPadding: 8
-                rightPadding: 8
+                width: todoView._tabWidth
+                leftPadding: 6
+                rightPadding: 6
                 contentItem: RowLayout {
                     spacing: 6
                     PlasmaCore.IconItem {
@@ -99,6 +137,13 @@ Item {
             Layout.fillHeight: true
             currentIndex: tabs.currentIndex
 
+            // Index 0: Global view (matches the position of globalTab above).
+            GlobalView {
+                store: todoView.store
+                onEditTaskRequested: taskDialog.openEdit(task)
+                onEditSubtaskRequested: subDialog.openFor(task, subtask)
+            }
+
             Repeater {
                 model: cats.count()
                 CategoryView {
@@ -130,6 +175,7 @@ Item {
                 opacity: 0.6
                 font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
             }
+            ModeMenuButton {}
             PlasmaComponents3.ToolButton {
                 icon.name: "configure"
                 text: i18n("Configure…")

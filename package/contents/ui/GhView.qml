@@ -1,9 +1,9 @@
 /*
- * JiraView.qml - the popup contents when the plasmoid is in "jira" mode.
+ * GhView.qml - popup contents for the "gh" (GitHub Projects) mode.
  *
- * Tabs come from the user-defined Jira categories (1..4), each with its
- * own name, color and filter (issuetype / status / statusCategory /
- * priority). See configJiraCategories.qml.
+ * Tabs come from the user-defined GH categories (1..4). Each tab filters
+ * the cached project items by status / type / state / repository, the
+ * same way Jira categories do.
  */
 
 import QtQuick 2.15
@@ -15,22 +15,22 @@ import org.kde.plasma.components 3.0 as PlasmaComponents3
 
 Item {
     id: view
-    property var jira
+    property var gh
 
-    readonly property int _v: jira ? jira.version : 0
+    readonly property int _v: gh ? gh.version : 0
     readonly property int categoryCount:
-        Math.min(4, Math.max(1, plasmoid.configuration.jiraCategoryCount | 0 || 3))
+        Math.min(4, Math.max(1, plasmoid.configuration.ghCategoryCount | 0 || 3))
 
     function _formatDate(ms) {
         if (!ms) return "";
         return Qt.formatDateTime(new Date(ms), Qt.DefaultLocaleShortDate);
     }
     function _categoryName(i) {
-        var arr = plasmoid.configuration.jiraCategoryNames || [];
+        var arr = plasmoid.configuration.ghCategoryNames || [];
         return arr[i] || qsTr("Cat. %1").arg(i + 1);
     }
     function _categoryColor(i) {
-        var arr = plasmoid.configuration.jiraCategoryColors || [];
+        var arr = plasmoid.configuration.ghCategoryColors || [];
         return arr[i] || "#7f8c8d";
     }
 
@@ -45,36 +45,36 @@ Item {
             spacing: PlasmaCore.Units.smallSpacing
 
             PlasmaCore.IconItem {
-                source: "view-task"
+                source: "applications-development"
                 Layout.preferredWidth: 18
                 Layout.preferredHeight: 18
             }
             PlasmaComponents3.Label {
-                text: i18n("Jira")
+                text: i18n("GitHub Projects")
                 font.bold: true
             }
             PlasmaComponents3.Label {
                 Layout.fillWidth: true
                 text: {
-                    if (!jira) return "";
-                    if (jira.loading) return i18n("Cargando…");
-                    if (jira.lastError) return jira.lastError;
-                    if (jira.lastFetchedAt > 0)
-                        return i18n("Actualizado %1 — %2 incidencias",
-                                    view._formatDate(jira.lastFetchedAt),
-                                    (view._v, jira.totalCount()));
+                    if (!gh) return "";
+                    if (gh.loading) return i18n("Cargando…");
+                    if (gh.lastError) return gh.lastError;
+                    if (gh.lastFetchedAt > 0)
+                        return i18n("Actualizado %1 — %2 ítems",
+                                    view._formatDate(gh.lastFetchedAt),
+                                    (view._v, gh.totalCount()));
                     return i18n("Sin datos. Pulsá ↻ para cargar.");
                 }
                 elide: Text.ElideRight
                 opacity: 0.7
-                color: jira && jira.lastError
+                color: gh && gh.lastError
                        ? PlasmaCore.Theme.negativeTextColor
                        : PlasmaCore.Theme.textColor
             }
             PlasmaComponents3.ToolButton {
                 icon.name: "view-refresh"
-                enabled: jira && !jira.loading
-                onClicked: jira.fetch()
+                enabled: gh && !gh.loading
+                onClicked: gh.fetch()
                 PlasmaComponents3.ToolTip.text: i18n("Refrescar")
                 PlasmaComponents3.ToolTip.visible: hovered
                 PlasmaComponents3.ToolTip.delay: 500
@@ -88,7 +88,7 @@ Item {
             }
         }
 
-        // -------- Tabs (one per Jira category) --------
+        // -------- Tabs (one per GH category) --------
         QQC2.TabBar {
             id: tabs
             Layout.fillWidth: true
@@ -99,7 +99,7 @@ Item {
                     id: tabBtn
                     leftPadding: 8
                     rightPadding: 8
-                    property int catCount: (view._v, jira ? jira.countByJiraCategory(index) : 0)
+                    property int catCount: (view._v, gh ? gh.countByGhCategory(index) : 0)
                     contentItem: RowLayout {
                         spacing: 6
                         Rectangle {
@@ -127,7 +127,7 @@ Item {
             }
         }
 
-        // -------- Body: list per tab --------
+        // -------- Body --------
         StackLayout {
             id: stack
             Layout.fillWidth: true
@@ -143,31 +143,31 @@ Item {
                         ListView {
                             id: list
                             spacing: 4
-                            model: (view._v, jira ? jira.issuesByJiraCategory(index) : [])
-                            delegate: JiraIssueItem {
+                            model: (view._v, gh ? gh.itemsByGhCategory(index) : [])
+                            delegate: GhItemDelegate {
                                 width: list.width
-                                issue: modelData
+                                entry: modelData
                             }
 
                             PlasmaComponents3.Label {
                                 anchors.centerIn: parent
-                                visible: list.count === 0 && jira && !jira.loading
+                                visible: list.count === 0 && gh && !gh.loading
                                 width: parent.width - 40
                                 horizontalAlignment: Text.AlignHCenter
                                 wrapMode: Text.WordWrap
                                 opacity: 0.55
                                 text: {
-                                    if (!jira) return "";
-                                    if (jira.lastError) return jira.lastError;
-                                    if (jira.lastFetchedAt === 0)
-                                        return i18n("Aún no se cargaron incidencias. Pulsá el botón de refrescar.");
-                                    return i18n("Sin incidencias en esta categoría.");
+                                    if (!gh) return "";
+                                    if (gh.lastError) return gh.lastError;
+                                    if (gh.lastFetchedAt === 0)
+                                        return i18n("Aún no se cargaron ítems. Pulsá el botón de refrescar.");
+                                    return i18n("Sin ítems en esta categoría.");
                                 }
                             }
 
                             PlasmaComponents3.BusyIndicator {
                                 anchors.centerIn: parent
-                                running: jira && jira.loading && list.count === 0
+                                running: gh && gh.loading && list.count === 0
                                 visible: running
                             }
                         }
@@ -182,9 +182,9 @@ Item {
 
             PlasmaComponents3.Label {
                 Layout.fillWidth: true
-                text: jira ? i18np("%1 incidencia en total",
-                                   "%1 incidencias en total",
-                                   (view._v, jira.totalCount())) : ""
+                text: gh ? i18np("%1 ítem en total",
+                                 "%1 ítems en total",
+                                 (view._v, gh.totalCount())) : ""
                 opacity: 0.6
                 font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
             }
@@ -198,7 +198,7 @@ Item {
         }
     }
 
-    // -------- Debug overlay (in-popup modal showing last fetch log) --------
+    // -------- Debug overlay --------
     Item {
         id: debugOverlay
         anchors.fill: parent
@@ -235,13 +235,13 @@ Item {
                     Layout.fillWidth: true
                     PlasmaComponents3.Label {
                         Layout.fillWidth: true
-                        text: i18n("Diagnóstico — última consulta Jira")
+                        text: i18n("Diagnóstico — última consulta GitHub")
                         font.bold: true
                     }
                     PlasmaComponents3.ToolButton {
                         icon.name: "edit-copy"
                         text: i18n("Copiar")
-                        enabled: jira && jira.hasDebugLog
+                        enabled: gh && gh.hasDebugLog
                         onClicked: {
                             logArea.selectAll();
                             logArea.copy();
@@ -251,8 +251,8 @@ Item {
                     PlasmaComponents3.ToolButton {
                         icon.name: "edit-clear-all"
                         text: i18n("Limpiar")
-                        enabled: jira && jira.hasDebugLog
-                        onClicked: jira.clearDebugLog()
+                        enabled: gh && gh.hasDebugLog
+                        onClicked: gh.clearDebugLog()
                     }
                     PlasmaComponents3.ToolButton {
                         icon.name: "window-close"
@@ -272,18 +272,10 @@ Item {
                         wrapMode: TextEdit.WrapAnywhere
                         font.family: "monospace"
                         font.pixelSize: 11
-                        text: (jira && jira.hasDebugLog)
-                              ? ((view._v, jira.lastDebugLog))
+                        text: (gh && gh.hasDebugLog)
+                              ? ((view._v, gh.lastDebugLog))
                               : i18n("Sin datos. Pulsá ↻ para hacer un fetch primero.")
                     }
-                }
-
-                PlasmaComponents3.Label {
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    opacity: 0.6
-                    font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
-                    text: i18n("Cada fetch reemplaza este log. Los warnings aparecen con [!].")
                 }
             }
         }

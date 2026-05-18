@@ -1,5 +1,9 @@
 /*
- * CategoryView.qml - list of tasks for a single category + "new task" field.
+ * GlobalView.qml - "Global" tab in the ToDo popup. Lists every task across
+ * every category, with a colored bar on the left showing which category it
+ * belongs to. Read-only-ish: clicks open the same edit dialogs as the
+ * per-category view; quick-add is intentionally absent here (the user picks
+ * a real category to create tasks).
  */
 
 import QtQuick 2.15
@@ -12,20 +16,36 @@ import org.kde.plasma.components 3.0 as PlasmaComponents3
 Item {
     id: view
     property var store
-    property int catIndex: 0
 
-    // Signals handled by FullRepresentation (which owns the dialogs).
     signal editTaskRequested(var task)
-    signal newTaskRequested(int catIndex)
     signal editSubtaskRequested(var task, var subtask)
-    signal exportRequested(int catIndex, string categoryName)
-    signal importRequested(int catIndex, string categoryName)
 
     CategoryHelper { id: cats }
 
     readonly property int _v: store ? store.version : 0
-    readonly property var _allInCategory: (_v, store ? store.tasksForCategory(catIndex) : [])
-    readonly property var filtered: view._applyFilter(_allInCategory, searchField.text)
+    readonly property var _allTasks: (_v, view._collect())
+    readonly property var filtered: view._applyFilter(_allTasks, searchField.text)
+
+    function _collect() {
+        if (!store || !store.tasks) return [];
+        var n = cats.count();
+        var out = [];
+        for (var i = 0; i < store.tasks.length; i++) {
+            var t = store.tasks[i];
+            if ((t.category | 0) < 0 || (t.category | 0) >= n) continue;
+            out.push(t);
+        }
+        // Sort: pending first, then by priority high → low, then by createdAt desc.
+        var prioRank = { "XL": 4, "L": 3, "M": 2, "S": 1, "XS": 0 };
+        out.sort(function(a, b) {
+            if (a.done !== b.done) return a.done ? 1 : -1;
+            var pa = prioRank[a.priority] === undefined ? 2 : prioRank[a.priority];
+            var pb = prioRank[b.priority] === undefined ? 2 : prioRank[b.priority];
+            if (pa !== pb) return pb - pa;
+            return (b.createdAt || 0) - (a.createdAt || 0);
+        });
+        return out;
+    }
 
     function _applyFilter(arr, q) {
         if (!q || q.trim().length === 0) return arr;
@@ -33,10 +53,17 @@ Item {
         var out = [];
         for (var i = 0; i < arr.length; i++) {
             var t = arr[i];
-            var hay = ((t.title || "") + " " + (t.description || "")).toLowerCase();
+            var name = (cats.name(t.category | 0) || "").toLowerCase();
+            var hay = ((t.title || "") + " " + (t.description || "") + " " + name).toLowerCase();
             if (hay.indexOf(needle) >= 0) out.push(t);
         }
         return out;
+    }
+
+    function _pendingCount() {
+        var c = 0;
+        for (var i = 0; i < view._allTasks.length; i++) if (!view._allTasks[i].done) c++;
+        return c;
     }
 
     ColumnLayout {
@@ -47,45 +74,37 @@ Item {
         RowLayout {
             Layout.fillWidth: true
 
-            Rectangle {
-                width: 14
-                height: 14
-                radius: 2
-                color: cats.color(view.catIndex)
+            PlasmaCore.IconItem {
+                source: "view-list-tree"
+                Layout.preferredWidth: 14
+                Layout.preferredHeight: 14
             }
             PlasmaComponents3.Label {
                 Layout.fillWidth: true
-                text: {
-                    var total = view._allInCategory.length;
-                    var pending = store.pendingCountForCategory(view.catIndex);
-                    return i18n("%1 — %2 pending of %3",
-                                cats.name(view.catIndex), pending, total);
-                }
+                text: i18n("Global — %1 pending of %2",
+                           view._pendingCount(), view._allTasks.length)
                 font.bold: true
                 elide: Text.ElideRight
             }
-            PlasmaComponents3.ToolButton {
-                icon.name: "document-export"
-                onClicked: view.exportRequested(view.catIndex, cats.name(view.catIndex))
-                PlasmaComponents3.ToolTip.text: i18n("Export this category as JSON")
-                PlasmaComponents3.ToolTip.visible: hovered
-                PlasmaComponents3.ToolTip.delay: 500
-            }
-            PlasmaComponents3.ToolButton {
-                icon.name: "document-import"
-                onClicked: view.importRequested(view.catIndex, cats.name(view.catIndex))
-                PlasmaComponents3.ToolTip.text: i18n("Import JSON into this category")
-                PlasmaComponents3.ToolTip.visible: hovered
-                PlasmaComponents3.ToolTip.delay: 500
-            }
-            PlasmaComponents3.Button {
-                icon.name: "document-new"
-                text: i18n("New…")
-                onClicked: view.newTaskRequested(view.catIndex)
+            // Small legend swatches so the user can read the color → category mapping.
+            Repeater {
+                model: cats.count()
+                Rectangle {
+                    Layout.preferredWidth: 10
+                    Layout.preferredHeight: 10
+                    radius: 2
+                    color: cats.color(index)
+                    border.width: 1
+                    border.color: Qt.darker(color, 1.4)
+                    PlasmaComponents3.ToolTip.visible: _legendHover.hovered
+                    PlasmaComponents3.ToolTip.text: cats.name(index)
+                    PlasmaComponents3.ToolTip.delay: 300
+                    HoverHandler { id: _legendHover }
+                }
             }
         }
 
-        // Search row (filters within this category as you type).
+        // Search row (filters across categories — also matches the category name).
         RowLayout {
             Layout.fillWidth: true
             spacing: PlasmaCore.Units.smallSpacing
@@ -98,7 +117,7 @@ Item {
             PlasmaComponents3.TextField {
                 id: searchField
                 Layout.fillWidth: true
-                placeholderText: i18n("Buscar tareas en esta categoría…")
+                placeholderText: i18n("Buscar tareas en todas las categorías…")
                 Keys.onEscapePressed: text = ""
             }
             PlasmaComponents3.ToolButton {
@@ -124,7 +143,7 @@ Item {
                     width: list.width
                     task: modelData
                     store: view.store
-                    catColor: cats.color(modelData ? modelData.category : 0)
+                    catColor: cats.color(modelData ? (modelData.category | 0) : 0)
                     onEditRequested: view.editTaskRequested(task)
                     onSubtaskEditRequested: view.editSubtaskRequested(task, subtask)
                 }
@@ -137,7 +156,7 @@ Item {
                     wrapMode: Text.WordWrap
                     text: searchField.text.length > 0
                           ? i18n("Ninguna tarea coincide con la búsqueda.")
-                          : i18n("No tasks in this category yet. Usá «New…» para crear una.")
+                          : i18n("No tasks yet. Crea una en una categoría específica.")
                     opacity: 0.55
                 }
             }

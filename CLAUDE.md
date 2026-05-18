@@ -34,22 +34,24 @@ There is **no test suite, no linter, no build step** — `package/` is the deliv
 
 ## Architecture
 
-### Two operating modes, one widget
+### Four operating modes, one widget
 
 `main.qml` is a thin dispatcher. `plasmoid.configuration.mode` selects between:
 
-- **`todo`** — local list (`TodoView.qml`) backed by `TaskStore` + SQLite.
+- **`todo`** — local list (`TodoView.qml`) backed by `TaskStore` + SQLite. Up to **7** user-defined categories (`Math.min(7, …)` clamp everywhere) plus an always-on "Global" tab (`GlobalView.qml`) that lists every task across categories using TaskItem's color stripe. The compact view shows hover tooltips with each category's pending titles.
 - **`jira`** — read-only (`JiraView.qml`) of issues from Jira Cloud REST v3, backed by `JiraStore` + SQLite cache.
+- **`gh`** — read-only (`GhView.qml`) of items from a GitHub Projects (V2) project, fetched via GraphQL v4 and backed by `GhStore` + SQLite cache (`gh_cache` table, schema v2).
+- **`notion`** — list + inline-edit (`NotionView.qml`) of Notion pages via the `ntn` CLI. `NotionStore.qml` shells out via `PlasmaCore.DataSource { engine: "executable" }` (wrapping every command in `sh -c '<cmd>'` with POSIX single-quote escaping for shell safety) and parses JSON/Markdown from stdout. Auth is delegated to `ntn login` — the plasmoid never sees the token. See `docs/NOTION.md`.
 
-Both `FullRepresentation.qml` (popup) and `CompactRepresentation.qml` (panel) branch on `mode`. The compact view shows per-category swatches with pending counts in both modes; clicking opens the popup.
+Both `FullRepresentation.qml` (popup) and `CompactRepresentation.qml` (panel) branch on `mode`. The compact view shows per-category swatches with counts in every mode (Notion is a single swatch — no native categorization); clicking opens the popup. **Mouse wheel over the compact view cycles `todo → jira → gh → notion → todo`** by writing to `plasmoid.configuration.mode` directly — implemented in `CompactRepresentation.qml` root `MouseArea.onWheel`.
 
 ### Stores own the state, views are dumb
 
-`main.qml` instantiates one `Database`, one `TaskStore`, and one `JiraStore`, and injects them down through `store:` / `jira:` properties. Every QML view receives them as properties — they never reach for `plasmoid` or the DB themselves. Mutations go through store methods (`addTask`, `archiveTask`, `toggleSubtaskDone`, `fetch`, …); each store bumps a `version` int and emits `changed()` so QML bindings refresh. Plain JS arrays of plain objects are the in-memory model — there is no `ListModel`.
+`main.qml` instantiates one `Database`, one `TaskStore`, one `JiraStore`, one `GhStore` and one `NotionStore`, and injects them down through `store:` / `jira:` / `gh:` / `notion:` properties. Every QML view receives them as properties — they never reach for `plasmoid` or the DB themselves. Mutations go through store methods (`addTask`, `archiveTask`, `toggleSubtaskDone`, `fetch`, `updatePage`, …); each store bumps a `version` int and emits `changed()` so QML bindings refresh. Plain JS arrays of plain objects are the in-memory model — there is no `ListModel`.
 
 ### Persistence: SQLite via QtQuick.LocalStorage
 
-`Database.qml` wraps `QtQuick.LocalStorage 2.0` (synchronous, ACID, ships with Qt 5). The DB file lives at `~/.local/share/KDE/plasmashell/QML/OfflineStorage/Databases/<md5>.sqlite` (logical name `CategorizedToDo`). Tables: `tasks`, `subtasks`, `settings` (k/v fallback for credentials), `jira_cache`, `schema_version`. Schema migrations are gated on `schema_version.v` inside `_migrate()` — bump `v` and add a new `if (v < N)` block when changing schema.
+`Database.qml` wraps `QtQuick.LocalStorage 2.0` (synchronous, ACID, ships with Qt 5). The DB file lives at `~/.local/share/KDE/plasmashell/QML/OfflineStorage/Databases/<md5>.sqlite` (logical name `CategorizedToDo`). Tables: `tasks`, `subtasks`, `settings` (k/v fallback for credentials), `jira_cache`, `gh_cache`, `schema_version`. Schema migrations are gated on `schema_version.v` inside `_migrate()` — bump `v` and add a new `if (v < N)` block when changing schema.
 
 Every store mutation commits inside `Database.transaction(...)` immediately — there is no debounce, no `flushNow()` queue (the function exists only as an API-compat no-op). `TaskStore.load()` is called once from `Component.onCompleted` and rebuilds the in-memory arrays from SQLite. Do **not** add a separate JSON-file path: previous JSON-file and `Plasmoid.configuration.tasksJson` backends were removed because `KConfigPropertyMap` debouncing and the `executable` data engine proved unreliable on the target setup (see `docs/PERSISTENCE.md`).
 
@@ -59,9 +61,13 @@ Schema is in `package/contents/config/main.xml` (KConfig XML). Use it for **widg
 
 **Jira credentials are mirrored to both layers.** `main.qml` wires `Connections { target: plasmoid.configuration }` so any change to `jiraSite/Email/Token/Jql` calls `_jira.persistCredentials()` to write through to SQLite. On startup `JiraStore.restoreCredentialsFromCache()` re-populates `Plasmoid.configuration` if Plasma has lost it. Keep this two-way mirror intact when touching credential fields.
 
-### Configurable Jira categories
+**GitHub credentials follow the same mirror.** `ghToken` / `ghOwner` round-trip through `GhStore.persistCredentials()` / `GhStore.restoreCredentialsFromCache()` (settings keys `gh.token`, `gh.owner`).
+
+### Configurable Jira / GitHub categories
 
 The Jira mode does not hardcode "To Do / In Progress / Done". Instead, parallel `StringList` entries in `main.xml` (`jiraCategoryNames`, `jiraCategoryColors`, `jiraCategoryTextColors`, `jiraCategoryFilterFields`, `jiraCategoryFilterValues`) drive up to 4 user-defined tabs/swatches. `jiraCategoryFilterFields[i]` is one of `statusCategory`, `issuetype`, `status`, `priority`, or empty (matches all). `jiraCategoryFilterValues[i]` uses `;` as the OR separator within an entry (because the outer list itself is comma-separated).
+
+The GitHub Projects mode mirrors this exactly with `ghCategory*` entries. Filter fields are `status` (the value of the project's `ghStatusField` single-select), `type` (`Issue`/`PullRequest`/`DraftIssue`), `state` (`OPEN`/`CLOSED`/`MERGED`/`DRAFT`), or `repo` (`owner/name`).
 
 The matching `categoryNames`/`categoryColors`/`categoryCount` entries drive the ToDo mode tabs (1–4). When `categoryCount` shrinks, `TaskStore.reassignOutOfRangeCategories()` clamps existing tasks into the last surviving category — handle the same way for any new "shrink" path.
 
@@ -75,4 +81,4 @@ The matching `categoryNames`/`categoryColors`/`categoryCount` entries drive the 
 - After every store mutation, call `_bump()` so QML bindings re-evaluate — the arrays are reassigned by reference, but `version` is the binding trigger.
 - IDs are monotonically increasing integers issued from `TaskStore._nextId`, seeded from `MAX(id)` across both tasks and subtasks at load time.
 - `metadata.desktop` carries the version (`X-KDE-PluginInfo-Version`) — bump it when releasing user-visible changes.
-- Documentation source-of-truth: `README.md`, `docs/PERSISTENCE.md`, `docs/JIRA.md`. README is in Spanish.
+- Documentation source-of-truth: `README.md`, `docs/PERSISTENCE.md`, `docs/JIRA.md`, `docs/GH_PROJECTS.md`. README is in Spanish.

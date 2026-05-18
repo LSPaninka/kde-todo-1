@@ -159,7 +159,7 @@ ceros) también se aplican.
 - Las llamadas HTTP usan **HTTPS** (asumiendo que `jiraSite` empieza
   con `https://`). El plasmoide no fuerza el esquema; si ponés
   `http://` el tráfico va en claro. **No lo hagas.**
-- El plasmoide nunca **escribe** en Jira: sólo `GET` a `/rest/api/3/search`
+- El plasmoide nunca **escribe** en Jira: sólo `GET` a `/rest/api/3/search/jql`
   y `/rest/api/3/myself`. Aun así, si tu token tiene permisos amplios,
   un atacante con acceso a tu sesión podría usarlo.
 
@@ -192,7 +192,7 @@ funciona pero es **mucho** menos seguro que API tokens; usá un
   ```
   [JiraStore] init: 0 cached issue(s); lastFetchedAt=never
   [JiraStore] auto-refresh scheduled every 5 min
-  [JiraStore] fetch start: GET https://foo.atlassian.net/rest/api/3/search
+  [JiraStore] fetch start: GET https://foo.atlassian.net/rest/api/3/search/jql
   [JiraStore]   JQL : assignee = currentUser() AND statusCategory != Done
   [JiraStore]   max : 50, fields: summary,status,priority,issuetype,parent,updated
   [JiraStore] fetch ok in 312 ms — 4 issue(s) (total in JQL: 4)

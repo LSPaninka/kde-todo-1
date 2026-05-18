@@ -26,6 +26,21 @@ Item {
     property int smallSwatch: 12
     property int bigSwatch: 22
 
+    // Tooltip payload. We don't render a QQC2 tooltip ourselves anymore;
+    // the parent forwards these to Plasmoid.toolTipMainText/SubText so the
+    // native Plasma tooltip (the one that sits above the panel) is reused.
+    property string tooltipTitle: ""
+    property string tooltipBody: ""
+
+    // Emitted when the cursor enters or leaves this badge. CompactRepresentation
+    // listens and pipes the values up to main.qml's tooltip override.
+    signal hoverChanged(bool isHovered, string mainText, string subText)
+
+    HoverHandler {
+        id: _hover
+        onHoveredChanged: badge.hoverChanged(hovered, badge.tooltipTitle, badge.tooltipBody)
+    }
+
     visible: showZero || count > 0
     implicitWidth:  insideMode ? insideRow.implicitWidth : rightRow.implicitWidth
     implicitHeight: insideMode ? insideRow.implicitHeight : rightRow.implicitHeight

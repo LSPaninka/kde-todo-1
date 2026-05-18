@@ -39,6 +39,18 @@ Kirigami.FormLayout {
             checked: page.cfg_mode === "jira"
             onToggled: if (checked) page.cfg_mode = "jira"
         }
+        RadioButton {
+            ButtonGroup.group: modeGroup
+            text: i18n("GitHub Projects")
+            checked: page.cfg_mode === "gh"
+            onToggled: if (checked) page.cfg_mode = "gh"
+        }
+        RadioButton {
+            ButtonGroup.group: modeGroup
+            text: i18n("Notion")
+            checked: page.cfg_mode === "notion"
+            onToggled: if (checked) page.cfg_mode = "notion"
+        }
     }
 
     Label {
@@ -46,9 +58,10 @@ Kirigami.FormLayout {
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
         opacity: 0.65
-        text: i18n("ToDo: lista de tareas local con categorías, prioridades y archivado. "
-                 + "Jira: muestra (sólo lectura) las incidencias asignadas a vos en Jira "
-                 + "Cloud. La pestaña «Jira» configura las credenciales.")
+        text: i18n("ToDo: lista de tareas local. Jira: incidencias asignadas en Jira Cloud. "
+                 + "GitHub Projects: ítems de un proyecto V2 (pestaña «GitHub»). Notion: páginas "
+                 + "buscadas vía el CLI `ntn` (pestaña «Notion»). Desde la vista minimalista podés "
+                 + "cambiar de modo con la rueda del mouse.")
     }
 
     Item { Kirigami.FormData.isSection: true }
@@ -58,7 +71,7 @@ Kirigami.FormLayout {
         id: catCountSpin
         Kirigami.FormData.label: i18n("Número de categorías:")
         from: 1
-        to: 4
+        to: 7
         stepSize: 1
     }
 
@@ -80,7 +93,7 @@ Kirigami.FormLayout {
         id: popupW
         Kirigami.FormData.label: i18n("Ancho del popup (px):")
         from: 280
-        to: 900
+        to: 1200
         stepSize: 10
     }
 
