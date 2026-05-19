@@ -24,6 +24,14 @@ struct MainView: View {
     @State private var statusBanner: (text: String, isError: Bool) = ("", false)
     @State private var bannerClearTask: DispatchWorkItem? = nil
 
+    // Proyecto destino del botón "Jira → Clockify".  Se inicializa con
+    // el default de Preferencias y se persiste de vuelta cuando el
+    // usuario elige otro desde el ComboBox del footer.  Tenerlo acá
+    // (y no leer Preferencias directo en `syncJiraIntoClockify`) hace
+    // que muchos workspaces que tienen "project required" activado
+    // dejen de devolver HTTP 400 sin tener que volver a Preferencias.
+    @State private var syncProjectId: String = ""
+
     private var jiraBlocks: [CalendarBlock] {
         jira.worklogs.map { CalendarBlock(jira: $0, showSummary: settings.showIssueSummary) }
     }
@@ -68,7 +76,14 @@ struct MainView: View {
             footerBar
         }
         .padding(8)
-        .onAppear { syncNow() }
+        .onAppear {
+            syncProjectId = settings.clockifyDefaultProjectId
+            syncNow()
+        }
+        .onChange(of: settings.clockifyDefaultProjectId) { _ in
+            // Si editan el default en Preferencias, reflejarlo acá.
+            syncProjectId = settings.clockifyDefaultProjectId
+        }
         .onReceive(NotificationCenter.default.publisher(for: .worklogOpenPreferences)) { _ in
             showSettings = true
         }
@@ -198,11 +213,12 @@ struct MainView: View {
     // MARK: - Footer
 
     private var footerBar: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 8) {
             Text(footerTotals).font(.caption).opacity(0.7)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             if settings.source == .jiraClockify {
+                projectPicker
                 Button {
                     syncJiraIntoClockify()
                 } label: {
@@ -216,8 +232,41 @@ struct MainView: View {
                 }
             }
             .pickerStyle(.menu)
-            .frame(width: 200)
+            .frame(width: 180)
             .onChange(of: settings.source) { _ in syncNow() }
+        }
+    }
+
+    /// ComboBox de proyecto + swatch de color (sólo modo combinado).
+    /// Persiste el `id` elegido en `settings.clockifyDefaultProjectId`
+    /// para que sobreviva al cierre de la app.
+    @ViewBuilder
+    private var projectPicker: some View {
+        let swatchColor: Color? = {
+            guard let p = clockify.projects.first(where: { $0.id == syncProjectId })
+            else { return nil }
+            return Color(hex: p.color)
+        }()
+        RoundedRectangle(cornerRadius: 2)
+            .fill(swatchColor ?? Color.clear)
+            .overlay(
+                RoundedRectangle(cornerRadius: 2)
+                    .stroke(Color.secondary.opacity(0.4), lineWidth: 1)
+            )
+            .frame(width: 12, height: 12)
+        Picker("", selection: $syncProjectId) {
+            Text("(sin proyecto)").tag("")
+            ForEach(clockify.projects) { p in
+                Text(p.name).tag(p.id)
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .frame(width: 200)
+        .help("Proyecto destino del sync Jira → Clockify")
+        .onChange(of: syncProjectId) { newValue in
+            // Persistir para próximas sesiones.
+            settings.clockifyDefaultProjectId = newValue
         }
     }
 
@@ -247,7 +296,7 @@ struct MainView: View {
 
     private func syncJiraIntoClockify() {
         setStatus("Copiando Jira → Clockify…", isError: false, sticky: true)
-        let pid = settings.clockifyDefaultProjectId
+        let pid = syncProjectId
         let bill = settings.clockifyBillableDefault
         clockify.syncFromJira(jira.worklogs, defaultProjectId: pid, defaultBillable: bill) { created, skipped, failed in
             setStatus(

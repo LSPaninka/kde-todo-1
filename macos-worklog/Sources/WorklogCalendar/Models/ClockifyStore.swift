@@ -261,6 +261,7 @@ final class ClockifyStore: ObservableObject {
                     return
                 }
                 let t = toCreate[idx]
+                let entryIdx = idx
                 idx += 1
                 let wid = self.settings.clockifyWorkspaceId
                 let url = URL(string: "https://api.clockify.me/api/v1/workspaces/\(wid)/time-entries")!
@@ -271,9 +272,21 @@ final class ClockifyStore: ObservableObject {
                     "billable": defaultBillable
                 ]
                 if !defaultProjectId.isEmpty { body["projectId"] = defaultProjectId }
-                self.sendJson(.post, url: url, body: body) { code, _ in
-                    if (200..<300).contains(code) { created += 1 }
-                    else { failed += 1; self.warn("Sync create exit=\(code) (\(t.desc))") }
+                // Loguemos el body del primer request: si todos fallan
+                // con 400 esto se puede pegar en curl para reproducir.
+                if entryIdx == 0,
+                   let data = try? JSONSerialization.data(withJSONObject: body, options: []),
+                   let json = String(data: data, encoding: .utf8) {
+                    self.log("Sync POST body sample: \(json)")
+                }
+                self.sendJson(.post, url: url, body: body) { code, respBody in
+                    if (200..<300).contains(code) {
+                        created += 1
+                    } else {
+                        failed += 1
+                        let detail = Self.extractError(respBody)
+                        self.warn("Sync create exit=\(code) (\(t.desc)) — \(detail)")
+                    }
                     run()
                 }
             }
@@ -502,12 +515,15 @@ final class ClockifyStore: ObservableObject {
 
     // MARK: - Helpers estáticos
 
-    /// "2026-05-12T15:00:00Z" — Clockify es estricto con el formato ISO.
+    /// "2026-05-12T15:00:00.000Z" — la docs de Clockify (y todos los
+    /// ejemplos de su reference) incluyen los milisegundos.  Algunos
+    /// endpoints rechazan la forma corta sin millis con HTTP 400, así
+    /// que los emitimos siempre.
     static func utcIso(_ d: Date) -> String {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.timeZone = TimeZone(identifier: "UTC")
-        f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'"
+        f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"
         return f.string(from: d)
     }
 

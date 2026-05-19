@@ -39,31 +39,32 @@ struct SettingsWindow: View {
                 }
                 .pickerStyle(.segmented)
 
-                HStack {
-                    Text("Objetivo diario (h)")
-                    Spacer()
-                    Stepper(value: $settings.dailyTargetHours, in: 0...24, step: 0.5) {
-                        Text(String(format: "%.1f", settings.dailyTargetHours))
-                            .monospacedDigit()
-                    }
-                }
+                Stepper(
+                    "Objetivo diario: \(settings.dailyTargetHours, specifier: "%.1f") h",
+                    value: $settings.dailyTargetHours,
+                    in: 0...24,
+                    step: 0.5
+                )
             }
 
             Section("Bloques") {
-                Toggle("Mostrar el título de la issue en bloques Jira", isOn: $settings.showIssueSummary)
+                Toggle("Mostrar el título de la issue en bloques Jira",
+                       isOn: $settings.showIssueSummary)
             }
 
-            Section("Picker de issues") {
-                TextField("JQL", text: $settings.jiraIssueJql, axis: .vertical)
-                    .lineLimit(2...4)
-                    .font(.system(.body, design: .monospaced))
-                HStack {
-                    Text("Máx. issues")
-                    Spacer()
-                    Stepper(value: $settings.jiraIssueMax, in: 10...200, step: 10) {
-                        Text("\(settings.jiraIssueMax)").monospacedDigit()
-                    }
+            Section("Picker de issues (modal nuevo worklog Jira)") {
+                LabeledContent("JQL") {
+                    TextField("", text: $settings.jiraIssueJql, axis: .vertical)
+                        .lineLimit(2...4)
+                        .font(.system(.body, design: .monospaced))
+                        .textFieldStyle(.roundedBorder)
                 }
+                Stepper(
+                    "Máx. issues: \(settings.jiraIssueMax)",
+                    value: $settings.jiraIssueMax,
+                    in: 10...200,
+                    step: 10
+                )
             }
 
             Section("Diagnóstico") {
@@ -73,7 +74,7 @@ struct SettingsWindow: View {
                     .textSelection(.enabled)
             }
         }
-        .padding()
+        .formStyle(.grouped)
     }
 }
 
@@ -132,7 +133,7 @@ private struct JiraTab: View {
                 }
             }
         }
-        .padding()
+        .formStyle(.grouped)
     }
 
     private func runTest() {
@@ -221,7 +222,7 @@ private struct ClockifyTab: View {
                 }
             }
         }
-        .padding()
+        .formStyle(.grouped)
     }
 
     private func runTest() {
