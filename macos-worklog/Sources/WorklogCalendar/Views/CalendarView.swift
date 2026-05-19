@@ -1,0 +1,348 @@
+import SwiftUI
+
+/// Resultado de un drag sobre una columna: día (índice 0..6), hora de
+/// inicio y hora de fin en ms epoch.  El lado izquierdo / derecho sólo
+/// importa en modo combinado.
+struct DragSelection {
+    let dayIndex: Int
+    let startMs: Double
+    let endMs: Double
+    let pressLeft: Bool
+}
+
+/// Grid semanal Domingo→Sábado con header de totales, columna de horas
+/// a la izquierda y 7 columnas de día.  Internamente cada columna es un
+/// `DayColumnView` con su propio drag-to-create.
+struct CalendarView: View {
+    let weekStart: Date
+    let jiraBlocks: [CalendarBlock]      // ya filtrados por modo
+    let clockifyBlocks: [CalendarBlock]
+    let source: WorklogSource
+    let viewMode: ViewHourMode
+    let dailyTargetHours: Double
+
+    let onCreateJira: (DragSelection) -> Void
+    let onCreateClockify: (DragSelection) -> Void
+    let onEditJira: (CalendarBlock) -> Void
+    let onEditClockify: (CalendarBlock) -> Void
+
+    private let rowHeight: CGFloat = 22
+    private let hourColumnWidth: CGFloat = 56
+    private let headerRowHeight: CGFloat = 22
+    private let totalsRowHeight: CGFloat = 22
+
+    private var combined: Bool { source == .jiraClockify }
+    private var showJira: Bool { source == .jira || source == .jiraClockify }
+    private var showClockify: Bool { source == .clockify || source == .jiraClockify }
+
+    private var slots: Int { viewMode.slotsPerDay }
+
+    /// Devuelve los bloques que caen en el día `idx` (0..6).
+    private func blocks(_ list: [CalendarBlock], dayIndex idx: Int) -> [CalendarBlock] {
+        let dayStartMs = weekStart.timeIntervalSince1970 * 1000 + Double(idx) * 86_400_000
+        let dayEndMs = dayStartMs + 86_400_000
+        return list.filter { $0.startedMs >= dayStartMs && $0.startedMs < dayEndMs }
+    }
+
+    private func totalSecForDay(_ idx: Int) -> Int {
+        // Total prioriza Jira cuando se muestra (más cercano a lo "loggeable").
+        let list = showJira ? blocks(jiraBlocks, dayIndex: idx) : blocks(clockifyBlocks, dayIndex: idx)
+        return list.reduce(0) { $0 + $1.durationSec }
+    }
+
+    private func formatTotal(_ sec: Int) -> String {
+        if sec <= 0 { return "—" }
+        let h = sec / 3600
+        let m = (sec % 3600) / 60
+        if h > 0 && m > 0 { return "\(h)h \(m)m" }
+        if h > 0 { return "\(h)h" }
+        return "\(m)m"
+    }
+
+    private func formatDiff(_ sec: Int) -> String {
+        let target = Int(dailyTargetHours * 3600)
+        let diff = sec - target
+        if diff == 0 { return "" }
+        let sign = diff > 0 ? "+" : "-"
+        let abs = Swift.abs(diff)
+        let h = abs / 3600
+        let m = (abs % 3600) / 60
+        var body = sign
+        if h > 0 { body += "\(h)h" }
+        if m > 0 { body += (h > 0 ? " " : "") + "\(m)m" }
+        return "(" + body + ")"
+    }
+
+    private func dayHeader(_ idx: Int) -> String {
+        let dayStart = weekStart.addingTimeInterval(Double(idx) * 86400)
+        let names = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"]
+        let months = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"]
+        let cal = Calendar.current
+        let day = cal.component(.day, from: dayStart)
+        let m = cal.component(.month, from: dayStart) - 1
+        return "\(names[idx]), \(day)/\(months[m])"
+    }
+
+    private func slotLabel(_ slot: Int) -> String {
+        let minutes = viewMode.startHour * 60 + slot * 30
+        let h = minutes / 60
+        let m = minutes % 60
+        return String(format: "%02d:%02d", h, m)
+    }
+
+    var body: some View {
+        ScrollView([.vertical]) {
+            VStack(spacing: 0) {
+                headerRow
+                bodyGrid
+            }
+        }
+    }
+
+    // MARK: - Header (totals)
+
+    private var headerRow: some View {
+        HStack(spacing: 0) {
+            ZStack {
+                Rectangle()
+                    .fill(Color.gray.opacity(0.08))
+                    .overlay(Rectangle().stroke(Color.white.opacity(0.08), lineWidth: 1))
+                Text("total")
+                    .font(.system(size: 9))
+                    .opacity(0.6)
+            }
+            .frame(width: hourColumnWidth, height: headerRowHeight + totalsRowHeight)
+
+            ForEach(0..<7, id: \.self) { i in
+                VStack(spacing: 0) {
+                    ZStack {
+                        Rectangle()
+                            .fill(Color.white.opacity(0.04))
+                            .overlay(Rectangle().stroke(Color.white.opacity(0.08), lineWidth: 1))
+                        Text(dayHeader(i))
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .frame(height: headerRowHeight)
+
+                    ZStack {
+                        Rectangle()
+                            .fill(totalsBackgroundFor(i))
+                            .overlay(Rectangle().stroke(Color.white.opacity(0.08), lineWidth: 1))
+                        let s = totalSecForDay(i)
+                        Text(s <= 0 ? "—" : "Loggeado: \(formatTotal(s)) \(formatDiff(s))")
+                            .font(.system(size: 9))
+                    }
+                    .frame(height: totalsRowHeight)
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    private func totalsBackgroundFor(_ idx: Int) -> Color {
+        let s = totalSecForDay(idx)
+        if s <= 0 { return Color.white.opacity(0.02) }
+        let target = Int(dailyTargetHours * 3600)
+        return s >= target
+            ? Color(red: 46/255, green: 204/255, blue: 113/255).opacity(0.18)
+            : Color(red: 241/255, green: 196/255, blue: 15/255).opacity(0.18)
+    }
+
+    // MARK: - Body (hour col + 7 day cols)
+
+    private var bodyGrid: some View {
+        HStack(spacing: 0) {
+            hourColumn
+            ForEach(0..<7, id: \.self) { i in
+                DayColumnView(
+                    dayIndex: i,
+                    weekStart: weekStart,
+                    viewMode: viewMode,
+                    rowHeight: rowHeight,
+                    jiraBlocks: showJira ? blocks(jiraBlocks, dayIndex: i) : [],
+                    clockifyBlocks: showClockify ? blocks(clockifyBlocks, dayIndex: i) : [],
+                    combined: combined,
+                    sourcePure: source,
+                    onCreateJira: onCreateJira,
+                    onCreateClockify: onCreateClockify,
+                    onEditJira: onEditJira,
+                    onEditClockify: onEditClockify
+                )
+                .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    private var hourColumn: some View {
+        VStack(spacing: 0) {
+            ForEach(0..<slots, id: \.self) { slot in
+                ZStack {
+                    Rectangle()
+                        .fill(slot % 2 == 0 ? Color.white.opacity(0.02) : Color.clear)
+                    HStack {
+                        Spacer()
+                        Text(slotLabel(slot))
+                            .font(.system(size: 9, design: .monospaced))
+                            .opacity(slot % 2 == 0 ? 0.85 : 0.45)
+                            .padding(.trailing, 4)
+                    }
+                }
+                .frame(height: rowHeight)
+            }
+        }
+        .frame(width: hourColumnWidth)
+    }
+}
+
+/// Una columna-día con su grid de fondo, divisor para modo combinado,
+/// drag-to-create y los bloques de Jira/Clockify posicionados.
+private struct DayColumnView: View {
+    let dayIndex: Int
+    let weekStart: Date
+    let viewMode: ViewHourMode
+    let rowHeight: CGFloat
+    let jiraBlocks: [CalendarBlock]
+    let clockifyBlocks: [CalendarBlock]
+    let combined: Bool
+    let sourcePure: WorklogSource
+    let onCreateJira: (DragSelection) -> Void
+    let onCreateClockify: (DragSelection) -> Void
+    let onEditJira: (CalendarBlock) -> Void
+    let onEditClockify: (CalendarBlock) -> Void
+
+    @State private var dragStart: CGPoint? = nil
+    @State private var dragCurrent: CGPoint? = nil
+    @State private var pressLeft: Bool = true
+
+    private var totalHeight: CGFloat { CGFloat(viewMode.slotsPerDay) * rowHeight }
+
+    private var snappedTop: CGFloat {
+        guard let s = dragStart, let c = dragCurrent else { return 0 }
+        let raw = min(s.y, c.y)
+        return CGFloat(max(0, Int(round(raw / rowHeight)))) * rowHeight
+    }
+
+    private var snappedBottom: CGFloat {
+        guard let s = dragStart, let c = dragCurrent else { return rowHeight }
+        let raw = max(s.y, c.y)
+        let snapped = CGFloat(max(0, Int(round(raw / rowHeight)))) * rowHeight + rowHeight
+        return Swift.max(snapped, snappedTop + rowHeight)
+    }
+
+    private func msAtSlot(_ slot: Int) -> Double {
+        let dayStart = weekStart.timeIntervalSince1970 * 1000 + Double(dayIndex) * 86_400_000
+        return dayStart + Double(viewMode.startHour * 3600 + slot * 1800) * 1000
+    }
+
+    private func slotOfMs(_ ms: Double) -> Int {
+        let dayStart = weekStart.timeIntervalSince1970 * 1000 + Double(dayIndex) * 86_400_000
+        let local = ms - dayStart
+        let slotsFromMidnight = Int(floor(local / (30 * 60 * 1000)))
+        return slotsFromMidnight - viewMode.startHour * 2
+    }
+
+    private func yFor(_ b: CalendarBlock) -> CGFloat {
+        CGFloat(slotOfMs(b.startedMs)) * rowHeight
+    }
+    private func heightFor(_ b: CalendarBlock) -> CGFloat {
+        CGFloat(max(1, Int(round(Double(b.durationSec) / 1800)))) * rowHeight
+    }
+
+    var body: some View {
+        GeometryReader { geo in
+            let width = geo.size.width
+            ZStack(alignment: .topLeading) {
+                // Background grid.
+                VStack(spacing: 0) {
+                    ForEach(0..<viewMode.slotsPerDay, id: \.self) { i in
+                        Rectangle()
+                            .fill(i % 2 == 0 ? Color.white.opacity(0.03) : Color.clear)
+                            .overlay(Rectangle().stroke(Color.white.opacity(0.06), lineWidth: 1))
+                            .frame(height: rowHeight)
+                    }
+                }
+
+                // Vertical divider en modo combinado.
+                if combined {
+                    Rectangle()
+                        .fill(Color.white.opacity(0.12))
+                        .frame(width: 1)
+                        .offset(x: width / 2 - 0.5)
+                }
+
+                // Drag selection rectangle.
+                if dragStart != nil, dragCurrent != nil {
+                    let leftX: CGFloat = combined ? (pressLeft ? 0 : width / 2) : 0
+                    let w: CGFloat = combined ? width / 2 : width
+                    Rectangle()
+                        .fill(Color.accentColor.opacity(0.30))
+                        .overlay(Rectangle().stroke(Color.accentColor, lineWidth: 1))
+                        .frame(width: w, height: snappedBottom - snappedTop)
+                        .offset(x: leftX, y: snappedTop)
+                        .allowsHitTesting(false)
+                }
+
+                // Jira blocks.
+                ForEach(jiraBlocks) { b in
+                    EntryBlockView(
+                        block: b,
+                        compactLayout: combined,
+                        useProjectColor: false,
+                        onTap: { onEditJira(b) }
+                    )
+                    .frame(width: combined ? (width / 2) - 3 : width - 4,
+                           height: heightFor(b))
+                    .offset(x: combined ? 2 : 2, y: yFor(b))
+                }
+
+                // Clockify blocks.
+                ForEach(clockifyBlocks) { b in
+                    EntryBlockView(
+                        block: b,
+                        compactLayout: combined,
+                        useProjectColor: !combined,
+                        onTap: { onEditClockify(b) }
+                    )
+                    .frame(width: combined ? (width / 2) - 3 : width - 4,
+                           height: heightFor(b))
+                    .offset(x: combined ? (width / 2) + 1 : 2, y: yFor(b))
+                }
+            }
+            .frame(width: width, height: totalHeight)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 2, coordinateSpace: .local)
+                    .onChanged { value in
+                        if dragStart == nil {
+                            dragStart = value.startLocation
+                            pressLeft = combined ? value.startLocation.x < width / 2 : true
+                        }
+                        dragCurrent = value.location
+                    }
+                    .onEnded { _ in
+                        guard let s = dragStart, let c = dragCurrent else {
+                            dragStart = nil; dragCurrent = nil; return
+                        }
+                        let topSlot = max(0, Int(round(min(s.y, c.y) / rowHeight)))
+                        let botSlot = max(topSlot + 1, Int(round(max(s.y, c.y) / rowHeight)) + 1)
+                        let startMs = msAtSlot(topSlot)
+                        var endMs = msAtSlot(botSlot)
+                        if endMs <= startMs { endMs = startMs + 30 * 60 * 1000 }
+                        let sel = DragSelection(dayIndex: dayIndex,
+                                                startMs: startMs,
+                                                endMs: endMs,
+                                                pressLeft: pressLeft)
+                        dragStart = nil; dragCurrent = nil
+                        if combined {
+                            if sel.pressLeft { onCreateJira(sel) } else { onCreateClockify(sel) }
+                        } else if sourcePure == .jira {
+                            onCreateJira(sel)
+                        } else {
+                            onCreateClockify(sel)
+                        }
+                    }
+            )
+        }
+        .frame(height: totalHeight)
+    }
+}
