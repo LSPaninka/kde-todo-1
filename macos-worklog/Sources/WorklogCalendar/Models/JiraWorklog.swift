@@ -18,4 +18,6 @@ struct JiraAssignableIssue: Identifiable, Hashable {
     var summary: String
     var issuetype: String
     var status: String
+    /// Estimación restante en segundos (0 si la issue no la tiene seteada).
+    var remainingSec: Int
 }

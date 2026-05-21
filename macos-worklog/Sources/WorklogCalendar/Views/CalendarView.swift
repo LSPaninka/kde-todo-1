@@ -25,6 +25,11 @@ struct CalendarView: View {
     let onCreateClockify: (DragSelection) -> Void
     let onEditJira: (CalendarBlock) -> Void
     let onEditClockify: (CalendarBlock) -> Void
+    /// Llamados cuando el usuario arrastra y suelta un bloque.  El
+    /// padre recibe el bloque y el `newStartMs` ya snappeado y clampeado
+    /// a los límites del día.
+    let onMoveJira: (CalendarBlock, Double) -> Void
+    let onMoveClockify: (CalendarBlock, Double) -> Void
 
     private let rowHeight: CGFloat = 22
     private let hourColumnWidth: CGFloat = 56
@@ -36,6 +41,32 @@ struct CalendarView: View {
     private var showClockify: Bool { source == .clockify || source == .jiraClockify }
 
     private var slots: Int { viewMode.slotsPerDay }
+
+    /// `true` si la columna `idx` representa el día de hoy.
+    private func isToday(_ idx: Int) -> Bool {
+        let day = weekStart.addingTimeInterval(Double(idx) * 86_400)
+        return Calendar.current.isDateInToday(day)
+    }
+
+    /// Aplica un delta vertical en píxeles a un bloque: snappea al slot
+    /// de 30 min más cercano, clampea al día y emite `onMoveJira` /
+    /// `onMoveClockify` con el nuevo `startMs` o no hace nada si el
+    /// delta es < medio slot.
+    fileprivate func handleMove(block: CalendarBlock, deltaY: CGFloat, isJira: Bool) {
+        let slotsDelta = Int(round(deltaY / rowHeight))
+        guard slotsDelta != 0 else { return }
+        var newStart = block.startedMs + Double(slotsDelta) * 30 * 60 * 1000
+        let weekStartMs = weekStart.timeIntervalSince1970 * 1000
+        let dayOffsetMs = (block.startedMs - weekStartMs)
+            .truncatingRemainder(dividingBy: 86_400_000)
+        let dayStart = block.startedMs - dayOffsetMs
+        let dayEnd = dayStart + 86_400_000
+        let durMs = Double(block.durationSec) * 1000
+        if newStart < dayStart           { newStart = dayStart }
+        if newStart + durMs > dayEnd     { newStart = dayEnd - durMs }
+        if isJira { onMoveJira(block, newStart) }
+        else      { onMoveClockify(block, newStart) }
+    }
 
     /// Devuelve los bloques que caen en el día `idx` (0..6).
     private func blocks(_ list: [CalendarBlock], dayIndex idx: Int) -> [CalendarBlock] {
@@ -117,7 +148,9 @@ struct CalendarView: View {
                 VStack(spacing: 0) {
                     ZStack {
                         Rectangle()
-                            .fill(Color.white.opacity(0.04))
+                            .fill(isToday(i)
+                                  ? Color.accentColor.opacity(0.22)
+                                  : Color.white.opacity(0.04))
                             .overlay(Rectangle().stroke(Color.white.opacity(0.08), lineWidth: 1))
                         Text(dayHeader(i))
                             .font(.system(size: 10, weight: .semibold))
@@ -163,10 +196,13 @@ struct CalendarView: View {
                     clockifyBlocks: showClockify ? blocks(clockifyBlocks, dayIndex: i) : [],
                     combined: combined,
                     sourcePure: source,
+                    isToday: isToday(i),
                     onCreateJira: onCreateJira,
                     onCreateClockify: onCreateClockify,
                     onEditJira: onEditJira,
-                    onEditClockify: onEditClockify
+                    onEditClockify: onEditClockify,
+                    onMoveJira: { b, dy in handleMove(block: b, deltaY: dy, isJira: true) },
+                    onMoveClockify: { b, dy in handleMove(block: b, deltaY: dy, isJira: false) }
                 )
                 .frame(maxWidth: .infinity)
             }
@@ -205,10 +241,15 @@ private struct DayColumnView: View {
     let clockifyBlocks: [CalendarBlock]
     let combined: Bool
     let sourcePure: WorklogSource
+    let isToday: Bool
     let onCreateJira: (DragSelection) -> Void
     let onCreateClockify: (DragSelection) -> Void
     let onEditJira: (CalendarBlock) -> Void
     let onEditClockify: (CalendarBlock) -> Void
+    /// Llamados al soltar un drag-to-move: recibimos el bloque y el
+    /// delta en píxeles; el padre (CalendarView) hace snap + clamp.
+    let onMoveJira: (CalendarBlock, CGFloat) -> Void
+    let onMoveClockify: (CalendarBlock, CGFloat) -> Void
 
     @State private var dragStart: CGPoint? = nil
     @State private var dragCurrent: CGPoint? = nil
@@ -252,6 +293,13 @@ private struct DayColumnView: View {
         GeometryReader { geo in
             let width = geo.size.width
             ZStack(alignment: .topLeading) {
+                // Tinte del día actual debajo del grid, así el patrón de
+                // filas alternadas sigue siendo visible por encima.
+                if isToday {
+                    Rectangle()
+                        .fill(Color.accentColor.opacity(0.10))
+                }
+
                 // Background grid.
                 VStack(spacing: 0) {
                     ForEach(0..<viewMode.slotsPerDay, id: \.self) { i in
@@ -288,7 +336,9 @@ private struct DayColumnView: View {
                         block: b,
                         compactLayout: combined,
                         useProjectColor: false,
-                        onTap: { onEditJira(b) }
+                        onTap: { onEditJira(b) },
+                        onMove: { dy in onMoveJira(b, dy) },
+                        rowHeight: rowHeight
                     )
                     .frame(width: combined ? (width / 2) - 3 : width - 4,
                            height: heightFor(b))
@@ -301,7 +351,9 @@ private struct DayColumnView: View {
                         block: b,
                         compactLayout: combined,
                         useProjectColor: !combined,
-                        onTap: { onEditClockify(b) }
+                        onTap: { onEditClockify(b) },
+                        onMove: { dy in onMoveClockify(b, dy) },
+                        rowHeight: rowHeight
                     )
                     .frame(width: combined ? (width / 2) - 3 : width - 4,
                            height: heightFor(b))

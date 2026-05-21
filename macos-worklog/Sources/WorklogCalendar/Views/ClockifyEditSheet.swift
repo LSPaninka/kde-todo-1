@@ -67,8 +67,11 @@ struct ClockifyEditSheet: View {
                 Spacer()
                 timePicker("Inicio:", date: $startDate, isStart: true)
                 timePicker("Fin:", date: $endDate, isStart: false)
-                Text("(\(CalendarBlock.fmtDur(durationSec)))").opacity(0.7)
             }
+            Text("Duración: \(CalendarBlock.fmtDur(durationSec))")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, alignment: .trailing)
 
             Divider()
 

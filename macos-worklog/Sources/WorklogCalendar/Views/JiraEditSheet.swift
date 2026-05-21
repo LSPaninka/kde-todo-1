@@ -71,8 +71,13 @@ struct JiraEditSheet: View {
                 Spacer()
                 timePicker("Inicio:", date: $startDate, isStart: true)
                 timePicker("Fin:", date: $endDate, isStart: false)
-                Text("(\(CalendarBlock.fmtDur(durationSec)))").opacity(0.7)
             }
+            // La duración va en su propia línea para que cambiar
+            // "3h" → "3h 30m" no empuje los +/- de la fila de arriba.
+            Text("Duración: \(CalendarBlock.fmtDur(durationSec))")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, alignment: .trailing)
 
             Divider()
 
@@ -148,7 +153,7 @@ struct JiraEditSheet: View {
                     .frame(width: 92, alignment: .leading)
                 Text(iss.summary).lineLimit(1)
                 Spacer()
-                Text("\(iss.issuetype) · \(iss.status)")
+                Text(pickerTrailing(iss))
                     .font(.caption).opacity(0.6)
             }
             .padding(.vertical, 2)
@@ -171,6 +176,14 @@ struct JiraEditSheet: View {
                 ProgressView().controlSize(.small)
             }
         }
+    }
+
+    private func pickerTrailing(_ iss: JiraAssignableIssue) -> String {
+        var parts: [String] = []
+        if !iss.issuetype.isEmpty { parts.append(iss.issuetype) }
+        if !iss.status.isEmpty    { parts.append(iss.status) }
+        if iss.remainingSec > 0   { parts.append(CalendarBlock.fmtDur(iss.remainingSec)) }
+        return parts.joined(separator: " · ")
     }
 
     private func timePicker(_ label: String, date: Binding<Date>, isStart: Bool) -> some View {

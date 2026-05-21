@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Modelo "polimórfico" que el grid renderiza en cualquier slot.  Sirve
@@ -86,6 +87,16 @@ struct EntryBlockView: View {
     /// distinguirlo visualmente del lila de Jira.
     let useProjectColor: Bool
     let onTap: () -> Void
+    /// Llamado al soltar un drag vertical sobre el bloque.  El callback
+    /// recibe el delta en píxeles desde el punto de press (positivo =
+    /// hacia abajo).  El padre se encarga del snap a slot y del clamp
+    /// a límites del día.
+    let onMove: (CGFloat) -> Void
+    /// Altura de cada fila de 30 min (necesaria para snappear el offset
+    /// visual al soltar).
+    let rowHeight: CGFloat
+
+    @State private var dragOffsetY: CGFloat = 0
 
     private var isShort: Bool { block.durationSec <= 30 * 60 }
     private var single: Bool { compactLayout || isShort }
@@ -144,7 +155,46 @@ struct EntryBlockView: View {
             }
         }
         .contentShape(Rectangle())
+        .offset(y: dragOffsetY)
+        // Cursor "double-arrow" mientras estás encima del bloque, para
+        // advertir que se puede arrastrar.
+        .onHover { hovering in
+            if hovering {
+                NSCursor.resizeUpDown.set()
+            } else {
+                NSCursor.arrow.set()
+            }
+        }
+        // Tap-sólo → editar.  `DragGesture(minimumDistance: 4)` no
+        // dispara nada si el usuario no se movió 4 px, así que clicks
+        // cortos siguen yendo a `.onTapGesture`.
         .onTapGesture(perform: onTap)
+        .gesture(
+            DragGesture(minimumDistance: 4, coordinateSpace: .local)
+                .onChanged { value in
+                    dragOffsetY = value.translation.height
+                }
+                .onEnded { value in
+                    let dy = value.translation.height
+                    if Swift.abs(dy) >= 1 {
+                        // Snappeamos visualmente al múltiplo de fila más
+                        // cercano y dejamos el bloque ahí hasta que el
+                        // refetch traiga la nueva `startedMs` (el
+                        // `.onChange` de abajo se encarga de resetear).
+                        dragOffsetY = (dy / rowHeight).rounded() * rowHeight
+                        onMove(dy)
+                    } else {
+                        dragOffsetY = 0
+                    }
+                }
+        )
+        // El padre actualizó el modelo (refetch tras un update OK, o un
+        // refetch tras un fallo que revierte): el `yFor(b)` del padre ya
+        // posiciona el bloque correctamente, así que limpiamos el offset
+        // local para no quedar desplazados el doble.
+        .onChange(of: block.startedMs) { _ in
+            dragOffsetY = 0
+        }
     }
 }
 

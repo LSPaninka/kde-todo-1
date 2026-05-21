@@ -69,7 +69,9 @@ struct MainView: View {
                                           start: Date(timeIntervalSince1970: e.startedMs / 1000),
                                           end:   Date(timeIntervalSince1970: (e.startedMs + Double(e.durationSec) * 1000) / 1000))
                     }
-                }
+                },
+                onMoveJira:     { block, newStartMs in moveJira(block, to: newStartMs) },
+                onMoveClockify: { block, newStartMs in moveClockify(block, to: newStartMs) }
             )
             .frame(maxHeight: .infinity)
 
@@ -188,7 +190,10 @@ struct MainView: View {
         }
     }
 
-    @ViewBuilder
+    /// El status text reserva espacio vertical siempre — usamos un
+    /// non-breaking space cuando no hay mensaje y opacidad 0, para que
+    /// el calendario no salte arriba/abajo cada vez que aparece o se
+    /// limpia un mensaje.
     private var statusLine: some View {
         let text: String = {
             if !statusBanner.text.isEmpty { return statusBanner.text }
@@ -202,12 +207,11 @@ struct MainView: View {
             if !statusBanner.text.isEmpty { return statusBanner.isError }
             return !jira.lastError.isEmpty || !clockify.lastError.isEmpty
         }()
-        if !text.isEmpty {
-            Text(text)
-                .font(.caption)
-                .foregroundColor(isErr ? .red : .secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
+        return Text(text.isEmpty ? "\u{00A0}" : text)
+            .font(.caption)
+            .foregroundColor(isErr ? .red : .secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .opacity(text.isEmpty ? 0 : 1)
     }
 
     // MARK: - Footer
@@ -304,6 +308,55 @@ struct MainView: View {
                 isError: failed > 0
             )
             clockify.fetchWeek(starting: weekStart)
+        }
+    }
+
+    /// Llamado al soltar un drag-to-move sobre un bloque Jira.
+    /// Mantiene la duración y el comentario; sólo cambia `started`.
+    private func moveJira(_ block: CalendarBlock, to newStartMs: Double) {
+        guard let w = jira.worklogs.first(where: { "jira-\($0.id)" == block.id }) else { return }
+        let newStart = Date(timeIntervalSince1970: newStartMs / 1000)
+        jira.updateWorklog(
+            issueKey: w.issueKey,
+            worklogId: w.id,
+            started: newStart,
+            durationSec: w.durationSec,
+            comment: w.comment
+        ) { result in
+            switch result {
+            case .success:
+                syncNow()
+            case .failure(let err):
+                setStatus("Error moviendo worklog: \(err.message)", isError: true)
+                // Refetch para que el bloque vuelva a su y original
+                // (el snap visual no se aplicó del lado del servidor).
+                syncNow()
+            }
+        }
+    }
+
+    /// Mismo concepto para entradas Clockify.  Mantiene descripción,
+    /// proyecto, tags y billable; sólo desplaza start+end.
+    private func moveClockify(_ block: CalendarBlock, to newStartMs: Double) {
+        guard let e = clockify.entries.first(where: { "clockify-\($0.id)" == block.id }) else { return }
+        let newStart = Date(timeIntervalSince1970: newStartMs / 1000)
+        let newEnd = newStart.addingTimeInterval(Double(e.durationSec))
+        clockify.updateEntry(
+            id: e.id,
+            start: newStart,
+            end: newEnd,
+            description: e.description,
+            projectId: e.projectId,
+            tagIds: e.tagIds,
+            billable: e.billable
+        ) { result in
+            switch result {
+            case .success:
+                syncNow()
+            case .failure(let err):
+                setStatus("Error moviendo entry: \(err.message)", isError: true)
+                syncNow()
+            }
         }
     }
 

@@ -86,10 +86,13 @@ final class JiraWorklogStore: ObservableObject {
         let jql = settings.jiraIssueJql.trimmingCharacters(in: .whitespacesAndNewlines)
         let max = Swift.max(10, min(200, settings.jiraIssueMax))
 
+        // `timeestimate` = estimación restante (segundos).  `timetracking`
+        // es la variante humana; pedimos ambos para resiliencia entre
+        // instancias de Jira.
         guard let url = jqlSearchURL(creds: creds,
                                      jql: jql,
                                      maxResults: max,
-                                     fields: "summary,status,issuetype") else {
+                                     fields: "summary,status,issuetype,timeestimate,timetracking") else {
             completion(.failure(StringError("URL inválida del search.")))
             return
         }
@@ -114,7 +117,15 @@ final class JiraWorklogStore: ObservableObject {
                 let summary = (f["summary"] as? String) ?? ""
                 let issuetype = ((f["issuetype"] as? [String: Any])?["name"] as? String) ?? ""
                 let status = ((f["status"] as? [String: Any])?["name"] as? String) ?? ""
-                out.append(.init(key: key, summary: summary, issuetype: issuetype, status: status))
+                var remaining = 0
+                if let n = f["timeestimate"] as? Int {
+                    remaining = n
+                } else if let t = f["timetracking"] as? [String: Any],
+                          let n = t["remainingEstimateSeconds"] as? Int {
+                    remaining = n
+                }
+                out.append(.init(key: key, summary: summary, issuetype: issuetype,
+                                 status: status, remainingSec: remaining))
             }
             self.assignableIssues = out
             self.log("Picker: \(out.count) issue(s).")
