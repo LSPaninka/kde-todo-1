@@ -192,12 +192,17 @@ Item {
                     icon.name: "list-add"
                     onClicked: dlg.endMs = dlg._adjust(dlg.endMs, 30)
                 }
+            }
 
-                Item { Layout.preferredWidth: 8 }
-                PlasmaComponents3.Label {
-                    text: "(" + dlg._fmtDuration(dlg._durationSec()) + ")"
-                    opacity: 0.7
-                }
+            // Duration moved out of the time row so resizing it (4h → 4h 30m)
+            // doesn't shift the +/- buttons. Aligned right under the Fin
+            // group so it's still visually anchored to the duration.
+            PlasmaComponents3.Label {
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignRight
+                text: i18n("Duración: %1", dlg._fmtDuration(dlg._durationSec()))
+                opacity: 0.65
+                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
             }
 
             // Issue picker (create mode) or fixed label (edit mode).
@@ -287,7 +292,14 @@ Item {
                                 elide: Text.ElideRight
                             }
                             PlasmaComponents3.Label {
-                                text: modelData.issuetype + " · " + modelData.status
+                                text: {
+                                    var parts = [];
+                                    if (modelData.issuetype) parts.push(modelData.issuetype);
+                                    if (modelData.status)    parts.push(modelData.status);
+                                    if (modelData.remainingSec > 0)
+                                        parts.push(dlg._fmtDuration(modelData.remainingSec));
+                                    return parts.join(" · ");
+                                }
                                 opacity: 0.6
                                 font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
                             }

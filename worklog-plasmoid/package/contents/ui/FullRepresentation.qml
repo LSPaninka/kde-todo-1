@@ -206,7 +206,9 @@ Item {
 
         // Status / errors. Pure binding — never assigned imperatively;
         // transient messages go through _setStatus() which writes
-        // _statusOverride + restarts the auto-clear timer.
+        // _statusOverride + restarts the auto-clear timer. The "no
+        // message" state still returns a non-breaking space so the line
+        // keeps its height and the calendar below doesn't jump up/down.
         PlasmaComponents3.Label {
             id: statusLabel
             Layout.fillWidth: true
@@ -218,9 +220,8 @@ Item {
                     return i18n("Jira: %1", jiraStore.lastError);
                 if (clockifyStore && clockifyStore.lastError.length > 0)
                     return i18n("Clockify: %1", clockifyStore.lastError);
-                return "";
+                return " ";   // U+00A0 NO-BREAK SPACE: reserves vertical space.
             }
-            visible: text.length > 0
             color: {
                 if (full._statusOverride.length > 0) return full._statusOverrideColor;
                 if ((jiraStore && jiraStore.lastError.length > 0) ||
@@ -229,7 +230,7 @@ Item {
                 }
                 return PlasmaCore.Theme.textColor;
             }
-            opacity: 0.8
+            opacity: text === " " ? 0 : 0.8
             font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
         }
 
@@ -246,6 +247,67 @@ Item {
             onCreateClockifyRequested: clockifyEditDialog.openCreate(startMs, endMs)
             onEditJiraRequested:       jiraEditDialog.openEdit(entry)
             onEditClockifyRequested:   clockifyEditDialog.openEdit(entry)
+            onMoveJiraRequested: function(entry, newStartMs) {
+                if (!jiraStore) return;
+                full._setStatus(i18n("Moviendo worklog Jira…"), false);
+                _clearStatusTimer.stop();
+                jiraStore.updateWorklog(
+                    entry.issueKey,
+                    entry.id,
+                    new Date(newStartMs),
+                    entry.durationSec,
+                    undefined   // keep existing comment
+                );
+            }
+            onMoveClockifyRequested: function(entry, newStartMs) {
+                if (!clockifyStore) return;
+                full._setStatus(i18n("Moviendo entrada Clockify…"), false);
+                _clearStatusTimer.stop();
+                var newStart = new Date(newStartMs);
+                var newEnd   = new Date(newStartMs + entry.durationSec * 1000);
+                clockifyStore.updateEntry(
+                    entry.id,
+                    newStart, newEnd,
+                    entry.description,
+                    entry.projectId,
+                    entry.tagIds,
+                    entry.billable
+                );
+            }
+        }
+
+        // Central refetch trigger. Any successful mutation (drag-move,
+        // modal create/save/delete) lands here and bumps a single
+        // fetchWeek. On failure we surface the error in the status line.
+        Connections {
+            target: jiraStore
+            function onUpdateFinished(ok, err) {
+                if (ok) full.syncNow();
+                else    full._setStatus(i18n("Jira: no se pudo guardar — %1", err), true);
+            }
+            function onCreateFinished(ok, err) {
+                if (ok) full.syncNow();
+                else    full._setStatus(i18n("Jira: no se pudo crear — %1", err), true);
+            }
+            function onDeleteFinished(ok, err) {
+                if (ok) full.syncNow();
+                else    full._setStatus(i18n("Jira: no se pudo borrar — %1", err), true);
+            }
+        }
+        Connections {
+            target: clockifyStore
+            function onUpdateFinished(ok, err) {
+                if (ok) full.syncNow();
+                else    full._setStatus(i18n("Clockify: no se pudo guardar — %1", err), true);
+            }
+            function onCreateFinished(ok, err) {
+                if (ok) full.syncNow();
+                else    full._setStatus(i18n("Clockify: no se pudo crear — %1", err), true);
+            }
+            function onDeleteFinished(ok, err) {
+                if (ok) full.syncNow();
+                else    full._setStatus(i18n("Clockify: no se pudo borrar — %1", err), true);
+            }
         }
 
         // -------- Footer --------
@@ -335,37 +397,60 @@ Item {
                 PlasmaComponents3.ToolTip.delay: 500
             }
 
-            // Mode hamburger.
+            // Mode hamburger — uses a Popup with RadioButtons (real circles)
+            // and a ButtonGroup so the selection is always exclusive and
+            // can't be cleared by clicking the active one.
             PlasmaComponents3.ToolButton {
                 id: modeBtn
                 icon.name: "application-menu"
-                onClicked: modeMenu.open()
+                onClicked: modePopup.open()
                 PlasmaComponents3.ToolTip.text: i18n("Cambiar fuente de worklog")
                 PlasmaComponents3.ToolTip.visible: hovered
                 PlasmaComponents3.ToolTip.delay: 500
-                QQC2.Menu {
-                    id: modeMenu
-                    y: -implicitHeight
-                    QQC2.MenuItem {
-                        text: i18n("Jira")
-                        icon.name: "go-bottom"
-                        checkable: true
-                        checked: full.source === "jira"
-                        onTriggered: { plasmoid.configuration.worklogSource = "jira"; full.syncNow(); }
-                    }
-                    QQC2.MenuItem {
-                        text: i18n("Jira / Clockify")
-                        icon.name: "view-split-left-right"
-                        checkable: true
-                        checked: full.source === "jira-clockify"
-                        onTriggered: { plasmoid.configuration.worklogSource = "jira-clockify"; full.syncNow(); }
-                    }
-                    QQC2.MenuItem {
-                        text: i18n("Clockify")
-                        icon.name: "chronometer"
-                        checkable: true
-                        checked: full.source === "clockify"
-                        onTriggered: { plasmoid.configuration.worklogSource = "clockify"; full.syncNow(); }
+
+                QQC2.Popup {
+                    id: modePopup
+                    parent: modeBtn
+                    y: -implicitHeight - 4
+                    padding: 10
+                    modal: true
+                    focus: true
+                    closePolicy: QQC2.Popup.CloseOnEscape | QQC2.Popup.CloseOnPressOutsideParent
+
+                    QQC2.ButtonGroup { id: sourceGroup }
+
+                    contentItem: ColumnLayout {
+                        spacing: 4
+                        QQC2.RadioButton {
+                            QQC2.ButtonGroup.group: sourceGroup
+                            text: i18n("Jira")
+                            checked: full.source === "jira"
+                            onClicked: if (checked && full.source !== "jira") {
+                                plasmoid.configuration.worklogSource = "jira";
+                                full.syncNow();
+                                modePopup.close();
+                            }
+                        }
+                        QQC2.RadioButton {
+                            QQC2.ButtonGroup.group: sourceGroup
+                            text: i18n("Jira / Clockify")
+                            checked: full.source === "jira-clockify"
+                            onClicked: if (checked && full.source !== "jira-clockify") {
+                                plasmoid.configuration.worklogSource = "jira-clockify";
+                                full.syncNow();
+                                modePopup.close();
+                            }
+                        }
+                        QQC2.RadioButton {
+                            QQC2.ButtonGroup.group: sourceGroup
+                            text: i18n("Clockify")
+                            checked: full.source === "clockify"
+                            onClicked: if (checked && full.source !== "clockify") {
+                                plasmoid.configuration.worklogSource = "clockify";
+                                full.syncNow();
+                                modePopup.close();
+                            }
+                        }
                     }
                 }
             }
@@ -379,19 +464,17 @@ Item {
     }
 
     // -------- Modals --------
+    // Refetch is driven by the store-level Connections above (which cover
+    // both modal saves and drag-to-move) so we don't double-fire it.
     WorklogEditDialog {
         id: jiraEditDialog
         store: full.jiraStore
         anchors.fill: parent
-        onSaved: full.syncNow()
-        onDeleted: full.syncNow()
     }
     ClockifyEditDialog {
         id: clockifyEditDialog
         store: full.clockifyStore
         anchors.fill: parent
-        onSaved: full.syncNow()
-        onDeleted: full.syncNow()
     }
 
     // -------- Debug overlay --------

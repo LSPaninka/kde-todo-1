@@ -207,7 +207,10 @@ QtObject {
         var url = creds.site + "/rest/api/3/search/jql?jql=" +
                   encodeURIComponent(jql) +
                   "&maxResults=" + max +
-                  "&fields=summary,status,issuetype";
+                  // timeestimate = remaining estimate (seconds). timetracking
+                  // is the human-readable variant; we keep both for
+                  // resilience across Jira instances.
+                  "&fields=summary,status,issuetype,timeestimate,timetracking";
 
         _log("Picker GET " + url);
         _jiraGet(url, creds, function(code, body) {
@@ -223,11 +226,18 @@ QtObject {
                 for (var i = 0; i < raw.length; i++) {
                     var r = raw[i];
                     var f = r.fields || {};
+                    var remaining = 0;
+                    if (typeof f.timeestimate === "number") {
+                        remaining = f.timeestimate;
+                    } else if (f.timetracking && typeof f.timetracking.remainingEstimateSeconds === "number") {
+                        remaining = f.timetracking.remainingEstimateSeconds;
+                    }
                     out.push({
                         key: r.key || "",
                         summary: f.summary || "",
                         issuetype: (f.issuetype && f.issuetype.name) || "",
-                        status: (f.status && f.status.name) || ""
+                        status: (f.status && f.status.name) || "",
+                        remainingSec: remaining | 0
                     });
                 }
                 store.assignableIssues = out;

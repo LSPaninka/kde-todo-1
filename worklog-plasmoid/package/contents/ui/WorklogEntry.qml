@@ -34,7 +34,14 @@ Rectangle {
     property bool compact: false   // true in combined mode (force smaller font)
     property bool useProjectColor: false
 
+    // Used by the drag-to-move MouseArea below to constrain the block to
+    // its containing day column.
+    property real columnHeight: parent ? parent.height : 0
+
     signal clicked()
+    // Emitted on drag release with the Y delta (px) from the press point.
+    // Parent maps that to a slot delta and triggers an API update.
+    signal moveRequested(real deltaY)
 
     radius: 3
     border.width: 1
@@ -165,9 +172,37 @@ Rectangle {
         Item { Layout.fillHeight: true }
     }
 
+    // Click + vertical drag handler. drag.threshold ≥ 4px so a small
+    // press-release still fires onClicked; once the user actually drags,
+    // onClicked is suppressed (Qt's MouseArea behavior).
     MouseArea {
         anchors.fill: parent
-        onClicked: block.clicked()
-        cursorShape: Qt.PointingHandCursor
+        drag.target: block
+        drag.axis: Drag.YAxis
+        drag.minimumY: 0
+        drag.maximumY: Math.max(0, block.columnHeight - block.height)
+        drag.threshold: 4
+        cursorShape: Qt.SizeVerCursor
+
+        property bool _dragged: false
+        property real _pressY: 0
+
+        onPressed: {
+            _dragged = false;
+            _pressY = block.y;
+        }
+        onPositionChanged: function(mouse) {
+            if (drag.active) _dragged = true;
+        }
+        onReleased: function(mouse) {
+            if (_dragged) {
+                var dy = block.y - _pressY;
+                if (Math.abs(dy) >= 1) block.moveRequested(dy);
+                else block.y = _pressY;   // undo a no-op nudge
+            }
+        }
+        onClicked: function(mouse) {
+            if (!_dragged) block.clicked();
+        }
     }
 }

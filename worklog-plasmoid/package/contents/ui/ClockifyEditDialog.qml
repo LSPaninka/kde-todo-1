@@ -191,11 +191,16 @@ Item {
                     icon.name: "list-add"
                     onClicked: dlg.endMs = dlg._adjust(dlg.endMs, 30)
                 }
-                Item { Layout.preferredWidth: 8 }
-                PlasmaComponents3.Label {
-                    text: "(" + dlg._fmtDur(dlg._durationSec()) + ")"
-                    opacity: 0.7
-                }
+            }
+
+            // Duration moved below the time row so it doesn't shove the
+            // +/- buttons every time the rounding changes width.
+            PlasmaComponents3.Label {
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignRight
+                text: i18n("Duración: %1", dlg._fmtDur(dlg._durationSec()))
+                opacity: 0.65
+                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
             }
 
             // Project picker.
