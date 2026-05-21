@@ -247,24 +247,27 @@ Item {
             onCreateClockifyRequested: clockifyEditDialog.openCreate(startMs, endMs)
             onEditJiraRequested:       jiraEditDialog.openEdit(entry)
             onEditClockifyRequested:   clockifyEditDialog.openEdit(entry)
-            onMoveJiraRequested: function(entry, newStartMs) {
+            // One handler covers cross-day move, top resize and bottom
+            // resize — all three end up as a Jira/Clockify update with
+            // a new (start, duration) pair.
+            onMoveJiraRequested: function(entry, newStartMs, newDurationSec) {
                 if (!jiraStore) return;
-                full._setStatus(i18n("Moviendo worklog Jira…"), false);
+                full._setStatus(i18n("Actualizando worklog Jira…"), false);
                 _clearStatusTimer.stop();
                 jiraStore.updateWorklog(
                     entry.issueKey,
                     entry.id,
                     new Date(newStartMs),
-                    entry.durationSec,
+                    newDurationSec,
                     undefined   // keep existing comment
                 );
             }
-            onMoveClockifyRequested: function(entry, newStartMs) {
+            onMoveClockifyRequested: function(entry, newStartMs, newDurationSec) {
                 if (!clockifyStore) return;
-                full._setStatus(i18n("Moviendo entrada Clockify…"), false);
+                full._setStatus(i18n("Actualizando entrada Clockify…"), false);
                 _clearStatusTimer.stop();
                 var newStart = new Date(newStartMs);
-                var newEnd   = new Date(newStartMs + entry.durationSec * 1000);
+                var newEnd   = new Date(newStartMs + newDurationSec * 1000);
                 clockifyStore.updateEntry(
                     entry.id,
                     newStart, newEnd,

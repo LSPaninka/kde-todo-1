@@ -34,14 +34,22 @@ Rectangle {
     property bool compact: false   // true in combined mode (force smaller font)
     property bool useProjectColor: false
 
-    // Used by the drag-to-move MouseArea below to constrain the block to
-    // its containing day column.
+    // Geometry hints from the parent so the MouseArea below can decide
+    // whether to constrain the drag and how to translate pixel deltas
+    // into slot / day deltas.
     property real columnHeight: parent ? parent.height : 0
+    property real columnWidth:  parent ? parent.width  : 0
+    property real rowHeight: 22                // slot height in px (= 30 min)
 
     signal clicked()
-    // Emitted on drag release with the Y delta (px) from the press point.
-    // Parent maps that to a slot delta and triggers an API update.
-    signal moveRequested(real deltaY)
+    // Emitted on drag release with the pixel delta from the original
+    // x/y. WorklogCalendar maps to (day, slot) deltas and triggers an
+    // API update.
+    signal moveRequested(real deltaX, real deltaY)
+    // Edge-resize signals: deltaY is the difference between the block's
+    // current y/height and the value it had at press time.
+    signal resizeTopRequested(real deltaY)
+    signal resizeBottomRequested(real deltaH)
 
     radius: 3
     border.width: 1
@@ -172,35 +180,116 @@ Rectangle {
         Item { Layout.fillHeight: true }
     }
 
-    // Click + vertical drag handler. drag.threshold ≥ 4px so a small
-    // press-release still fires onClicked; once the user actually drags,
-    // onClicked is suppressed (Qt's MouseArea behavior).
+    // Single MouseArea handling three interactions, chosen on press by
+    // pointer Y within the block:
+    //   - top ≤ 5 px         → resize from the top (changes y + height)
+    //   - bottom ≤ 5 px      → resize from the bottom (changes height)
+    //   - middle             → click / drag-to-move (X+Y, cross-day OK)
+    //
+    // For move we lean on Qt's drag.target so the block visually follows
+    // the cursor. For resize drag.target is null and we recompute y/height
+    // manually from a parent-relative cursor (so the moving MouseArea
+    // doesn't confuse the math).
+    readonly property int _edgePx: 5
+
     MouseArea {
+        id: ma
         anchors.fill: parent
-        drag.target: block
-        drag.axis: Drag.YAxis
-        drag.minimumY: 0
-        drag.maximumY: Math.max(0, block.columnHeight - block.height)
+        hoverEnabled: true
+        drag.axis: Drag.XAndYAxis
         drag.threshold: 4
-        cursorShape: Qt.SizeVerCursor
 
+        property int  _mode: 0          // 0=idle, 1=move, 2=resizeTop, 3=resizeBottom
+        property real _pressBlockX: 0
+        property real _pressBlockY: 0
+        property real _origY: 0
+        property real _origH: 0
+        property real _pressParentY: 0   // cursor Y in block.parent's coords at press
         property bool _dragged: false
-        property real _pressY: 0
 
-        onPressed: {
+        cursorShape: {
+            if (pressed) {
+                if (_mode === 1) return Qt.SizeAllCursor;
+                if (_mode === 2 || _mode === 3) return Qt.SizeVerCursor;
+            }
+            if (!containsMouse) return Qt.ArrowCursor;
+            if (mouseY < block._edgePx)               return Qt.SizeVerCursor;
+            if (mouseY > height - block._edgePx)      return Qt.SizeVerCursor;
+            return Qt.SizeAllCursor;
+        }
+
+        onPressed: function(mouse) {
             _dragged = false;
-            _pressY = block.y;
-        }
-        onPositionChanged: function(mouse) {
-            if (drag.active) _dragged = true;
-        }
-        onReleased: function(mouse) {
-            if (_dragged) {
-                var dy = block.y - _pressY;
-                if (Math.abs(dy) >= 1) block.moveRequested(dy);
-                else block.y = _pressY;   // undo a no-op nudge
+            _origY        = block.y;
+            _origH        = block.height;
+            _pressBlockX  = block.x;
+            _pressBlockY  = block.y;
+            _pressParentY = ma.mapToItem(block.parent, mouse.x, mouse.y).y;
+
+            if (mouse.y < block._edgePx) {
+                _mode = 2;                 // resize top
+                drag.target = null;
+            } else if (mouse.y > height - block._edgePx) {
+                _mode = 3;                 // resize bottom
+                drag.target = null;
+            } else {
+                _mode = 1;                 // move
+                drag.target = block;
+                // Float the block AND its day-column above siblings, so a
+                // drag into Thursday isn't visually covered by Friday.
+                block.z = 999;
+                if (block.parent) block.parent.z = 999;
             }
         }
+
+        onPositionChanged: function(mouse) {
+            if (_mode === 1) {
+                if (drag.active) _dragged = true;
+                return;
+            }
+            // Resize modes: compute dy in stable parent coords.
+            var nowParentY = ma.mapToItem(block.parent, mouse.x, mouse.y).y;
+            var dy = nowParentY - _pressParentY;
+            if (Math.abs(dy) > 2) _dragged = true;
+
+            if (_mode === 2) {
+                // Top edge: grow upward (dy<0) / shrink downward.
+                var newY = _origY + dy;
+                var newH = _origH - dy;
+                if (newY < 0) { newH += newY; newY = 0; }
+                if (newH < block.rowHeight) {
+                    newH = block.rowHeight;
+                    newY = _origY + _origH - block.rowHeight;
+                }
+                block.y = newY;
+                block.height = newH;
+            } else {
+                // Bottom edge: grow downward (dy>0) / shrink upward.
+                var maxH = Math.max(block.rowHeight, block.columnHeight - block.y);
+                var newHb = _origH + dy;
+                if (newHb < block.rowHeight) newHb = block.rowHeight;
+                if (newHb > maxH)            newHb = maxH;
+                block.height = newHb;
+            }
+        }
+
+        onReleased: function(mouse) {
+            block.z = 0;
+            if (block.parent) block.parent.z = 0;
+            var m = _mode;
+            _mode = 0;
+            if (!_dragged) return;   // tap → handled by onClicked
+            if (m === 1) {
+                var dx = block.x - _pressBlockX;
+                var dy = block.y - _pressBlockY;
+                block.moveRequested(dx, dy);
+            } else if (m === 2) {
+                block.resizeTopRequested(block.y - _origY);
+            } else if (m === 3) {
+                block.resizeBottomRequested(block.height - _origH);
+            }
+        }
+
         onClicked: function(mouse) {
             if (!_dragged) block.clicked();
         }

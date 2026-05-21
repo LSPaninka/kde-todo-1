@@ -33,23 +33,47 @@ Item {
     signal createClockifyRequested(real dayMs, real startMs, real endMs)
     signal editJiraRequested(var entry)
     signal editClockifyRequested(var entry)
-    signal moveJiraRequested(var entry, real newStartMs)
-    signal moveClockifyRequested(var entry, real newStartMs)
+    // Unified change signals — used for cross-day moves, top-edge resizes
+    // (changes both start and duration) and bottom-edge resizes (duration
+    // only). The store layer doesn't care which gesture produced them.
+    signal moveJiraRequested(var entry, real newStartMs, int newDurationSec)
+    signal moveClockifyRequested(var entry, real newStartMs, int newDurationSec)
 
-    // Snap a drag-delta (in px) to whole 30-min slots, apply to the entry's
-    // original start, and clamp the result inside the day so we don't try
-    // to log past midnight.
-    function _handleMove(entry, deltaY, isJira) {
+    function _emitChange(entry, newStartMs, newDurationSec, isJira) {
+        // Clamp to the visible week so a wild drag can't log on day -1
+        // or day 8. Per-day clamp is intentionally skipped — entries that
+        // span midnight are legal in both Jira and Clockify.
+        var wsMs = weekStart.getTime();
+        var weMs = wsMs + 7 * 86400000;
+        var durMs = newDurationSec * 1000;
+        if (newStartMs < wsMs)         newStartMs = wsMs;
+        if (newStartMs + durMs > weMs) newStartMs = weMs - durMs;
+        if (newDurationSec < 1800)     newDurationSec = 1800;   // 30-min floor
+        if (newStartMs === entry.started && newDurationSec === entry.durationSec) return;
+        if (isJira) moveJiraRequested(entry, newStartMs, newDurationSec);
+        else        moveClockifyRequested(entry, newStartMs, newDurationSec);
+    }
+
+    function _handleMove(entry, deltaX, deltaY, currentDayWidth, isJira) {
+        var slots  = Math.round(deltaY / cal.rowHeight);
+        var days   = currentDayWidth > 0 ? Math.round(deltaX / currentDayWidth) : 0;
+        if (slots === 0 && days === 0) return;
+        var newStart = entry.started + days * 86400000 + slots * 30 * 60 * 1000;
+        _emitChange(entry, newStart, entry.durationSec, isJira);
+    }
+    function _handleResizeTop(entry, deltaY, isJira) {
         var slots = Math.round(deltaY / cal.rowHeight);
         if (slots === 0) return;
+        // deltaY positive → started later, duration shrinks by same.
         var newStart = entry.started + slots * 30 * 60 * 1000;
-        var dayStart = entry.started - ((entry.started - weekStart.getTime()) % 86400000);
-        var dayEnd   = dayStart + 86400000;
-        var durMs    = entry.durationSec * 1000;
-        if (newStart < dayStart)            newStart = dayStart;
-        if (newStart + durMs > dayEnd)      newStart = dayEnd - durMs;
-        if (isJira) moveJiraRequested(entry, newStart);
-        else        moveClockifyRequested(entry, newStart);
+        var newDur   = entry.durationSec - slots * 1800;
+        _emitChange(entry, newStart, newDur, isJira);
+    }
+    function _handleResizeBottom(entry, deltaH, isJira) {
+        var slots = Math.round(deltaH / cal.rowHeight);
+        if (slots === 0) return;
+        var newDur = entry.durationSec + slots * 1800;
+        _emitChange(entry, entry.started, newDur, isJira);
     }
 
     readonly property bool _isCombined: source === "jira-clockify"
@@ -387,8 +411,14 @@ Item {
                             width: cal._isCombined ? (dayCol.width / 2) - 3 : dayCol.width - 4
                             height: cal._heightForEntry(modelData)
                             columnHeight: dayCol.height
+                            columnWidth: dayCol.width
+                            rowHeight: cal.rowHeight
                             onClicked: cal.editJiraRequested(entry)
-                            onMoveRequested: function(dy) { cal._handleMove(entry, dy, true); }
+                            onMoveRequested: function(dx, dy) {
+                                cal._handleMove(entry, dx, dy, dayCol.width, true);
+                            }
+                            onResizeTopRequested:    function(dy) { cal._handleResizeTop(entry, dy, true); }
+                            onResizeBottomRequested: function(dh) { cal._handleResizeBottom(entry, dh, true); }
                         }
                     }
 
@@ -406,8 +436,14 @@ Item {
                             width: cal._isCombined ? (dayCol.width / 2) - 3 : dayCol.width - 4
                             height: cal._heightForEntry(modelData)
                             columnHeight: dayCol.height
+                            columnWidth: dayCol.width
+                            rowHeight: cal.rowHeight
                             onClicked: cal.editClockifyRequested(entry)
-                            onMoveRequested: function(dy) { cal._handleMove(entry, dy, false); }
+                            onMoveRequested: function(dx, dy) {
+                                cal._handleMove(entry, dx, dy, dayCol.width, false);
+                            }
+                            onResizeTopRequested:    function(dy) { cal._handleResizeTop(entry, dy, false); }
+                            onResizeBottomRequested: function(dh) { cal._handleResizeBottom(entry, dh, false); }
                         }
                     }
                 }
