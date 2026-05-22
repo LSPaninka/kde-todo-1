@@ -44,7 +44,7 @@ final class AppSettings: ObservableObject {
 
     // Tamaño preferido de la ventana principal.
     @Published var windowWidth: Int = 1100 { didSet { ud.set(windowWidth, forKey: "worklogWindowWidth") } }
-    @Published var windowHeight: Int = 700 { didSet { ud.set(windowHeight, forKey: "worklogWindowHeight") } }
+    @Published var windowHeight: Int = 800 { didSet { ud.set(windowHeight, forKey: "worklogWindowHeight") } }
 
     // MARK: - Jira
 
@@ -57,6 +57,26 @@ final class AppSettings: ObservableObject {
         "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC"
         { didSet { ud.set(jiraIssueJql, forKey: "worklogIssueJql") } }
     @Published var jiraIssueMax: Int = 50 { didSet { ud.set(jiraIssueMax, forKey: "worklogIssueMax") } }
+
+    // MARK: - Sprint (experimental)
+
+    /// Habilita los anillos Sprint + Horas al pie del calendario.
+    @Published var showSprintGauges: Bool = true { didSet { ud.set(showSprintGauges, forKey: "worklogShowSprintGauges") } }
+    /// Cómo descubrir el sprint activo.  Default
+    /// `"subtask-customfield"` cubre el caso típico (usuario sólo dueño
+    /// de subtareas).  `"agile-board"` necesita un boardId.
+    /// `"assignee-jql"` es el fallback que pide al campo `sprint`
+    /// top-level.
+    @Published var sprintStrategy: String = "subtask-customfield" { didSet { ud.set(sprintStrategy, forKey: "worklogSprintStrategy") } }
+    /// Nombre del custom field con el array de sprints.  En la mayoría
+    /// de las instancias de Jira Cloud es `customfield_10020`.
+    @Published var sprintField: String = "customfield_10020" { didSet { ud.set(sprintField, forKey: "worklogSprintField") } }
+    /// ID del board para la estrategia `agile-board`.
+    @Published var sprintBoardId: Int = 0 { didSet { ud.set(sprintBoardId, forKey: "worklogSprintBoardId") } }
+    /// "api" usa `timetracking.remainingEstimateSeconds`.  "calculated"
+    /// usa `max(0, originalEstimate − timeSpent)` para cuando la
+    /// estimación no se mantiene al día en Jira.
+    @Published var remainingMode: String = "api" { didSet { ud.set(remainingMode, forKey: "worklogRemainingMode") } }
 
     // MARK: - Clockify
 
@@ -90,6 +110,14 @@ final class AppSettings: ObservableObject {
         jiraToken = Keychain.get("jira.token") ?? ""
         if let s = ud.string(forKey: "worklogIssueJql") { jiraIssueJql = s }
         if let n = ud.object(forKey: "worklogIssueMax") as? Int { jiraIssueMax = n }
+
+        if ud.object(forKey: "worklogShowSprintGauges") != nil {
+            showSprintGauges = ud.bool(forKey: "worklogShowSprintGauges")
+        }
+        if let s = ud.string(forKey: "worklogSprintStrategy"), !s.isEmpty { sprintStrategy = s }
+        if let s = ud.string(forKey: "worklogSprintField"),    !s.isEmpty { sprintField = s }
+        if let n = ud.object(forKey: "worklogSprintBoardId") as? Int { sprintBoardId = n }
+        if let s = ud.string(forKey: "worklogRemainingMode"),  !s.isEmpty { remainingMode = s }
 
         clockifyApiKey           = Keychain.get("clockify.api-key") ?? ""
         clockifyWorkspaceId      = ud.string(forKey: "clockifyWorkspaceId") ?? ""

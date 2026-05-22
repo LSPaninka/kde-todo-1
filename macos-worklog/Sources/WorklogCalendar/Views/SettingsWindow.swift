@@ -67,6 +67,47 @@ struct SettingsWindow: View {
                 )
             }
 
+            Section("Sprint (experimental)") {
+                Toggle("Mostrar anillos Sprint / Horas debajo del calendario",
+                       isOn: $settings.showSprintGauges)
+
+                Picker("Estrategia para encontrar el sprint activo",
+                       selection: $settings.sprintStrategy) {
+                    Text("Subtareas + custom field (default)").tag("subtask-customfield")
+                    Text("Agile board (board ID)").tag("agile-board")
+                    Text("Assignee + openSprints (fallback)").tag("assignee-jql")
+                }
+                .pickerStyle(.menu)
+
+                if settings.sprintStrategy != "agile-board" {
+                    TextField("Custom field del sprint",
+                              text: $settings.sprintField)
+                        .font(.system(.body, design: .monospaced))
+                        .textFieldStyle(.roundedBorder)
+                    Text("En la mayoría de Jira Cloud: customfield_10020.")
+                        .font(.caption2).foregroundColor(.secondary)
+                }
+
+                if settings.sprintStrategy == "agile-board" {
+                    Stepper(
+                        "Board ID: \(settings.sprintBoardId)",
+                        value: $settings.sprintBoardId,
+                        in: 0...99999, step: 1
+                    )
+                    Text("ID del board ágil cuyo sprint activo querés mostrar.")
+                        .font(.caption2).foregroundColor(.secondary)
+                }
+
+                Picker("Modo del campo \"Disponible\"",
+                       selection: $settings.remainingMode) {
+                    Text("API (remainingEstimate)").tag("api")
+                    Text("Calculado (original − spent)").tag("calculated")
+                }
+                .pickerStyle(.segmented)
+                Text("Usá Calculado si en tu Jira el remainingEstimate no se mantiene al día.")
+                    .font(.caption2).foregroundColor(.secondary)
+            }
+
             Section("Diagnóstico") {
                 Toggle("NSLog detallado de cada request", isOn: $settings.debug)
                 Text("Visibles con: log stream --predicate 'process == \"WorklogCalendar\"' --info")

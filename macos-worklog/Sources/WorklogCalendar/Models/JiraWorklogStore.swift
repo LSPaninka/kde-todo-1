@@ -19,6 +19,14 @@ final class JiraWorklogStore: ObservableObject {
     @Published private(set) var assignableIssues: [JiraAssignableIssue] = []
     @Published private(set) var myAccountId: String = ""
 
+    /// Sprint activo del usuario (o `nil` si no hay).  Lo llena
+    /// `fetchSprintInfo()`.
+    @Published private(set) var currentSprint: JiraSprintInfo? = nil
+    /// Suma del `remaining` (= disponible) de las issues del sprint.
+    @Published private(set) var sprintAvailableSec: Int = 0
+    /// Suma de los worklogs propios dentro del rango del sprint.
+    @Published private(set) var sprintConsumedSec: Int = 0
+
     @Published private(set) var loading: Bool = false
     @Published var lastError: String = ""
     @Published private(set) var lastFetchedAt: Date? = nil
@@ -87,12 +95,12 @@ final class JiraWorklogStore: ObservableObject {
         let max = Swift.max(10, min(200, settings.jiraIssueMax))
 
         // `timeestimate` = estimación restante (segundos).  `timetracking`
-        // es la variante humana; pedimos ambos para resiliencia entre
-        // instancias de Jira.
+        // es la variante humana; `timeoriginalestimate` lo necesitamos
+        // sólo para el modo "calculated" del remaining helper.
         guard let url = jqlSearchURL(creds: creds,
                                      jql: jql,
                                      maxResults: max,
-                                     fields: "summary,status,issuetype,timeestimate,timetracking") else {
+                                     fields: "summary,status,issuetype,timeoriginalestimate,timeestimate,timetracking") else {
             completion(.failure(StringError("URL inválida del search.")))
             return
         }
@@ -117,13 +125,9 @@ final class JiraWorklogStore: ObservableObject {
                 let summary = (f["summary"] as? String) ?? ""
                 let issuetype = ((f["issuetype"] as? [String: Any])?["name"] as? String) ?? ""
                 let status = ((f["status"] as? [String: Any])?["name"] as? String) ?? ""
-                var remaining = 0
-                if let n = f["timeestimate"] as? Int {
-                    remaining = n
-                } else if let t = f["timetracking"] as? [String: Any],
-                          let n = t["remainingEstimateSeconds"] as? Int {
-                    remaining = n
-                }
+                // Mismo helper que usa el gauge: que el picker muestre
+                // valores consistentes con la columna "Disponible".
+                let remaining = self.remainingSec(fields: f)
                 out.append(.init(key: key, summary: summary, issuetype: issuetype,
                                  status: status, remainingSec: remaining))
             }
@@ -513,5 +517,281 @@ final class JiraWorklogStore: ObservableObject {
         }
         if let msg = json["message"] as? String { return msg }
         return String(body.prefix(240))
+    }
+
+    // MARK: - Sprint info (gauges)
+
+    /// Despacha a una de las 3 estrategias configuradas.  El callback
+    /// recibe `true` si todo cargó OK (puede haber `currentSprint = nil`
+    /// si no hay ningún sprint activo, que es válido).
+    func fetchSprintInfo(completion: @escaping (Bool) -> Void) {
+        guard let creds = credentials() else { completion(false); return }
+        let go: () -> Void = { [weak self] in
+            self?.dispatchSprintStrategy(creds: creds, completion: completion)
+        }
+        if myAccountId.isEmpty {
+            let url = URL(string: creds.site + "/rest/api/3/myself")!
+            send(.get, url: url, body: nil, creds: creds) { [weak self] code, body in
+                if code == 200,
+                   let data = body.data(using: .utf8),
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let id = json["accountId"] as? String {
+                    self?.myAccountId = id
+                }
+                go()
+            }
+        } else {
+            go()
+        }
+    }
+
+    private func dispatchSprintStrategy(creds: Credentials, completion: @escaping (Bool) -> Void) {
+        let strategy = settings.sprintStrategy
+        log("Sprint strategy: \(strategy)")
+        switch strategy {
+        case "agile-board":         fetchSprintAgileBoard(creds: creds, completion: completion)
+        case "assignee-jql":        fetchSprintAssigneeJql(creds: creds, completion: completion)
+        default:                    fetchSprintSubtaskField(creds: creds, completion: completion)
+        }
+    }
+
+    // ----- Strategy: subtarea + customfield_10020 -----
+
+    private func fetchSprintSubtaskField(creds: Credentials,
+                                          completion: @escaping (Bool) -> Void) {
+        let field = settings.sprintField.isEmpty ? "customfield_10020" : settings.sprintField
+        // No filtramos por statusCategory: las subtareas "Done" también
+        // suman a "Quemadas" para este sprint.
+        let jql = "issuetype in subTaskIssueTypes() AND assignee = currentUser()"
+        let fields = "summary,worklog,timeoriginalestimate,timeestimate,timetracking,\(field)"
+        guard let url = jqlSearchURL(creds: creds, jql: jql,
+                                     maxResults: 200, fields: fields) else {
+            clearSprint(); completion(false); return
+        }
+        log("Sprint(subtask) GET \(url.absoluteString)")
+        send(.get, url: url, body: nil, creds: creds) { [weak self] code, body in
+            guard let self else { completion(false); return }
+            if code != 200 {
+                self.warn("subtask-customfield exit=\(code): \(body.prefix(240))")
+                self.clearSprint(); completion(false); return
+            }
+            guard let data = body.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let issues = json["issues"] as? [[String: Any]] else {
+                self.clearSprint(); completion(false); return
+            }
+            self.log("subtask-customfield: \(issues.count) subtarea(s).")
+            if issues.isEmpty { self.clearSprint(); completion(true); return }
+            guard let active = self.findActiveSprintIn(issues: issues, field: field) else {
+                self.warn("Ningún sprint activo en el campo '\(field)' de las subtareas. ¿Cambió el id del custom field?")
+                self.clearSprint(); completion(true); return
+            }
+            self.currentSprint = active
+            self.computeSprintTotals(issues: issues, active: active, field: field)
+            completion(true)
+        }
+    }
+
+    // ----- Strategy: agile board -----
+
+    private func fetchSprintAgileBoard(creds: Credentials,
+                                        completion: @escaping (Bool) -> Void) {
+        let boardId = settings.sprintBoardId
+        if boardId <= 0 {
+            warn("agile-board: 'Board ID' no configurado.")
+            clearSprint(); completion(false); return
+        }
+        let url = URL(string: creds.site + "/rest/agile/1.0/board/\(boardId)/sprint?state=active")!
+        log("Sprint(agile) GET \(url.absoluteString)")
+        send(.get, url: url, body: nil, creds: creds) { [weak self] code, body in
+            guard let self else { completion(false); return }
+            if code != 200 {
+                self.warn("agile-board sprint list exit=\(code): \(body.prefix(240))")
+                self.clearSprint(); completion(false); return
+            }
+            guard let data = body.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let values = json["values"] as? [[String: Any]] else {
+                self.clearSprint(); completion(false); return
+            }
+            if values.isEmpty {
+                self.log("agile-board: el board \(boardId) no tiene sprints activos.")
+                self.clearSprint(); completion(true); return
+            }
+            guard let active = self.sprintInfo(from: values[0]) else {
+                self.clearSprint(); completion(false); return
+            }
+            self.currentSprint = active
+
+            // Issues del sprint asignadas al usuario.
+            let jql = "sprint = \(active.id) AND assignee = currentUser()"
+            let fields = "summary,worklog,timeoriginalestimate,timeestimate,timetracking"
+            guard let url2 = self.jqlSearchURL(creds: creds, jql: jql,
+                                               maxResults: 200, fields: fields) else {
+                self.sprintAvailableSec = 0; self.sprintConsumedSec = 0
+                completion(true); return
+            }
+            self.log("Sprint(agile) issues GET \(url2.absoluteString)")
+            self.send(.get, url: url2, body: nil, creds: creds) { code2, body2 in
+                if code2 != 200 {
+                    self.warn("agile-board issues exit=\(code2): \(body2.prefix(240))")
+                    self.sprintAvailableSec = 0; self.sprintConsumedSec = 0
+                    completion(true); return
+                }
+                if let d2 = body2.data(using: .utf8),
+                   let j2 = try? JSONSerialization.jsonObject(with: d2) as? [String: Any],
+                   let is2 = j2["issues"] as? [[String: Any]] {
+                    // No filtramos por sprint id: el JQL ya lo hizo.
+                    self.computeSprintTotals(issues: is2, active: active, field: nil)
+                    completion(true)
+                } else {
+                    completion(false)
+                }
+            }
+        }
+    }
+
+    // ----- Strategy: assignee + openSprints (fallback) -----
+
+    private func fetchSprintAssigneeJql(creds: Credentials,
+                                         completion: @escaping (Bool) -> Void) {
+        let field = settings.sprintField.isEmpty ? "customfield_10020" : settings.sprintField
+        let jql = "sprint in openSprints() AND assignee = currentUser()"
+        let fields = "summary,worklog,timeoriginalestimate,timeestimate,timetracking,\(field)"
+        guard let url = jqlSearchURL(creds: creds, jql: jql,
+                                     maxResults: 200, fields: fields) else {
+            clearSprint(); completion(false); return
+        }
+        log("Sprint(assignee) GET \(url.absoluteString)")
+        send(.get, url: url, body: nil, creds: creds) { [weak self] code, body in
+            guard let self else { completion(false); return }
+            if code != 200 {
+                self.warn("assignee-jql exit=\(code): \(body.prefix(240))")
+                self.clearSprint(); completion(false); return
+            }
+            guard let data = body.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let issues = json["issues"] as? [[String: Any]] else {
+                self.clearSprint(); completion(false); return
+            }
+            if issues.isEmpty { self.clearSprint(); completion(true); return }
+            guard let active = self.findActiveSprintIn(issues: issues, field: field) else {
+                self.clearSprint(); completion(true); return
+            }
+            self.currentSprint = active
+            self.computeSprintTotals(issues: issues, active: active, field: field)
+            completion(true)
+        }
+    }
+
+    // ----- Helpers compartidos -----
+
+    /// Recorre los issues buscando un sprint con `state == "active"` en
+    /// el array del custom field.
+    private func findActiveSprintIn(issues: [[String: Any]], field: String) -> JiraSprintInfo? {
+        for iss in issues {
+            let f = (iss["fields"] as? [String: Any]) ?? [:]
+            let raw = f[field]
+            let arr: [[String: Any]] = {
+                if let a = raw as? [[String: Any]] { return a }
+                if let d = raw as? [String: Any]   { return [d] }
+                return []
+            }()
+            for s in arr {
+                let state = (s["state"] as? String)?.lowercased() ?? ""
+                if state == "active" {
+                    if let info = sprintInfo(from: s) { return info }
+                }
+            }
+        }
+        return nil
+    }
+
+    private func sprintInfo(from raw: [String: Any]) -> JiraSprintInfo? {
+        guard let id = raw["id"] as? Int else { return nil }
+        let name = (raw["name"] as? String) ?? ""
+        let start = (raw["startDate"] as? String) ?? ""
+        let end   = (raw["endDate"]   as? String) ?? ""
+        let startMs = Self.parseJiraDateMs(start) ?? 0
+        let endMs   = Self.parseJiraDateMs(end) ?? 0
+        return JiraSprintInfo(id: id, name: name,
+                              startDate: start, endDate: end,
+                              startMs: startMs, endMs: endMs)
+    }
+
+    private func clearSprint() {
+        currentSprint = nil
+        sprintAvailableSec = 0
+        sprintConsumedSec = 0
+    }
+
+    /// "Disponible" = lo que falta por hacer.  Subtareas ya consumidas
+    /// en sprints anteriores contribuyen 0 en vez de inflar el total
+    /// con su `originalEstimate`.
+    private func computeSprintTotals(issues: [[String: Any]],
+                                      active: JiraSprintInfo,
+                                      field: String?) {
+        let sStart = active.startMs
+        let sEnd   = active.endMs
+        var available = 0
+        var consumed = 0
+        for iss in issues {
+            let f = (iss["fields"] as? [String: Any]) ?? [:]
+            if let fld = field {
+                let raw = f[fld]
+                let arr: [[String: Any]] = {
+                    if let a = raw as? [[String: Any]] { return a }
+                    if let d = raw as? [String: Any]   { return [d] }
+                    return []
+                }()
+                let hit = arr.contains { ($0["id"] as? Int) == active.id }
+                if !hit { continue }
+            }
+            available += remainingSec(fields: f)
+
+            let wlContainer = (f["worklog"] as? [String: Any]) ?? [:]
+            let wls = (wlContainer["worklogs"] as? [[String: Any]]) ?? []
+            for w in wls {
+                guard let startedStr = w["started"] as? String,
+                      let ms = Self.parseJiraDateMs(startedStr),
+                      ms >= sStart, ms <= sEnd else { continue }
+                if !myAccountId.isEmpty,
+                   let author = w["author"] as? [String: Any],
+                   let aid = author["accountId"] as? String,
+                   aid != myAccountId { continue }
+                consumed += (w["timeSpentSeconds"] as? Int) ?? 0
+            }
+        }
+        sprintAvailableSec = available
+        sprintConsumedSec = consumed
+        log("Sprint '\(active.name)': remaining=\(available)s, consumed=\(consumed)s.")
+    }
+
+    /// Calcula el "remaining" de una issue según el modo configurado.
+    /// "api" usa `timetracking.remainingEstimateSeconds` (o `timeestimate`
+    /// como fallback).  "calculated" usa
+    /// `max(0, originalEstimate − timeSpent)` para Jiras donde el
+    /// remainingEstimate no se actualiza al loguear.
+    fileprivate func remainingSec(fields f: [String: Any]) -> Int {
+        let mode = settings.remainingMode
+        if mode == "calculated" {
+            let orig: Int = {
+                if let n = f["timeoriginalestimate"] as? Int { return n }
+                if let t = f["timetracking"] as? [String: Any],
+                   let n = t["originalEstimateSeconds"] as? Int { return n }
+                return 0
+            }()
+            let spent: Int = {
+                if let t = f["timetracking"] as? [String: Any],
+                   let n = t["timeSpentSeconds"] as? Int { return n }
+                return 0
+            }()
+            return Swift.max(0, orig - spent)
+        }
+        // "api"
+        if let t = f["timetracking"] as? [String: Any],
+           let n = t["remainingEstimateSeconds"] as? Int { return n }
+        if let n = f["timeestimate"] as? Int { return n }
+        return 0
     }
 }

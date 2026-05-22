@@ -77,6 +77,12 @@ extension CalendarBlock {
 }
 
 /// Rectángulo con texto que representa un único worklog/entry sobre el grid.
+///
+/// Maneja tres interacciones con una sola gesture, decidida al iniciar
+/// el drag según la Y del punto de press:
+///   - top 5 px      → resize del borde superior (cambia inicio + duración)
+///   - bottom 5 px   → resize del borde inferior (cambia duración)
+///   - centro        → click (tap) o move X+Y (cross-day permitido)
 struct EntryBlockView: View {
     let block: CalendarBlock
     /// Cuando estamos en modo combinado (jira-clockify) o el bloque dura
@@ -87,16 +93,25 @@ struct EntryBlockView: View {
     /// distinguirlo visualmente del lila de Jira.
     let useProjectColor: Bool
     let onTap: () -> Void
-    /// Llamado al soltar un drag vertical sobre el bloque.  El callback
-    /// recibe el delta en píxeles desde el punto de press (positivo =
-    /// hacia abajo).  El padre se encarga del snap a slot y del clamp
-    /// a límites del día.
-    let onMove: (CGFloat) -> Void
+    /// Move: el padre snappea Y a slots y X al ancho de columna.
+    let onMove: (_ dx: CGFloat, _ dy: CGFloat) -> Void
+    /// Resize del borde superior: el padre cambia `started + duration`.
+    let onResizeTop: (CGFloat) -> Void
+    /// Resize del borde inferior: el padre cambia sólo `duration`.
+    let onResizeBottom: (CGFloat) -> Void
     /// Altura de cada fila de 30 min (necesaria para snappear el offset
-    /// visual al soltar).
+    /// visual al soltar y para detectar el zonado top/bottom).
     let rowHeight: CGFloat
 
+    @State private var dragMode: DragMode = .none
+    @State private var dragOffsetX: CGFloat = 0
     @State private var dragOffsetY: CGFloat = 0
+    @State private var resizeTopDy: CGFloat = 0
+    @State private var resizeHeightDelta: CGFloat = 0
+
+    enum DragMode { case none, move, resizeTop, resizeBottom }
+
+    private let edgePx: CGFloat = 5
 
     private var isShort: Bool { block.durationSec <= 30 * 60 }
     private var single: Bool { compactLayout || isShort }
@@ -122,6 +137,110 @@ struct EntryBlockView: View {
     }
 
     var body: some View {
+        // Color.clear claims the parent-given frame for layout / hit-testing,
+        // y arriba ponemos el bloque visual real cuyo tamaño y posición
+        // pueden cambiar libremente durante el drag/resize sin afectar al
+        // padre.  Ojo: las gestures van sobre la Color.clear (no se mueve),
+        // así que `value.startLocation` es estable.
+        GeometryReader { geo in
+            let baseHeight = geo.size.height
+            Color.clear
+                .overlay(alignment: .topLeading) {
+                    visualBlock(width: geo.size.width,
+                                height: Swift.max(rowHeight, baseHeight + resizeHeightDelta))
+                        .offset(x: dragOffsetX, y: dragOffsetY + resizeTopDy)
+                }
+                .contentShape(Rectangle())
+                .onHover { hovering in
+                    if hovering {
+                        NSCursor.resizeUpDown.set()
+                    } else {
+                        NSCursor.arrow.set()
+                    }
+                }
+                // El bloque arrastrado se dibuja arriba de los demás del
+                // mismo padre (no llega a tapar columnas vecinas, pero al
+                // menos no queda detrás de bloques contiguos).
+                .zIndex(dragMode == .move ? 999 : 0)
+                .onTapGesture(perform: onTap)
+                .gesture(
+                    DragGesture(minimumDistance: 4, coordinateSpace: .local)
+                        .onChanged { value in
+                            if dragMode == .none {
+                                let y = value.startLocation.y
+                                if y < edgePx                       { dragMode = .resizeTop }
+                                else if y > baseHeight - edgePx     { dragMode = .resizeBottom }
+                                else                                 { dragMode = .move }
+                            }
+                            apply(translation: value.translation, baseHeight: baseHeight)
+                        }
+                        .onEnded { value in
+                            let mode = dragMode
+                            dragMode = .none
+                            switch mode {
+                            case .move:
+                                let snappedY = (value.translation.height / rowHeight).rounded() * rowHeight
+                                dragOffsetX = value.translation.width
+                                dragOffsetY = snappedY
+                                onMove(value.translation.width, value.translation.height)
+                            case .resizeTop:
+                                var dy = value.translation.height
+                                if baseHeight - dy < rowHeight { dy = baseHeight - rowHeight }
+                                let snapped = (dy / rowHeight).rounded() * rowHeight
+                                resizeTopDy = snapped
+                                resizeHeightDelta = -snapped
+                                onResizeTop(value.translation.height)
+                            case .resizeBottom:
+                                var dh = value.translation.height
+                                if baseHeight + dh < rowHeight { dh = rowHeight - baseHeight }
+                                let snapped = (dh / rowHeight).rounded() * rowHeight
+                                resizeHeightDelta = snapped
+                                onResizeBottom(value.translation.height)
+                            case .none: break
+                            }
+                        }
+                )
+                // El refetch del padre actualizó la posición/duración del
+                // bloque: ya lo está pintando bien, así que limpiamos los
+                // deltas locales para no quedar offset el doble.
+                .onChange(of: block.startedMs) { _ in
+                    dragOffsetX = 0
+                    dragOffsetY = 0
+                }
+                .onChange(of: block.durationSec) { _ in
+                    resizeTopDy = 0
+                    resizeHeightDelta = 0
+                }
+        }
+    }
+
+    /// Aplica el `translation` del DragGesture al estado de visual del
+    /// bloque según el modo activo.  Se llama desde `.onChanged`.
+    private func apply(translation: CGSize, baseHeight: CGFloat) {
+        switch dragMode {
+        case .move:
+            dragOffsetX = translation.width
+            dragOffsetY = translation.height
+        case .resizeTop:
+            var dy = translation.height
+            // No dejamos que la altura caiga debajo de una fila.
+            if baseHeight - dy < rowHeight { dy = baseHeight - rowHeight }
+            resizeTopDy = dy
+            resizeHeightDelta = -dy
+        case .resizeBottom:
+            var dh = translation.height
+            if baseHeight + dh < rowHeight { dh = rowHeight - baseHeight }
+            resizeHeightDelta = dh
+        case .none:
+            break
+        }
+    }
+
+    /// El "render" del bloque sin gestures.  Se le pasa el width/height
+    /// resultantes para que el ZStack tenga tamaño explícito y los textos
+    /// se acomoden bien aún en modo resize.
+    @ViewBuilder
+    private func visualBlock(width: CGFloat, height: CGFloat) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: 3, style: .continuous)
                 .fill(fillColor)
@@ -154,47 +273,7 @@ struct EntryBlockView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .contentShape(Rectangle())
-        .offset(y: dragOffsetY)
-        // Cursor "double-arrow" mientras estás encima del bloque, para
-        // advertir que se puede arrastrar.
-        .onHover { hovering in
-            if hovering {
-                NSCursor.resizeUpDown.set()
-            } else {
-                NSCursor.arrow.set()
-            }
-        }
-        // Tap-sólo → editar.  `DragGesture(minimumDistance: 4)` no
-        // dispara nada si el usuario no se movió 4 px, así que clicks
-        // cortos siguen yendo a `.onTapGesture`.
-        .onTapGesture(perform: onTap)
-        .gesture(
-            DragGesture(minimumDistance: 4, coordinateSpace: .local)
-                .onChanged { value in
-                    dragOffsetY = value.translation.height
-                }
-                .onEnded { value in
-                    let dy = value.translation.height
-                    if Swift.abs(dy) >= 1 {
-                        // Snappeamos visualmente al múltiplo de fila más
-                        // cercano y dejamos el bloque ahí hasta que el
-                        // refetch traiga la nueva `startedMs` (el
-                        // `.onChange` de abajo se encarga de resetear).
-                        dragOffsetY = (dy / rowHeight).rounded() * rowHeight
-                        onMove(dy)
-                    } else {
-                        dragOffsetY = 0
-                    }
-                }
-        )
-        // El padre actualizó el modelo (refetch tras un update OK, o un
-        // refetch tras un fallo que revierte): el `yFor(b)` del padre ya
-        // posiciona el bloque correctamente, así que limpiamos el offset
-        // local para no quedar desplazados el doble.
-        .onChange(of: block.startedMs) { _ in
-            dragOffsetY = 0
-        }
+        .frame(width: width, height: height)
     }
 }
 

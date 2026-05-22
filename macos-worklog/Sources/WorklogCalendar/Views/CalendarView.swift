@@ -25,11 +25,12 @@ struct CalendarView: View {
     let onCreateClockify: (DragSelection) -> Void
     let onEditJira: (CalendarBlock) -> Void
     let onEditClockify: (CalendarBlock) -> Void
-    /// Llamados cuando el usuario arrastra y suelta un bloque.  El
-    /// padre recibe el bloque y el `newStartMs` ya snappeado y clampeado
-    /// a los límites del día.
-    let onMoveJira: (CalendarBlock, Double) -> Void
-    let onMoveClockify: (CalendarBlock, Double) -> Void
+    /// Llamados cuando el usuario suelta un drag-to-move o un resize.
+    /// El padre recibe `(bloque, newStartMs, newDurationSec)` ya
+    /// snappeados al slot y clampeados a la semana visible.  Una sola
+    /// signatura cubre las tres gesturas (move, resize-top, resize-bottom).
+    let onMoveJira: (CalendarBlock, Double, Int) -> Void
+    let onMoveClockify: (CalendarBlock, Double, Int) -> Void
 
     private let rowHeight: CGFloat = 22
     private let hourColumnWidth: CGFloat = 56
@@ -48,24 +49,66 @@ struct CalendarView: View {
         return Calendar.current.isDateInToday(day)
     }
 
-    /// Aplica un delta vertical en píxeles a un bloque: snappea al slot
-    /// de 30 min más cercano, clampea al día y emite `onMoveJira` /
-    /// `onMoveClockify` con el nuevo `startMs` o no hace nada si el
-    /// delta es < medio slot.
-    fileprivate func handleMove(block: CalendarBlock, deltaY: CGFloat, isJira: Bool) {
-        let slotsDelta = Int(round(deltaY / rowHeight))
-        guard slotsDelta != 0 else { return }
-        var newStart = block.startedMs + Double(slotsDelta) * 30 * 60 * 1000
-        let weekStartMs = weekStart.timeIntervalSince1970 * 1000
-        let dayOffsetMs = (block.startedMs - weekStartMs)
-            .truncatingRemainder(dividingBy: 86_400_000)
-        let dayStart = block.startedMs - dayOffsetMs
-        let dayEnd = dayStart + 86_400_000
-        let durMs = Double(block.durationSec) * 1000
-        if newStart < dayStart           { newStart = dayStart }
-        if newStart + durMs > dayEnd     { newStart = dayEnd - durMs }
-        if isJira { onMoveJira(block, newStart) }
-        else      { onMoveClockify(block, newStart) }
+    /// Único punto de salida hacia el padre para los tres gestos.
+    /// Clampea al rango visible (Domingo→Sábado siguiente) y obliga un
+    /// piso de 30 min de duración.  No clampea por día: bloques que
+    /// cruzan la medianoche son legales en Jira y Clockify.
+    private func emitChange(block: CalendarBlock,
+                            newStartMs: Double,
+                            newDurationSec: Int,
+                            isJira: Bool) {
+        let wsMs = weekStart.timeIntervalSince1970 * 1000
+        let weMs = wsMs + 7 * 86_400_000
+        var start = newStartMs
+        let dur = Swift.max(1800, newDurationSec)         // 30 min floor
+        let durMs = Double(dur) * 1000
+        if start < wsMs            { start = wsMs }
+        if start + durMs > weMs    { start = weMs - durMs }
+        if start == block.startedMs && dur == block.durationSec { return }
+        if isJira { onMoveJira(block, start, dur) }
+        else      { onMoveClockify(block, start, dur) }
+    }
+
+    /// Drag X+Y dentro del calendario.  X se snappea al ancho de columna
+    /// (= cambio de día) e Y al alto de fila (= slot de 30 min).
+    fileprivate func handleMove(block: CalendarBlock,
+                                deltaX: CGFloat, deltaY: CGFloat,
+                                columnWidth: CGFloat,
+                                isJira: Bool) {
+        let slots = Int(round(deltaY / rowHeight))
+        let days  = columnWidth > 0 ? Int(round(deltaX / columnWidth)) : 0
+        if slots == 0 && days == 0 { return }
+        let newStart = block.startedMs
+            + Double(days) * 86_400_000
+            + Double(slots) * 30 * 60 * 1000
+        emitChange(block: block,
+                   newStartMs: newStart,
+                   newDurationSec: block.durationSec,
+                   isJira: isJira)
+    }
+
+    /// Resize del borde superior: deltaY positivo = inicio más tarde,
+    /// duración baja por la misma cantidad.
+    fileprivate func handleResizeTop(block: CalendarBlock, deltaY: CGFloat, isJira: Bool) {
+        let slots = Int(round(deltaY / rowHeight))
+        if slots == 0 { return }
+        let newStart = block.startedMs + Double(slots) * 30 * 60 * 1000
+        let newDur   = block.durationSec - slots * 1800
+        emitChange(block: block,
+                   newStartMs: newStart,
+                   newDurationSec: newDur,
+                   isJira: isJira)
+    }
+
+    /// Resize del borde inferior: sólo cambia la duración.
+    fileprivate func handleResizeBottom(block: CalendarBlock, deltaH: CGFloat, isJira: Bool) {
+        let slots = Int(round(deltaH / rowHeight))
+        if slots == 0 { return }
+        let newDur = block.durationSec + slots * 1800
+        emitChange(block: block,
+                   newStartMs: block.startedMs,
+                   newDurationSec: newDur,
+                   isJira: isJira)
     }
 
     /// Devuelve los bloques que caen en el día `idx` (0..6).
@@ -201,8 +244,18 @@ struct CalendarView: View {
                     onCreateClockify: onCreateClockify,
                     onEditJira: onEditJira,
                     onEditClockify: onEditClockify,
-                    onMoveJira: { b, dy in handleMove(block: b, deltaY: dy, isJira: true) },
-                    onMoveClockify: { b, dy in handleMove(block: b, deltaY: dy, isJira: false) }
+                    onMoveJira: { b, dx, dy, w in
+                        handleMove(block: b, deltaX: dx, deltaY: dy,
+                                   columnWidth: w, isJira: true)
+                    },
+                    onMoveClockify: { b, dx, dy, w in
+                        handleMove(block: b, deltaX: dx, deltaY: dy,
+                                   columnWidth: w, isJira: false)
+                    },
+                    onResizeTopJira:        { b, dy in handleResizeTop(block: b, deltaY: dy, isJira: true) },
+                    onResizeTopClockify:    { b, dy in handleResizeTop(block: b, deltaY: dy, isJira: false) },
+                    onResizeBottomJira:     { b, dh in handleResizeBottom(block: b, deltaH: dh, isJira: true) },
+                    onResizeBottomClockify: { b, dh in handleResizeBottom(block: b, deltaH: dh, isJira: false) }
                 )
                 .frame(maxWidth: .infinity)
             }
@@ -246,10 +299,15 @@ private struct DayColumnView: View {
     let onCreateClockify: (DragSelection) -> Void
     let onEditJira: (CalendarBlock) -> Void
     let onEditClockify: (CalendarBlock) -> Void
-    /// Llamados al soltar un drag-to-move: recibimos el bloque y el
-    /// delta en píxeles; el padre (CalendarView) hace snap + clamp.
-    let onMoveJira: (CalendarBlock, CGFloat) -> Void
-    let onMoveClockify: (CalendarBlock, CGFloat) -> Void
+    /// Drag-to-move:  recibimos `(bloque, dx, dy, anchoColumna)`.  El padre
+    /// (CalendarView) usa el ancho para convertir dx → días.
+    let onMoveJira:     (CalendarBlock, CGFloat, CGFloat, CGFloat) -> Void
+    let onMoveClockify: (CalendarBlock, CGFloat, CGFloat, CGFloat) -> Void
+    /// Resize del borde superior / inferior:  el delta vertical en px.
+    let onResizeTopJira:        (CalendarBlock, CGFloat) -> Void
+    let onResizeTopClockify:    (CalendarBlock, CGFloat) -> Void
+    let onResizeBottomJira:     (CalendarBlock, CGFloat) -> Void
+    let onResizeBottomClockify: (CalendarBlock, CGFloat) -> Void
 
     @State private var dragStart: CGPoint? = nil
     @State private var dragCurrent: CGPoint? = nil
@@ -337,7 +395,9 @@ private struct DayColumnView: View {
                         compactLayout: combined,
                         useProjectColor: false,
                         onTap: { onEditJira(b) },
-                        onMove: { dy in onMoveJira(b, dy) },
+                        onMove:          { dx, dy in onMoveJira(b, dx, dy, width) },
+                        onResizeTop:     { dy in onResizeTopJira(b, dy) },
+                        onResizeBottom:  { dh in onResizeBottomJira(b, dh) },
                         rowHeight: rowHeight
                     )
                     .frame(width: combined ? (width / 2) - 3 : width - 4,
@@ -352,7 +412,9 @@ private struct DayColumnView: View {
                         compactLayout: combined,
                         useProjectColor: !combined,
                         onTap: { onEditClockify(b) },
-                        onMove: { dy in onMoveClockify(b, dy) },
+                        onMove:          { dx, dy in onMoveClockify(b, dx, dy, width) },
+                        onResizeTop:     { dy in onResizeTopClockify(b, dy) },
+                        onResizeBottom:  { dh in onResizeBottomClockify(b, dh) },
                         rowHeight: rowHeight
                     )
                     .frame(width: combined ? (width / 2) - 3 : width - 4,

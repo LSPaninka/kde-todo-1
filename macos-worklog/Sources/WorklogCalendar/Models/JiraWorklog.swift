@@ -21,3 +21,16 @@ struct JiraAssignableIssue: Identifiable, Hashable {
     /// Estimación restante en segundos (0 si la issue no la tiene seteada).
     var remainingSec: Int
 }
+
+/// Datos mínimos del sprint activo que la app necesita para pintar los
+/// anillos del pie del calendario.  `name`/`startDate`/`endDate` vienen
+/// crudos de la API; las propiedades `startMs`/`endMs` los normalizan
+/// para hacer cálculos.
+struct JiraSprintInfo: Equatable {
+    var id: Int
+    var name: String
+    var startDate: String   // ISO 8601 como lo devuelve Jira
+    var endDate: String
+    var startMs: Double
+    var endMs: Double
+}

@@ -39,6 +39,15 @@ struct MainView: View {
         clockify.entries.map { CalendarBlock(clockify: $0) }
     }
 
+    /// Los gauges se muestran sólo cuando vale la pena: hay datos de
+    /// Jira (modo Jira o combinado), el calendario está en 9h y el
+    /// usuario los habilitó en preferencias.
+    private var showGauges: Bool {
+        guard settings.showSprintGauges else { return false }
+        guard settings.viewMode == .h9 else { return false }
+        return settings.source == .jira || settings.source == .jiraClockify
+    }
+
     var body: some View {
         VStack(spacing: 6) {
             headerBar
@@ -70,10 +79,19 @@ struct MainView: View {
                                           end:   Date(timeIntervalSince1970: (e.startedMs + Double(e.durationSec) * 1000) / 1000))
                     }
                 },
-                onMoveJira:     { block, newStartMs in moveJira(block, to: newStartMs) },
-                onMoveClockify: { block, newStartMs in moveClockify(block, to: newStartMs) }
+                onMoveJira:     { block, newStartMs, newDur in
+                    applyJira(block, newStartMs: newStartMs, newDurationSec: newDur)
+                },
+                onMoveClockify: { block, newStartMs, newDur in
+                    applyClockify(block, newStartMs: newStartMs, newDurationSec: newDur)
+                }
             )
             .frame(maxHeight: .infinity)
+
+            if showGauges {
+                Divider()
+                SprintGauges(jira: jira)
+            }
 
             footerBar
         }
@@ -86,6 +104,14 @@ struct MainView: View {
             // Si editan el default en Preferencias, reflejarlo acá.
             syncProjectId = settings.clockifyDefaultProjectId
         }
+        // Cambios en Preferencias del bloque "Sprint (experimental)" →
+        // re-fetch sin esperar al ↻.
+        .onChange(of: settings.sprintStrategy)   { _ in if showGauges { jira.fetchSprintInfo { _ in } } }
+        .onChange(of: settings.sprintField)      { _ in if showGauges { jira.fetchSprintInfo { _ in } } }
+        .onChange(of: settings.sprintBoardId)    { _ in if showGauges { jira.fetchSprintInfo { _ in } } }
+        .onChange(of: settings.remainingMode)    { _ in if showGauges { jira.fetchSprintInfo { _ in } } }
+        // Si recién encienden los gauges, traigamos los datos.
+        .onChange(of: settings.showSprintGauges) { on in if on { jira.fetchSprintInfo { _ in } } }
         .onReceive(NotificationCenter.default.publisher(for: .worklogOpenPreferences)) { _ in
             showSettings = true
         }
@@ -292,6 +318,9 @@ struct MainView: View {
     private func syncNow() {
         if settings.source == .jira || settings.source == .jiraClockify {
             jira.fetchWeek(starting: weekStart)
+            if showGauges {
+                jira.fetchSprintInfo { _ in }
+            }
         }
         if settings.source == .clockify || settings.source == .jiraClockify {
             clockify.fetchWeek(starting: weekStart)
@@ -311,36 +340,41 @@ struct MainView: View {
         }
     }
 
-    /// Llamado al soltar un drag-to-move sobre un bloque Jira.
-    /// Mantiene la duración y el comentario; sólo cambia `started`.
-    private func moveJira(_ block: CalendarBlock, to newStartMs: Double) {
+    /// Punto único de entrada para mover / redimensionar un bloque Jira.
+    /// Preserva el comentario; cambia `started` y `durationSec`.
+    private func applyJira(_ block: CalendarBlock,
+                           newStartMs: Double,
+                           newDurationSec: Int) {
         guard let w = jira.worklogs.first(where: { "jira-\($0.id)" == block.id }) else { return }
         let newStart = Date(timeIntervalSince1970: newStartMs / 1000)
         jira.updateWorklog(
             issueKey: w.issueKey,
             worklogId: w.id,
             started: newStart,
-            durationSec: w.durationSec,
+            durationSec: newDurationSec,
             comment: w.comment
         ) { result in
             switch result {
             case .success:
                 syncNow()
             case .failure(let err):
-                setStatus("Error moviendo worklog: \(err.message)", isError: true)
-                // Refetch para que el bloque vuelva a su y original
+                setStatus("Error actualizando worklog: \(err.message)", isError: true)
+                // Refetch para que el bloque vuelva a su posición original
                 // (el snap visual no se aplicó del lado del servidor).
                 syncNow()
             }
         }
     }
 
-    /// Mismo concepto para entradas Clockify.  Mantiene descripción,
-    /// proyecto, tags y billable; sólo desplaza start+end.
-    private func moveClockify(_ block: CalendarBlock, to newStartMs: Double) {
+    /// Idem para Clockify.  Preserva descripción, proyecto, tags y
+    /// billable; sólo se desplaza start y se ajusta end por la nueva
+    /// `durationSec`.
+    private func applyClockify(_ block: CalendarBlock,
+                               newStartMs: Double,
+                               newDurationSec: Int) {
         guard let e = clockify.entries.first(where: { "clockify-\($0.id)" == block.id }) else { return }
         let newStart = Date(timeIntervalSince1970: newStartMs / 1000)
-        let newEnd = newStart.addingTimeInterval(Double(e.durationSec))
+        let newEnd = newStart.addingTimeInterval(Double(newDurationSec))
         clockify.updateEntry(
             id: e.id,
             start: newStart,
@@ -354,7 +388,7 @@ struct MainView: View {
             case .success:
                 syncNow()
             case .failure(let err):
-                setStatus("Error moviendo entry: \(err.message)", isError: true)
+                setStatus("Error actualizando entry: \(err.message)", isError: true)
                 syncNow()
             }
         }
