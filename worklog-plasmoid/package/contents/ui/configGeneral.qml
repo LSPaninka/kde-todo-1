@@ -22,6 +22,7 @@ Kirigami.FormLayout {
     property string cfg_worklogSprintStrategy:    "subtask-customfield"
     property alias  cfg_worklogSprintField:       sprintFieldField.text
     property alias  cfg_worklogSprintBoardId:     sprintBoardIdSpin.value
+    property string cfg_worklogRemainingMode:     "api"
     property alias  cfg_worklogDebug:             debugCheck.checked
 
     ButtonGroup { id: viewGroup }
@@ -157,6 +158,34 @@ Kirigami.FormLayout {
         to: 9999999
         stepSize: 1
         enabled: page.cfg_worklogSprintStrategy === "agile-board"
+    }
+
+    Item { Kirigami.FormData.isSection: true }
+
+    Label {
+        Layout.fillWidth: true
+        Layout.preferredWidth: 400
+        wrapMode: Text.WordWrap
+        opacity: 0.65
+        text: i18n("Horas restantes — cómo calcular las horas «Disponibles» del anillo y "
+                 + "la columna derecha del picker. «API» usa el remainingEstimate de Jira. "
+                 + "«Calculado» usa originalEstimate − timeSpent, útil cuando "
+                 + "remainingEstimate no se va actualizando al cargar horas.")
+    }
+
+    ButtonGroup { id: remainingModeGroup }
+    RadioButton {
+        Kirigami.FormData.label: i18n("Remaining:")
+        ButtonGroup.group: remainingModeGroup
+        text: i18n("API (remainingEstimate)")
+        checked: page.cfg_worklogRemainingMode === "api"
+        onToggled: if (checked) page.cfg_worklogRemainingMode = "api"
+    }
+    RadioButton {
+        ButtonGroup.group: remainingModeGroup
+        text: i18n("Calculado (original − spent)")
+        checked: page.cfg_worklogRemainingMode === "calculated"
+        onToggled: if (checked) page.cfg_worklogRemainingMode = "calculated"
     }
 
     Label {

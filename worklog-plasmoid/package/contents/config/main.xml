@@ -64,6 +64,10 @@
             <min>0</min>
             <max>9999999</max>
         </entry>
+        <entry name="worklogRemainingMode" type="String">
+            <label>How to compute the remaining hours used by the "Horas" ring (Disponible) and by the right column of the issue picker. "api" uses Jira's remainingEstimateSeconds (the value shown in the issue's Remaining field). "calculated" uses originalEstimateSeconds - timeSpentSeconds (clamped at 0), useful when remainingEstimate isn't kept in sync as you log time.</label>
+            <default>api</default>
+        </entry>
         <entry name="worklogDailyTargetHours" type="Double">
             <label>Daily target hours (used for the per-day diff in the totals row)</label>
             <default>8</default>

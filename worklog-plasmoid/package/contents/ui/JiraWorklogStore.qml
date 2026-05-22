@@ -215,7 +215,7 @@ QtObject {
                   // timeestimate = remaining estimate (seconds). timetracking
                   // is the human-readable variant; we keep both for
                   // resilience across Jira instances.
-                  "&fields=summary,status,issuetype,timeestimate,timetracking";
+                  "&fields=summary,status,issuetype,timeoriginalestimate,timeestimate,timetracking";
 
         _log("Picker GET " + url);
         _jiraGet(url, creds, function(code, body) {
@@ -231,18 +231,14 @@ QtObject {
                 for (var i = 0; i < raw.length; i++) {
                     var r = raw[i];
                     var f = r.fields || {};
-                    var remaining = 0;
-                    if (typeof f.timeestimate === "number") {
-                        remaining = f.timeestimate;
-                    } else if (f.timetracking && typeof f.timetracking.remainingEstimateSeconds === "number") {
-                        remaining = f.timetracking.remainingEstimateSeconds;
-                    }
                     out.push({
                         key: r.key || "",
                         summary: f.summary || "",
                         issuetype: (f.issuetype && f.issuetype.name) || "",
                         status: (f.status && f.status.name) || "",
-                        remainingSec: remaining | 0
+                        // Mirrors the same mode the gauge uses so the column
+                        // on the right of the picker shows consistent values.
+                        remainingSec: _remainingSec(f)
                     });
                 }
                 store.assignableIssues = out;
@@ -455,13 +451,40 @@ QtObject {
         store.sprintConsumedSec  = 0;
         store._bump();
     }
+
+    // Remaining-hours strategy (selectable from config). "api" trusts
+    // Jira's remainingEstimateSeconds; "calculated" computes
+    // max(0, originalEstimate - timeSpent) which is what users want when
+    // remainingEstimate hasn't been kept up to date.
+    function _remainingSec(f) {
+        if (!f) return 0;
+        var mode = (plasmoidApi && plasmoidApi.configuration.worklogRemainingMode) || "api";
+        if (mode === "calculated") {
+            var orig = (typeof f.timeoriginalestimate === "number")
+                       ? f.timeoriginalestimate
+                       : (f.timetracking && typeof f.timetracking.originalEstimateSeconds === "number")
+                           ? f.timetracking.originalEstimateSeconds
+                           : 0;
+            var spent = (f.timetracking && typeof f.timetracking.timeSpentSeconds === "number")
+                        ? f.timetracking.timeSpentSeconds
+                        : 0;
+            return Math.max(0, orig - spent);
+        }
+        // "api"
+        if (f.timetracking && typeof f.timetracking.remainingEstimateSeconds === "number") {
+            return f.timetracking.remainingEstimateSeconds;
+        }
+        if (typeof f.timeestimate === "number") return f.timeestimate;
+        return 0;
+    }
+
     // If `fieldOrNull` is a string, only issues whose sprint custom-field
     // array contains the active.id are counted. If null, the caller has
     // pre-filtered (e.g. via "sprint = N" JQL).
     function _computeSprintTotalsFromIssues(issues, active, fieldOrNull) {
         var sStart = new Date(active.startDate).getTime();
         var sEnd   = new Date(active.endDate).getTime();
-        var total = 0, consumed = 0;
+        var available = 0, consumed = 0;
         for (var k = 0; k < issues.length; k++) {
             var f = issues[k].fields || {};
             if (fieldOrNull) {
@@ -473,10 +496,10 @@ QtObject {
                 }
                 if (!hit) continue;
             }
-            if (typeof f.timeoriginalestimate === "number") total += f.timeoriginalestimate;
-            else if (f.timetracking && typeof f.timetracking.originalEstimateSeconds === "number")
-                total += f.timetracking.originalEstimateSeconds;
-            else if (typeof f.timeestimate === "number") total += f.timeestimate;
+            // "Disponible" is now what's still pending for THIS issue, not
+            // the original estimate — issues fully consumed in earlier
+            // sprints contribute 0 instead of bloating the total.
+            available += _remainingSec(f);
 
             var wls = (f.worklog && f.worklog.worklogs) || [];
             for (var w = 0; w < wls.length; w++) {
@@ -488,10 +511,10 @@ QtObject {
                 consumed += wo.timeSpentSeconds | 0;
             }
         }
-        store.sprintAvailableSec = total;
+        store.sprintAvailableSec = available;
         store.sprintConsumedSec  = consumed;
         store._bump();
-        _log("Sprint '" + active.name + "': available=" + total + "s, consumed=" + consumed + "s.");
+        _log("Sprint '" + active.name + "': remaining=" + available + "s, consumed=" + consumed + "s.");
     }
 
     // ------------------------------------------------------------------

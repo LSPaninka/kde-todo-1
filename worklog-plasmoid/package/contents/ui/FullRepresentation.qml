@@ -592,4 +592,23 @@ Item {
             }
         }
     }
+
+    // Refetch sprint info when the user toggles experimental Sprint config
+    // — strategy / field / board / remaining mode — so the gauges update
+    // without a manual sync click.
+    Connections {
+        target: plasmoid.configuration
+        function onWorklogSprintStrategyChanged() {
+            if (full._showGauges && jiraStore) jiraStore.fetchSprintInfo();
+        }
+        function onWorklogSprintFieldChanged() {
+            if (full._showGauges && jiraStore) jiraStore.fetchSprintInfo();
+        }
+        function onWorklogSprintBoardIdChanged() {
+            if (full._showGauges && jiraStore) jiraStore.fetchSprintInfo();
+        }
+        function onWorklogRemainingModeChanged() {
+            if (full._showGauges && jiraStore) jiraStore.fetchSprintInfo();
+        }
+    }
 }

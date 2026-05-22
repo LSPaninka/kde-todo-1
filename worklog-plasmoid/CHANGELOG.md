@@ -1,5 +1,38 @@
 # Changelog — Jira / Clockify Worklog Calendar
 
+## 0.4.2 — Disponible = remaining, with API/calculated toggle
+
+`Disponible` on the Horas ring was summing `timeoriginalestimate` for
+every subtask in the active sprint, which inflated the number with
+hours already consumed in previous sprints (e.g. 159h 30m vs the
+~13–32h actually pending). Two changes:
+
+- **`Disponible` now uses *remaining*** (sum of `_remainingSec(f)`)
+  instead of original estimate. Issues fully consumed in earlier
+  sprints contribute 0, as expected.
+- **`Horas` ring percentage** is now `consumed / (avail + consumed)`,
+  matching the original spec ("el total de horas seteadas (disponibles
+  y consumidas)"). The total is therefore "what's left to do plus
+  what I've already logged in this sprint".
+- **New experimental config** `worklogRemainingMode`
+  (`"api"` default, `"calculated"`):
+  - `api`: uses `timetracking.remainingEstimateSeconds` (the value
+    Jira shows in the Remaining field).
+  - `calculated`: uses
+    `max(0, originalEstimateSeconds − timeSpentSeconds)`.
+    Useful when Jira's remainingEstimate isn't kept in sync as
+    you log time — many users find the calculated value matches
+    reality better.
+  Affects both the ring (Disponible legend + the percentage) and
+  the column on the right of the new-worklog picker.
+- The General config tab gained the new "Remaining" radio in the
+  experimental section.
+- Sprint info auto-refetches when any of the experimental Sprint /
+  Remaining settings change, so the gauge reflects the new mode
+  without a manual sync click.
+
+Bumped metadata 0.4.1 → 0.4.2.
+
 ## 0.4.1 — Sprint discovery: 3 strategies (subtarea-only friendly)
 
 The 0.4.0 sprint lookup (`sprint in openSprints() AND assignee = currentUser()`)

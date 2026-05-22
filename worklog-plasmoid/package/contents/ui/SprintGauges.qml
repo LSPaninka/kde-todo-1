@@ -53,12 +53,17 @@ Item {
         return ((now - start) / (end - start)) * 100;
     }
 
+    // Per the original definition: "el total de horas seteadas (disponibles
+    // y consumidas)". Available is what's still pending, consumed is what
+    // I've logged in this sprint; the denominator is the SUM so the
+    // percentage walks from 0 → 100 as you log hours against the sprint.
     function _hoursPct() {
         if (!jiraStore) return 0;
-        var avail = jiraStore.sprintAvailableSec | 0;
-        if (avail <= 0) return 0;
-        var pct = (jiraStore.sprintConsumedSec / avail) * 100;
-        return Math.max(0, Math.min(100, pct));
+        var avail    = jiraStore.sprintAvailableSec | 0;
+        var consumed = jiraStore.sprintConsumedSec  | 0;
+        var total    = avail + consumed;
+        if (total <= 0) return 0;
+        return Math.max(0, Math.min(100, (consumed / total) * 100));
     }
 
     function _sprintColor(pct) {
