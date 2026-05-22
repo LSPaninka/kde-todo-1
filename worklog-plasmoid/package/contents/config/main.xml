@@ -39,9 +39,17 @@
         </entry>
         <entry name="worklogPopupHeight" type="Int">
             <label>Popup height in pixels</label>
-            <default>650</default>
+            <default>750</default>
             <min>400</min>
             <max>1500</max>
+        </entry>
+        <entry name="worklogShowSprintGauges" type="Bool">
+            <label>Show the Sprint + Horas ring gauges below the calendar (9h mode only, Jira / Jira-Clockify sources only).</label>
+            <default>true</default>
+        </entry>
+        <entry name="worklogSprintField" type="String">
+            <label>Jira issue field that holds the sprint array. Defaults to "sprint" which works on modern Jira Cloud; older instances may need a customfield_NNNNN id.</label>
+            <default>sprint</default>
         </entry>
         <entry name="worklogDailyTargetHours" type="Double">
             <label>Daily target hours (used for the per-day diff in the totals row)</label>

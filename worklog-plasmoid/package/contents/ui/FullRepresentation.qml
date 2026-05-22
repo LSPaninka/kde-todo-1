@@ -83,9 +83,15 @@ Item {
                end.getDate()   + " " + months[end.getMonth()] + " " + end.getFullYear();
     }
 
+    readonly property bool _showGauges:
+        plasmoid.configuration.worklogShowSprintGauges !== false &&
+        plasmoid.configuration.worklogViewMode === "9h" &&
+        (source === "jira" || source === "jira-clockify")
+
     function syncNow() {
         if (_showJira     && jiraStore)     jiraStore.fetchWeek(currentWeekStart);
         if (_showClockify && clockifyStore) clockifyStore.fetchWeek(currentWeekStart);
+        if (_showGauges   && jiraStore)     jiraStore.fetchSprintInfo();
     }
 
     function syncJiraIntoClockify() {
@@ -311,6 +317,15 @@ Item {
                 if (ok) full.syncNow();
                 else    full._setStatus(i18n("Clockify: no se pudo borrar — %1", err), true);
             }
+        }
+
+        // -------- Sprint + Horas gauges (Jira / Jira-Clockify, 9h only) --
+        SprintGauges {
+            id: sprintGauges
+            Layout.fillWidth: true
+            Layout.preferredHeight: 190
+            visible: full._showGauges
+            jiraStore: full.jiraStore
         }
 
         // -------- Footer --------
@@ -559,5 +574,22 @@ Item {
     Component.onCompleted: {
         if (jiraStore && jiraStore.lastFetchedAt === 0 && _showJira) jiraStore.fetchWeek(currentWeekStart);
         if (clockifyStore && clockifyStore.lastFetchedAt === 0 && _showClockify) clockifyStore.fetchWeek(currentWeekStart);
+        if (_showGauges && jiraStore) jiraStore.fetchSprintInfo();
+        if (_showGauges) sprintGauges.startFillAnimation();
+    }
+
+    // Re-trigger the fill animation every time the popup re-opens (Plasma
+    // reuses the same FullRepresentation instance so Component.onCompleted
+    // only fires once on first open). Also re-fetch the sprint so the
+    // legend matches whatever was added externally.
+    Connections {
+        target: plasmoid
+        function onExpandedChanged() {
+            if (!plasmoid.expanded) return;
+            if (full._showGauges) {
+                sprintGauges.startFillAnimation();
+                if (jiraStore) jiraStore.fetchSprintInfo();
+            }
+        }
     }
 }

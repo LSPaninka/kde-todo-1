@@ -22,8 +22,13 @@ QtObject {
     property var plasmoidApi: null
 
     property var worklogs: []         // {id, issueKey, issueSummary, started (ms), durationSec, comment}
-    property var assignableIssues: [] // {key, summary, issuetype, status}
+    property var assignableIssues: [] // {key, summary, issuetype, status, remainingSec}
     property string myAccountId: ""
+
+    // Active sprint of the user (or null). Filled by fetchSprintInfo().
+    property var currentSprint: null  // {id, name, startDate, endDate}
+    property real sprintAvailableSec: 0   // sum of originalEstimate across the sprint's issues
+    property real sprintConsumedSec: 0    // sum of *my* worklogs inside the sprint's date range
 
     property bool loading: false
     property string lastError: ""
@@ -246,6 +251,151 @@ QtObject {
                 callback(true);
             } catch (e) {
                 _warn("Picker parse error: " + e);
+                callback(false);
+            }
+        });
+    }
+
+    // ------------------------------------------------------------------
+    // Sprint info (for the gauges at the bottom of the popup)
+    // ------------------------------------------------------------------
+    // Reads every issue in any open sprint that's assigned to me, picks
+    // the first one with state="active" as THE sprint, then sums
+    // originalEstimate (= available) and my worklogs within the sprint's
+    // date range (= consumed).
+    //
+    // If the Jira instance doesn't expose `sprint` as a top-level field,
+    // the user can override the field name via worklogSprintField in the
+    // config (defaults to "sprint" — works on modern Jira Cloud).
+
+    function fetchSprintInfo(callback) {
+        if (!callback) callback = function() {};
+        var creds = _creds();
+        if (!creds) { callback(false); return; }
+        if (!myAccountId) {
+            // Resolve /myself first so we can filter worklog authors.
+            _jiraGet(creds.site + "/rest/api/3/myself", creds, function(code, body) {
+                if (code === 200) {
+                    try {
+                        var d = JSON.parse(body);
+                        store.myAccountId = d.accountId || "";
+                    } catch (e) { /* swallow */ }
+                }
+                _doFetchSprint(creds, callback);
+            });
+        } else {
+            _doFetchSprint(creds, callback);
+        }
+    }
+
+    function _doFetchSprint(creds, callback) {
+        var sprintField = (plasmoidApi && plasmoidApi.configuration.worklogSprintField) || "sprint";
+        var jql = "sprint in openSprints() AND assignee = currentUser()";
+        var url = creds.site + "/rest/api/3/search/jql?jql=" + encodeURIComponent(jql) +
+                  "&maxResults=200" +
+                  "&fields=summary,worklog,timeoriginalestimate,timeestimate,timetracking," +
+                  encodeURIComponent(sprintField);
+        _log("Sprint GET " + url);
+        _jiraGet(url, creds, function(code, body) {
+            if (code !== 200) {
+                _warn("fetchSprintInfo exit=" + code + ": " + body.substring(0, 200));
+                store.currentSprint = null;
+                store.sprintAvailableSec = 0;
+                store.sprintConsumedSec  = 0;
+                store._bump();
+                callback(false);
+                return;
+            }
+            try {
+                var data = JSON.parse(body);
+                var issues = data.issues || [];
+                if (issues.length === 0) {
+                    _log("Sprint: 0 issues — no active sprint visible.");
+                    store.currentSprint = null;
+                    store.sprintAvailableSec = 0;
+                    store.sprintConsumedSec  = 0;
+                    store._bump();
+                    callback(true);
+                    return;
+                }
+
+                // Pick the first sprint with state="active" across all issues.
+                var active = null;
+                for (var i = 0; i < issues.length && !active; i++) {
+                    var fld = (issues[i].fields || {})[sprintField];
+                    var sprintArr = Array.isArray(fld) ? fld
+                                  : (fld ? [fld] : []);
+                    for (var j = 0; j < sprintArr.length; j++) {
+                        var s = sprintArr[j];
+                        if (s && (s.state === "active" || s.state === "ACTIVE")) {
+                            active = s; break;
+                        }
+                    }
+                }
+                if (!active) {
+                    _log("Sprint: ningún sprint con state=active.");
+                    store.currentSprint = null;
+                    store.sprintAvailableSec = 0;
+                    store.sprintConsumedSec  = 0;
+                    store._bump();
+                    callback(true);
+                    return;
+                }
+
+                store.currentSprint = {
+                    id:        active.id,
+                    name:      active.name || "",
+                    startDate: active.startDate || "",
+                    endDate:   active.endDate   || ""
+                };
+                var sStart = new Date(store.currentSprint.startDate).getTime();
+                var sEnd   = new Date(store.currentSprint.endDate).getTime();
+
+                var total = 0;
+                var consumed = 0;
+                for (var k = 0; k < issues.length; k++) {
+                    // Only count issues that belong to THIS sprint (an issue
+                    // may have been moved across sprints).
+                    var inThis = false;
+                    var f = issues[k].fields || {};
+                    var arr = Array.isArray(f[sprintField]) ? f[sprintField]
+                            : (f[sprintField] ? [f[sprintField]] : []);
+                    for (var m = 0; m < arr.length; m++) {
+                        if (arr[m] && arr[m].id === active.id) { inThis = true; break; }
+                    }
+                    if (!inThis) continue;
+
+                    if (typeof f.timeoriginalestimate === "number") {
+                        total += f.timeoriginalestimate;
+                    } else if (f.timetracking &&
+                               typeof f.timetracking.originalEstimateSeconds === "number") {
+                        total += f.timetracking.originalEstimateSeconds;
+                    } else if (typeof f.timeestimate === "number") {
+                        total += f.timeestimate;
+                    }
+
+                    var wls = (f.worklog && f.worklog.worklogs) || [];
+                    for (var w = 0; w < wls.length; w++) {
+                        var wo = wls[w];
+                        var sm = _parseJiraDate(wo.started);
+                        if (sm < sStart || sm > sEnd) continue;
+                        var auth = wo.author || {};
+                        if (myAccountId && auth.accountId !== myAccountId) continue;
+                        consumed += wo.timeSpentSeconds | 0;
+                    }
+                }
+                store.sprintAvailableSec = total;
+                store.sprintConsumedSec  = consumed;
+                store._bump();
+                _log("Sprint '" + store.currentSprint.name + "': " +
+                     "available=" + total + "s, consumed=" + consumed + "s.");
+                callback(true);
+            } catch (e) {
+                _warn("fetchSprintInfo parse: " + e);
+                store.currentSprint = null;
+                store.sprintAvailableSec = 0;
+                store.sprintConsumedSec  = 0;
+                store._bump();
                 callback(false);
             }
         });

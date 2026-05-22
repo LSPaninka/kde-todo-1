@@ -18,6 +18,7 @@ Kirigami.FormLayout {
     property alias  cfg_worklogIssueJql:          jqlField.text
     property alias  cfg_worklogIssueMax:          maxSpin.value
     property alias  cfg_worklogShowIssueSummary:  showSummaryCheck.checked
+    property alias  cfg_worklogShowSprintGauges:  sprintGaugesCheck.checked
     property alias  cfg_worklogDebug:             debugCheck.checked
 
     ButtonGroup { id: viewGroup }
@@ -86,6 +87,13 @@ Kirigami.FormLayout {
         id: showSummaryCheck
         Kirigami.FormData.label: i18n("Bloques:")
         text: i18n("Mostrar también el título de la issue (el código siempre se muestra)")
+    }
+
+    CheckBox {
+        id: sprintGaugesCheck
+        Kirigami.FormData.label: i18n("Gauges:")
+        text: i18n("Mostrar los anillos «Sprint» y «Horas» debajo del calendario " +
+                   "(solo en modo 9h con fuentes Jira / Jira-Clockify)")
     }
 
     CheckBox {
