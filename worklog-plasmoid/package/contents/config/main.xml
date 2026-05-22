@@ -47,9 +47,22 @@
             <label>Show the Sprint + Horas ring gauges below the calendar (9h mode only, Jira / Jira-Clockify sources only).</label>
             <default>true</default>
         </entry>
+        <entry name="worklogSprintStrategy" type="String">
+            <label>How to discover the active sprint. One of:
+            "subtask-customfield" (default) — scan subtasks assigned to the user and pick the entry with state="active" in their sprint custom field. Works when only subtasks are assigned to the user.
+            "agile-board" — query /rest/agile/1.0/board/{id}/sprint?state=active with worklogSprintBoardId. Requires the board id.
+            "assignee-jql" — original 0.4.0 behavior using "sprint in openSprints() AND assignee = currentUser()". Use as a fallback.</label>
+            <default>subtask-customfield</default>
+        </entry>
         <entry name="worklogSprintField" type="String">
-            <label>Jira issue field that holds the sprint array. Defaults to "sprint" which works on modern Jira Cloud; older instances may need a customfield_NNNNN id.</label>
-            <default>sprint</default>
+            <label>Name of the Jira issue field that holds the sprint array. Defaults to customfield_10020 which is the standard on most Jira Cloud instances; older / customised instances may use a different customfield_NNNNN id, or simply "sprint" if the field is exposed top-level.</label>
+            <default>customfield_10020</default>
+        </entry>
+        <entry name="worklogSprintBoardId" type="Int">
+            <label>Board id used by the agile-board strategy. Visible at /jira/software/c/projects/.../boards/&lt;id&gt; in the URL.</label>
+            <default>0</default>
+            <min>0</min>
+            <max>9999999</max>
         </entry>
         <entry name="worklogDailyTargetHours" type="Double">
             <label>Daily target hours (used for the per-day diff in the totals row)</label>

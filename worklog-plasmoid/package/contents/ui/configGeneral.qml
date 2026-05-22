@@ -19,6 +19,9 @@ Kirigami.FormLayout {
     property alias  cfg_worklogIssueMax:          maxSpin.value
     property alias  cfg_worklogShowIssueSummary:  showSummaryCheck.checked
     property alias  cfg_worklogShowSprintGauges:  sprintGaugesCheck.checked
+    property string cfg_worklogSprintStrategy:    "subtask-customfield"
+    property alias  cfg_worklogSprintField:       sprintFieldField.text
+    property alias  cfg_worklogSprintBoardId:     sprintBoardIdSpin.value
     property alias  cfg_worklogDebug:             debugCheck.checked
 
     ButtonGroup { id: viewGroup }
@@ -100,6 +103,60 @@ Kirigami.FormLayout {
         id: debugCheck
         Kirigami.FormData.label: i18n("Logs:")
         text: i18n("Loggear fetch/parse en plasmashell stdout")
+    }
+
+    Item { Kirigami.FormData.isSection: true }
+
+    Label {
+        Layout.fillWidth: true
+        Layout.preferredWidth: 400
+        wrapMode: Text.WordWrap
+        opacity: 0.65
+        text: i18n("Sprint (experimental) — cómo descubre el plasmoide cuál es tu sprint "
+                 + "activo de Jira. La opción «Subtarea + customfield» funciona incluso si "
+                 + "solo tenés subtareas asignadas (las historias padre quedan sin asignar). "
+                 + "«Board ID» va directo al endpoint de agile y necesita el id del board. "
+                 + "«Assignee JQL» es la query original de 0.4.0, útil si tu cuenta tiene "
+                 + "issues asignadas a vos directamente.")
+    }
+
+    ButtonGroup { id: sprintStrategyGroup }
+
+    RadioButton {
+        Kirigami.FormData.label: i18n("Estrategia:")
+        ButtonGroup.group: sprintStrategyGroup
+        text: i18n("Subtarea + customfield")
+        checked: page.cfg_worklogSprintStrategy === "subtask-customfield"
+        onToggled: if (checked) page.cfg_worklogSprintStrategy = "subtask-customfield"
+    }
+    RadioButton {
+        ButtonGroup.group: sprintStrategyGroup
+        text: i18n("Board ID (agile)")
+        checked: page.cfg_worklogSprintStrategy === "agile-board"
+        onToggled: if (checked) page.cfg_worklogSprintStrategy = "agile-board"
+    }
+    RadioButton {
+        ButtonGroup.group: sprintStrategyGroup
+        text: i18n("Assignee JQL (legacy 0.4.0)")
+        checked: page.cfg_worklogSprintStrategy === "assignee-jql"
+        onToggled: if (checked) page.cfg_worklogSprintStrategy = "assignee-jql"
+    }
+
+    TextField {
+        id: sprintFieldField
+        Kirigami.FormData.label: i18n("Custom field:")
+        Layout.fillWidth: true
+        placeholderText: "customfield_10020"
+        enabled: page.cfg_worklogSprintStrategy !== "agile-board"
+    }
+
+    SpinBox {
+        id: sprintBoardIdSpin
+        Kirigami.FormData.label: i18n("Board ID:")
+        from: 0
+        to: 9999999
+        stepSize: 1
+        enabled: page.cfg_worklogSprintStrategy === "agile-board"
     }
 
     Label {

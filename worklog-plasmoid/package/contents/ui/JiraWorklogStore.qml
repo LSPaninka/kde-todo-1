@@ -259,146 +259,239 @@ QtObject {
     // ------------------------------------------------------------------
     // Sprint info (for the gauges at the bottom of the popup)
     // ------------------------------------------------------------------
-    // Reads every issue in any open sprint that's assigned to me, picks
-    // the first one with state="active" as THE sprint, then sums
-    // originalEstimate (= available) and my worklogs within the sprint's
-    // date range (= consumed).
+    // Three strategies (configurable via worklogSprintStrategy):
     //
-    // If the Jira instance doesn't expose `sprint` as a top-level field,
-    // the user can override the field name via worklogSprintField in the
-    // config (defaults to "sprint" — works on modern Jira Cloud).
+    //   "subtask-customfield" (default): query subtasks assigned to me
+    //     with the sprint custom field (customfield_10020 on most Jira
+    //     instances) and pick the entry with state="active". This works
+    //     even when parent stories are unassigned and only the subtasks
+    //     belong to the user.
+    //
+    //   "agile-board": fetch the active sprint of a specific board via
+    //     /rest/agile/1.0/board/{id}/sprint?state=active. Requires the
+    //     board id in worklogSprintBoardId. Most direct lookup; useful
+    //     when you know exactly which board to ask.
+    //
+    //   "assignee-jql": original 0.4.0 behavior — query "sprint in
+    //     openSprints() AND assignee = currentUser()" relying on the
+    //     `sprint` field being exposed top-level. Kept as a fallback for
+    //     setups where the previous strategy worked.
 
     function fetchSprintInfo(callback) {
         if (!callback) callback = function() {};
         var creds = _creds();
         if (!creds) { callback(false); return; }
+        var doIt = function() { _dispatchSprintStrategy(creds, callback); };
         if (!myAccountId) {
-            // Resolve /myself first so we can filter worklog authors.
             _jiraGet(creds.site + "/rest/api/3/myself", creds, function(code, body) {
                 if (code === 200) {
-                    try {
-                        var d = JSON.parse(body);
-                        store.myAccountId = d.accountId || "";
-                    } catch (e) { /* swallow */ }
+                    try { store.myAccountId = JSON.parse(body).accountId || ""; }
+                    catch (e) { /* swallow */ }
                 }
-                _doFetchSprint(creds, callback);
+                doIt();
             });
         } else {
-            _doFetchSprint(creds, callback);
+            doIt();
         }
     }
 
-    function _doFetchSprint(creds, callback) {
-        var sprintField = (plasmoidApi && plasmoidApi.configuration.worklogSprintField) || "sprint";
-        var jql = "sprint in openSprints() AND assignee = currentUser()";
+    function _dispatchSprintStrategy(creds, callback) {
+        var s = (plasmoidApi && plasmoidApi.configuration.worklogSprintStrategy) || "subtask-customfield";
+        _log("Sprint strategy: " + s);
+        if (s === "agile-board")        _fetchSprintAgileBoard(creds, callback);
+        else if (s === "assignee-jql")  _fetchSprintAssigneeJql(creds, callback);
+        else                            _fetchSprintSubtaskField(creds, callback);
+    }
+
+    // ----- Strategy: subtask + customfield_10020 ----------------------
+    function _fetchSprintSubtaskField(creds, callback) {
+        var field = (plasmoidApi && plasmoidApi.configuration.worklogSprintField) || "customfield_10020";
+        // Don't filter by statusCategory — Done subtasks still contribute
+        // to "Quemadas" (consumed) for this sprint.
+        var jql = "issuetype in subTaskIssueTypes() AND assignee = currentUser()";
         var url = creds.site + "/rest/api/3/search/jql?jql=" + encodeURIComponent(jql) +
                   "&maxResults=200" +
                   "&fields=summary,worklog,timeoriginalestimate,timeestimate,timetracking," +
-                  encodeURIComponent(sprintField);
-        _log("Sprint GET " + url);
+                  encodeURIComponent(field);
+        _log("Sprint(subtask) GET " + url);
         _jiraGet(url, creds, function(code, body) {
             if (code !== 200) {
-                _warn("fetchSprintInfo exit=" + code + ": " + body.substring(0, 200));
-                store.currentSprint = null;
-                store.sprintAvailableSec = 0;
-                store.sprintConsumedSec  = 0;
-                store._bump();
-                callback(false);
-                return;
+                _warn("subtask-customfield exit=" + code + ": " + body.substring(0, 240));
+                _clearSprint(); callback(false); return;
             }
             try {
                 var data = JSON.parse(body);
                 var issues = data.issues || [];
-                if (issues.length === 0) {
-                    _log("Sprint: 0 issues — no active sprint visible.");
-                    store.currentSprint = null;
-                    store.sprintAvailableSec = 0;
-                    store.sprintConsumedSec  = 0;
-                    store._bump();
-                    callback(true);
-                    return;
-                }
+                _log("subtask-customfield: " + issues.length + " subtarea(s) recibidas.");
+                if (issues.length === 0) { _clearSprint(); callback(true); return; }
 
-                // Pick the first sprint with state="active" across all issues.
-                var active = null;
-                for (var i = 0; i < issues.length && !active; i++) {
-                    var fld = (issues[i].fields || {})[sprintField];
-                    var sprintArr = Array.isArray(fld) ? fld
-                                  : (fld ? [fld] : []);
-                    for (var j = 0; j < sprintArr.length; j++) {
-                        var s = sprintArr[j];
-                        if (s && (s.state === "active" || s.state === "ACTIVE")) {
-                            active = s; break;
-                        }
-                    }
-                }
+                var active = _findActiveSprintIn(issues, field);
                 if (!active) {
-                    _log("Sprint: ningún sprint con state=active.");
-                    store.currentSprint = null;
-                    store.sprintAvailableSec = 0;
-                    store.sprintConsumedSec  = 0;
-                    store._bump();
-                    callback(true);
-                    return;
+                    _warn("Ningún sprint activo en el campo '" + field +
+                          "' de las subtareas. ¿Cambió el id del custom field? " +
+                          "Configurá worklogSprintField si hace falta.");
+                    _clearSprint(); callback(true); return;
                 }
-
-                store.currentSprint = {
-                    id:        active.id,
-                    name:      active.name || "",
-                    startDate: active.startDate || "",
-                    endDate:   active.endDate   || ""
-                };
-                var sStart = new Date(store.currentSprint.startDate).getTime();
-                var sEnd   = new Date(store.currentSprint.endDate).getTime();
-
-                var total = 0;
-                var consumed = 0;
-                for (var k = 0; k < issues.length; k++) {
-                    // Only count issues that belong to THIS sprint (an issue
-                    // may have been moved across sprints).
-                    var inThis = false;
-                    var f = issues[k].fields || {};
-                    var arr = Array.isArray(f[sprintField]) ? f[sprintField]
-                            : (f[sprintField] ? [f[sprintField]] : []);
-                    for (var m = 0; m < arr.length; m++) {
-                        if (arr[m] && arr[m].id === active.id) { inThis = true; break; }
-                    }
-                    if (!inThis) continue;
-
-                    if (typeof f.timeoriginalestimate === "number") {
-                        total += f.timeoriginalestimate;
-                    } else if (f.timetracking &&
-                               typeof f.timetracking.originalEstimateSeconds === "number") {
-                        total += f.timetracking.originalEstimateSeconds;
-                    } else if (typeof f.timeestimate === "number") {
-                        total += f.timeestimate;
-                    }
-
-                    var wls = (f.worklog && f.worklog.worklogs) || [];
-                    for (var w = 0; w < wls.length; w++) {
-                        var wo = wls[w];
-                        var sm = _parseJiraDate(wo.started);
-                        if (sm < sStart || sm > sEnd) continue;
-                        var auth = wo.author || {};
-                        if (myAccountId && auth.accountId !== myAccountId) continue;
-                        consumed += wo.timeSpentSeconds | 0;
-                    }
-                }
-                store.sprintAvailableSec = total;
-                store.sprintConsumedSec  = consumed;
-                store._bump();
-                _log("Sprint '" + store.currentSprint.name + "': " +
-                     "available=" + total + "s, consumed=" + consumed + "s.");
+                _setActiveSprint(active);
+                _computeSprintTotalsFromIssues(issues, active, field);
                 callback(true);
             } catch (e) {
-                _warn("fetchSprintInfo parse: " + e);
-                store.currentSprint = null;
-                store.sprintAvailableSec = 0;
-                store.sprintConsumedSec  = 0;
-                store._bump();
-                callback(false);
+                _warn("subtask-customfield parse: " + e);
+                _clearSprint(); callback(false);
             }
         });
+    }
+
+    // ----- Strategy: agile board → active sprint → issues -------------
+    function _fetchSprintAgileBoard(creds, callback) {
+        var boardId = ((plasmoidApi && plasmoidApi.configuration.worklogSprintBoardId) | 0);
+        if (boardId <= 0) {
+            _warn("agile-board: 'Board ID' no configurado. Seteá worklogSprintBoardId.");
+            _clearSprint(); callback(false); return;
+        }
+        var url = creds.site + "/rest/agile/1.0/board/" + boardId + "/sprint?state=active";
+        _log("Sprint(agile) GET " + url);
+        _jiraGet(url, creds, function(code, body) {
+            if (code !== 200) {
+                _warn("agile-board sprint list exit=" + code + ": " + body.substring(0, 240));
+                _clearSprint(); callback(false); return;
+            }
+            try {
+                var data = JSON.parse(body);
+                var values = data.values || [];
+                if (values.length === 0) {
+                    _log("agile-board: el board " + boardId + " no tiene sprints activos.");
+                    _clearSprint(); callback(true); return;
+                }
+                var active = values[0];
+                _setActiveSprint(active);
+
+                // Now grab the issues in that sprint assigned to me.
+                var jql2 = "sprint = " + active.id + " AND assignee = currentUser()";
+                var url2 = creds.site + "/rest/api/3/search/jql?jql=" + encodeURIComponent(jql2) +
+                           "&maxResults=200" +
+                           "&fields=summary,worklog,timeoriginalestimate,timeestimate,timetracking";
+                _log("Sprint(agile) issues GET " + url2);
+                _jiraGet(url2, creds, function(c2, b2) {
+                    if (c2 !== 200) {
+                        _warn("agile-board issues exit=" + c2 + ": " + b2.substring(0, 240));
+                        // We still have the sprint id + dates; just zero out totals.
+                        store.sprintAvailableSec = 0;
+                        store.sprintConsumedSec  = 0;
+                        store._bump();
+                        callback(true);
+                        return;
+                    }
+                    try {
+                        var d2 = JSON.parse(b2);
+                        // No need to filter by sprint id — JQL already did.
+                        _computeSprintTotalsFromIssues(d2.issues || [], active, null);
+                        callback(true);
+                    } catch (e) {
+                        _warn("agile-board issues parse: " + e);
+                        callback(false);
+                    }
+                });
+            } catch (e) {
+                _warn("agile-board parse: " + e);
+                _clearSprint(); callback(false);
+            }
+        });
+    }
+
+    // ----- Strategy: original assignee + openSprints ------------------
+    function _fetchSprintAssigneeJql(creds, callback) {
+        var field = (plasmoidApi && plasmoidApi.configuration.worklogSprintField) || "customfield_10020";
+        var jql = "sprint in openSprints() AND assignee = currentUser()";
+        var url = creds.site + "/rest/api/3/search/jql?jql=" + encodeURIComponent(jql) +
+                  "&maxResults=200" +
+                  "&fields=summary,worklog,timeoriginalestimate,timeestimate,timetracking," +
+                  encodeURIComponent(field);
+        _log("Sprint(assignee) GET " + url);
+        _jiraGet(url, creds, function(code, body) {
+            if (code !== 200) {
+                _warn("assignee-jql exit=" + code + ": " + body.substring(0, 240));
+                _clearSprint(); callback(false); return;
+            }
+            try {
+                var data = JSON.parse(body);
+                var issues = data.issues || [];
+                if (issues.length === 0) { _clearSprint(); callback(true); return; }
+                var active = _findActiveSprintIn(issues, field);
+                if (!active) { _clearSprint(); callback(true); return; }
+                _setActiveSprint(active);
+                _computeSprintTotalsFromIssues(issues, active, field);
+                callback(true);
+            } catch (e) {
+                _warn("assignee-jql parse: " + e);
+                _clearSprint(); callback(false);
+            }
+        });
+    }
+
+    // ----- Helpers used by all strategies -----------------------------
+    function _findActiveSprintIn(issues, field) {
+        for (var i = 0; i < issues.length; i++) {
+            var arr = (issues[i].fields || {})[field] || [];
+            if (!Array.isArray(arr)) arr = arr ? [arr] : [];
+            for (var j = 0; j < arr.length; j++) {
+                if (arr[j] && (arr[j].state === "active" || arr[j].state === "ACTIVE"))
+                    return arr[j];
+            }
+        }
+        return null;
+    }
+    function _setActiveSprint(s) {
+        store.currentSprint = {
+            id:        s.id,
+            name:      s.name || "",
+            startDate: s.startDate || "",
+            endDate:   s.endDate || ""
+        };
+    }
+    function _clearSprint() {
+        store.currentSprint = null;
+        store.sprintAvailableSec = 0;
+        store.sprintConsumedSec  = 0;
+        store._bump();
+    }
+    // If `fieldOrNull` is a string, only issues whose sprint custom-field
+    // array contains the active.id are counted. If null, the caller has
+    // pre-filtered (e.g. via "sprint = N" JQL).
+    function _computeSprintTotalsFromIssues(issues, active, fieldOrNull) {
+        var sStart = new Date(active.startDate).getTime();
+        var sEnd   = new Date(active.endDate).getTime();
+        var total = 0, consumed = 0;
+        for (var k = 0; k < issues.length; k++) {
+            var f = issues[k].fields || {};
+            if (fieldOrNull) {
+                var arr = f[fieldOrNull] || [];
+                if (!Array.isArray(arr)) arr = arr ? [arr] : [];
+                var hit = false;
+                for (var x = 0; x < arr.length; x++) {
+                    if (arr[x] && arr[x].id === active.id) { hit = true; break; }
+                }
+                if (!hit) continue;
+            }
+            if (typeof f.timeoriginalestimate === "number") total += f.timeoriginalestimate;
+            else if (f.timetracking && typeof f.timetracking.originalEstimateSeconds === "number")
+                total += f.timetracking.originalEstimateSeconds;
+            else if (typeof f.timeestimate === "number") total += f.timeestimate;
+
+            var wls = (f.worklog && f.worklog.worklogs) || [];
+            for (var w = 0; w < wls.length; w++) {
+                var wo = wls[w];
+                var sm = _parseJiraDate(wo.started);
+                if (sm < sStart || sm > sEnd) continue;
+                var auth = wo.author || {};
+                if (myAccountId && auth.accountId !== myAccountId) continue;
+                consumed += wo.timeSpentSeconds | 0;
+            }
+        }
+        store.sprintAvailableSec = total;
+        store.sprintConsumedSec  = consumed;
+        store._bump();
+        _log("Sprint '" + active.name + "': available=" + total + "s, consumed=" + consumed + "s.");
     }
 
     // ------------------------------------------------------------------

@@ -1,5 +1,36 @@
 # Changelog — Jira / Clockify Worklog Calendar
 
+## 0.4.1 — Sprint discovery: 3 strategies (subtarea-only friendly)
+
+The 0.4.0 sprint lookup (`sprint in openSprints() AND assignee = currentUser()`)
+returned nothing for users who only have subtasks assigned (parent
+stories unassigned), leaving both gauges stuck at 0%.
+
+`JiraWorklogStore.fetchSprintInfo` now dispatches to one of three
+selectable strategies, exposed under General → Sprint (experimental):
+
+- **Subtarea + customfield** (default) — queries
+  `issuetype in subTaskIssueTypes() AND assignee = currentUser()` and
+  reads the sprint custom field (`customfield_10020` by default) on
+  each subtask, picks the entry with `state="active"`, and aggregates
+  estimates + worklogs across those subtasks.
+- **Board ID (agile)** — calls
+  `GET /rest/agile/1.0/board/{id}/sprint?state=active` with the
+  board id from the new `worklogSprintBoardId` config field, then
+  pulls the issues in that sprint with
+  `sprint = N AND assignee = currentUser()`.
+- **Assignee JQL (legacy 0.4.0)** — the original 0.4.0 query, kept
+  for setups where it worked.
+
+New kcfg entries:
+- `worklogSprintStrategy` (String, default `"subtask-customfield"`).
+- `worklogSprintBoardId` (Int, default `0`).
+- `worklogSprintField` default changed `"sprint"` → `"customfield_10020"`.
+
+Every strategy shares the same totals computation
+(`_computeSprintTotalsFromIssues`) so changing strategies doesn't
+alter the numbers — only how the active sprint is discovered.
+
 ## 0.4.0 — Sprint + Horas gauges, popup default 750px
 
 ### New
