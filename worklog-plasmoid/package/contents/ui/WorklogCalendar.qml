@@ -38,6 +38,8 @@ Item {
     // only). The store layer doesn't care which gesture produced them.
     signal moveJiraRequested(var entry, real newStartMs, int newDurationSec)
     signal moveClockifyRequested(var entry, real newStartMs, int newDurationSec)
+    signal duplicateJiraRequested(var entry)
+    signal duplicateClockifyRequested(var entry)
 
     function _emitChange(entry, newStartMs, newDurationSec, isJira) {
         // Clamp to the visible week so a wild drag can't log on day -1
@@ -419,6 +421,7 @@ Item {
                             }
                             onResizeTopRequested:    function(dy) { cal._handleResizeTop(entry, dy, true); }
                             onResizeBottomRequested: function(dh) { cal._handleResizeBottom(entry, dh, true); }
+                            onDuplicateRequested:    function() { cal.duplicateJiraRequested(entry); }
                         }
                     }
 
@@ -444,6 +447,7 @@ Item {
                             }
                             onResizeTopRequested:    function(dy) { cal._handleResizeTop(entry, dy, false); }
                             onResizeBottomRequested: function(dh) { cal._handleResizeBottom(entry, dh, false); }
+                            onDuplicateRequested:    function() { cal.duplicateClockifyRequested(entry); }
                         }
                     }
                 }

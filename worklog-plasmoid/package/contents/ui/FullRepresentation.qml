@@ -283,6 +283,34 @@ Item {
                     entry.billable
                 );
             }
+            // Duplicate-button handlers — clone the entry verbatim
+            // (same start, same duration, same comment/project/tags/etc).
+            // The existing onCreateFinished Connections triggers a
+            // refetch so the new block appears alongside the original.
+            onDuplicateJiraRequested: function(entry) {
+                if (!jiraStore) return;
+                full._setStatus(i18n("Duplicando worklog Jira…"), false);
+                _clearStatusTimer.stop();
+                jiraStore.createWorklog(
+                    entry.issueKey,
+                    new Date(entry.started),
+                    entry.durationSec,
+                    entry.comment || ""
+                );
+            }
+            onDuplicateClockifyRequested: function(entry) {
+                if (!clockifyStore) return;
+                full._setStatus(i18n("Duplicando entrada Clockify…"), false);
+                _clearStatusTimer.stop();
+                clockifyStore.createEntry(
+                    new Date(entry.started),
+                    new Date(entry.started + entry.durationSec * 1000),
+                    entry.description || "",
+                    entry.projectId || "",
+                    entry.tagIds || [],
+                    entry.billable === true
+                );
+            }
         }
 
         // Central refetch trigger. Any successful mutation (drag-move,

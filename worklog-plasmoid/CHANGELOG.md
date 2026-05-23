@@ -1,5 +1,36 @@
 # Changelog — Jira / Clockify Worklog Calendar
 
+## 0.4.3 — Hover-resize bug, snap-during-drag, duplicate button
+
+Three blocks of work on the calendar entry interaction:
+
+- **Hover-resize bug fixed.** `onPositionChanged` fires on plain hover
+  when `hoverEnabled: true`. The previous code's `_mode === 3`
+  fallthrough was implicit (`else { … }`), so hovering on a block
+  with `_mode === 0` (idle) ran the bottom-resize logic, imperatively
+  set `block.height`, and **broke the height binding** — the block
+  stayed at the corrupted size until refetch. Added a hard
+  `if (!pressed) return;` guard at the top and made the fallthrough
+  branches explicit (`else if (_mode === 2)` / `else if (_mode === 3)`).
+- **Snap-to-cell while dragging.** Removed `drag.target: block`
+  entirely; moves and resizes now compute their target position from
+  the cursor delta in stable parent coordinates (via `mapToItem`) and
+  snap to whole rows/columns on every `onPositionChanged`. The block
+  hops between cells instead of smoothly following the cursor —
+  matches the user's "más estático" request and makes alignment
+  obvious during the drag.
+- **Duplicate button.** Small 16×16 icon button (top-right corner of
+  every worklog block), visible on hover via a `HoverHandler` that
+  doesn't compete with the main `MouseArea`. Emits
+  `duplicateRequested`; FullRepresentation maps to
+  `jiraStore.createWorklog` / `clockifyStore.createEntry` with the
+  entry's existing time, duration, comment/description, projectId,
+  tags and billable — i.e. an exact clone. The standard `createFinished`
+  Connections triggers a refetch so the new block appears alongside
+  the original.
+
+Bumped metadata 0.4.2 → 0.4.3.
+
 ## 0.4.2 — Disponible = remaining, with API/calculated toggle
 
 `Disponible` on the Horas ring was summing `timeoriginalestimate` for

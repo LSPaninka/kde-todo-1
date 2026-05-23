@@ -50,6 +50,8 @@ Rectangle {
     // current y/height and the value it had at press time.
     signal resizeTopRequested(real deltaY)
     signal resizeBottomRequested(real deltaH)
+    // Duplicate button in the top-right corner.
+    signal duplicateRequested()
 
     radius: 3
     border.width: 1
@@ -186,25 +188,26 @@ Rectangle {
     //   - bottom ≤ 5 px      → resize from the bottom (changes height)
     //   - middle             → click / drag-to-move (X+Y, cross-day OK)
     //
-    // For move we lean on Qt's drag.target so the block visually follows
-    // the cursor. For resize drag.target is null and we recompute y/height
-    // manually from a parent-relative cursor (so the moving MouseArea
-    // doesn't confuse the math).
+    // Drag does NOT use Qt's drag.target — we update block.x/y/height
+    // ourselves snapped to slots (rowHeight) and day columns
+    // (columnWidth), so the block hops between cells instead of
+    // smoothly following the cursor. positionChanged is guarded by
+    // `pressed` so plain hover (with hoverEnabled: true) doesn't
+    // accidentally trigger the resize logic and corrupt the height
+    // binding.
     readonly property int _edgePx: 5
 
     MouseArea {
         id: ma
         anchors.fill: parent
         hoverEnabled: true
-        drag.axis: Drag.XAndYAxis
-        drag.threshold: 4
 
         property int  _mode: 0          // 0=idle, 1=move, 2=resizeTop, 3=resizeBottom
-        property real _pressBlockX: 0
-        property real _pressBlockY: 0
-        property real _origY: 0
+        property real _origBlockX: 0
+        property real _origBlockY: 0
         property real _origH: 0
-        property real _pressParentY: 0   // cursor Y in block.parent's coords at press
+        property real _pressParentX: 0
+        property real _pressParentY: 0
         property bool _dragged: false
 
         cursorShape: {
@@ -219,22 +222,19 @@ Rectangle {
         }
 
         onPressed: function(mouse) {
-            _dragged = false;
-            _origY        = block.y;
-            _origH        = block.height;
-            _pressBlockX  = block.x;
-            _pressBlockY  = block.y;
-            _pressParentY = ma.mapToItem(block.parent, mouse.x, mouse.y).y;
+            _dragged    = false;
+            _origBlockX = block.x;
+            _origBlockY = block.y;
+            _origH      = block.height;
+            var p = ma.mapToItem(block.parent, mouse.x, mouse.y);
+            _pressParentX = p.x;
+            _pressParentY = p.y;
 
-            if (mouse.y < block._edgePx) {
-                _mode = 2;                 // resize top
-                drag.target = null;
-            } else if (mouse.y > height - block._edgePx) {
-                _mode = 3;                 // resize bottom
-                drag.target = null;
-            } else {
-                _mode = 1;                 // move
-                drag.target = block;
+            if (mouse.y < block._edgePx)                _mode = 2;
+            else if (mouse.y > height - block._edgePx)  _mode = 3;
+            else                                         _mode = 1;
+
+            if (_mode === 1) {
                 // Float the block AND its day-column above siblings, so a
                 // drag into Thursday isn't visually covered by Friday.
                 block.z = 999;
@@ -243,34 +243,52 @@ Rectangle {
         }
 
         onPositionChanged: function(mouse) {
-            if (_mode === 1) {
-                if (drag.active) _dragged = true;
-                return;
-            }
-            // Resize modes: compute dy in stable parent coords.
-            var nowParentY = ma.mapToItem(block.parent, mouse.x, mouse.y).y;
-            var dy = nowParentY - _pressParentY;
-            if (Math.abs(dy) > 2) _dragged = true;
+            // CRITICAL: positionChanged also fires on plain hover when
+            // hoverEnabled is true. Ignoring this guard would let the
+            // resize logic run on hover and silently break the height
+            // binding (block stays at the corrupted size until refetch).
+            if (!pressed) return;
 
-            if (_mode === 2) {
-                // Top edge: grow upward (dy<0) / shrink downward.
-                var newY = _origY + dy;
-                var newH = _origH - dy;
+            var p  = ma.mapToItem(block.parent, mouse.x, mouse.y);
+            var dx = p.x - _pressParentX;
+            var dy = p.y - _pressParentY;
+
+            if (_mode === 1) {
+                // Manual drag with cell-snapping. The block hops between
+                // grid cells; there's no smooth follow.
+                if (!_dragged && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+                _dragged = true;
+                var snappedDx = block.columnWidth > 0
+                              ? Math.round(dx / block.columnWidth) * block.columnWidth
+                              : 0;
+                var snappedDy = Math.round(dy / block.rowHeight) * block.rowHeight;
+                block.x = _origBlockX + snappedDx;
+                block.y = _origBlockY + snappedDy;
+            } else if (_mode === 2) {
+                // Top resize — snap delta to whole rows so the top edge
+                // always lands on a slot boundary.
+                if (Math.abs(dy) > 2) _dragged = true;
+                var stepY = Math.round(dy / block.rowHeight) * block.rowHeight;
+                var newY  = _origBlockY + stepY;
+                var newH  = _origH - stepY;
                 if (newY < 0) { newH += newY; newY = 0; }
                 if (newH < block.rowHeight) {
                     newH = block.rowHeight;
-                    newY = _origY + _origH - block.rowHeight;
+                    newY = _origBlockY + _origH - block.rowHeight;
                 }
                 block.y = newY;
                 block.height = newH;
-            } else {
-                // Bottom edge: grow downward (dy>0) / shrink upward.
-                var maxH = Math.max(block.rowHeight, block.columnHeight - block.y);
-                var newHb = _origH + dy;
+            } else if (_mode === 3) {
+                // Bottom resize — snap height delta to whole rows.
+                if (Math.abs(dy) > 2) _dragged = true;
+                var stepDH = Math.round(dy / block.rowHeight) * block.rowHeight;
+                var newHb  = _origH + stepDH;
                 if (newHb < block.rowHeight) newHb = block.rowHeight;
-                if (newHb > maxH)            newHb = maxH;
+                var maxH = Math.max(block.rowHeight, block.columnHeight - block.y);
+                if (newHb > maxH) newHb = maxH;
                 block.height = newHb;
             }
+            // _mode === 0 (idle) intentionally falls through with no-op.
         }
 
         onReleased: function(mouse) {
@@ -280,11 +298,9 @@ Rectangle {
             _mode = 0;
             if (!_dragged) return;   // tap → handled by onClicked
             if (m === 1) {
-                var dx = block.x - _pressBlockX;
-                var dy = block.y - _pressBlockY;
-                block.moveRequested(dx, dy);
+                block.moveRequested(block.x - _origBlockX, block.y - _origBlockY);
             } else if (m === 2) {
-                block.resizeTopRequested(block.y - _origY);
+                block.resizeTopRequested(block.y - _origBlockY);
             } else if (m === 3) {
                 block.resizeBottomRequested(block.height - _origH);
             }
@@ -293,5 +309,45 @@ Rectangle {
         onClicked: function(mouse) {
             if (!_dragged) block.clicked();
         }
+    }
+
+    // Hover detector that doesn't compete with the MouseArea — used to
+    // show the duplicate button only while the cursor is over the block.
+    HoverHandler { id: _blockHover }
+
+    // Duplicate button (top-right corner). Declared *after* the main
+    // MouseArea so it intercepts clicks in its little square — that way
+    // pressing the icon doesn't accidentally start a resize-top gesture.
+    Rectangle {
+        id: dupBtn
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.topMargin: 1
+        anchors.rightMargin: 1
+        width: 16
+        height: 16
+        radius: 3
+        visible: _blockHover.hovered || dupBtnMA.containsMouse
+        color: dupBtnMA.containsMouse ? Qt.rgba(1, 1, 1, 0.30) : Qt.rgba(0, 0, 0, 0.30)
+        border.width: 1
+        border.color: Qt.rgba(1, 1, 1, 0.45)
+
+        PlasmaCore.IconItem {
+            anchors.fill: parent
+            anchors.margins: 1
+            source: "edit-copy"
+            colorGroup: PlasmaCore.Theme.ComplementaryColorGroup
+        }
+        MouseArea {
+            id: dupBtnMA
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: block.duplicateRequested()
+        }
+
+        PlasmaComponents3.ToolTip.text: i18n("Duplicar este worklog")
+        PlasmaComponents3.ToolTip.visible: dupBtnMA.containsMouse
+        PlasmaComponents3.ToolTip.delay: 500
     }
 }
