@@ -84,7 +84,9 @@ struct MainView: View {
                 },
                 onMoveClockify: { block, newStartMs, newDur in
                     applyClockify(block, newStartMs: newStartMs, newDurationSec: newDur)
-                }
+                },
+                onDuplicateJira:     { block in duplicateJira(block) },
+                onDuplicateClockify: { block in duplicateClockify(block) }
             )
             .frame(maxHeight: .infinity)
 
@@ -362,6 +364,55 @@ struct MainView: View {
                 // Refetch para que el bloque vuelva a su posición original
                 // (el snap visual no se aplicó del lado del servidor).
                 syncNow()
+            }
+        }
+    }
+
+    /// Botón "duplicar" de un bloque Jira: crea un worklog idéntico
+    /// (misma issue, mismo started, misma durationSec, mismo comment).
+    /// El refetch que dispara `applyJira` en success aparece el nuevo
+    /// bloque al lado del original.
+    private func duplicateJira(_ block: CalendarBlock) {
+        guard let w = jira.worklogs.first(where: { "jira-\($0.id)" == block.id }) else { return }
+        let started = Date(timeIntervalSince1970: w.startedMs / 1000)
+        setStatus("Duplicando worklog Jira…", isError: false, sticky: true)
+        jira.createWorklog(
+            issueKey: w.issueKey,
+            started: started,
+            durationSec: w.durationSec,
+            comment: w.comment
+        ) { result in
+            switch result {
+            case .success:
+                setStatus("Worklog duplicado.", isError: false)
+                syncNow()
+            case .failure(let err):
+                setStatus("Error duplicando: \(err.message)", isError: true)
+            }
+        }
+    }
+
+    /// Botón "duplicar" de un bloque Clockify: crea una entry idéntica
+    /// (mismo proyecto, tags, billable, description, start y end).
+    private func duplicateClockify(_ block: CalendarBlock) {
+        guard let e = clockify.entries.first(where: { "clockify-\($0.id)" == block.id }) else { return }
+        let start = Date(timeIntervalSince1970: e.startedMs / 1000)
+        let end = start.addingTimeInterval(Double(e.durationSec))
+        setStatus("Duplicando entry Clockify…", isError: false, sticky: true)
+        clockify.createEntry(
+            start: start,
+            end: end,
+            description: e.description,
+            projectId: e.projectId,
+            tagIds: e.tagIds,
+            billable: e.billable
+        ) { result in
+            switch result {
+            case .success:
+                setStatus("Entry duplicada.", isError: false)
+                syncNow()
+            case .failure(let err):
+                setStatus("Error duplicando: \(err.message)", isError: true)
             }
         }
     }

@@ -31,6 +31,10 @@ struct CalendarView: View {
     /// signatura cubre las tres gesturas (move, resize-top, resize-bottom).
     let onMoveJira: (CalendarBlock, Double, Int) -> Void
     let onMoveClockify: (CalendarBlock, Double, Int) -> Void
+    /// Llamados al click en el botón "duplicar" de un bloque.  El padre
+    /// crea una copia idéntica vía `createWorklog` / `createEntry`.
+    let onDuplicateJira: (CalendarBlock) -> Void
+    let onDuplicateClockify: (CalendarBlock) -> Void
 
     private let rowHeight: CGFloat = 22
     private let hourColumnWidth: CGFloat = 56
@@ -255,7 +259,9 @@ struct CalendarView: View {
                     onResizeTopJira:        { b, dy in handleResizeTop(block: b, deltaY: dy, isJira: true) },
                     onResizeTopClockify:    { b, dy in handleResizeTop(block: b, deltaY: dy, isJira: false) },
                     onResizeBottomJira:     { b, dh in handleResizeBottom(block: b, deltaH: dh, isJira: true) },
-                    onResizeBottomClockify: { b, dh in handleResizeBottom(block: b, deltaH: dh, isJira: false) }
+                    onResizeBottomClockify: { b, dh in handleResizeBottom(block: b, deltaH: dh, isJira: false) },
+                    onDuplicateJira:        onDuplicateJira,
+                    onDuplicateClockify:    onDuplicateClockify
                 )
                 .frame(maxWidth: .infinity)
             }
@@ -308,6 +314,9 @@ private struct DayColumnView: View {
     let onResizeTopClockify:    (CalendarBlock, CGFloat) -> Void
     let onResizeBottomJira:     (CalendarBlock, CGFloat) -> Void
     let onResizeBottomClockify: (CalendarBlock, CGFloat) -> Void
+    /// Botón "duplicar" del bloque.
+    let onDuplicateJira:        (CalendarBlock) -> Void
+    let onDuplicateClockify:    (CalendarBlock) -> Void
 
     @State private var dragStart: CGPoint? = nil
     @State private var dragCurrent: CGPoint? = nil
@@ -398,7 +407,9 @@ private struct DayColumnView: View {
                         onMove:          { dx, dy in onMoveJira(b, dx, dy, width) },
                         onResizeTop:     { dy in onResizeTopJira(b, dy) },
                         onResizeBottom:  { dh in onResizeBottomJira(b, dh) },
-                        rowHeight: rowHeight
+                        onDuplicate:     { onDuplicateJira(b) },
+                        rowHeight: rowHeight,
+                        columnWidth: width
                     )
                     .frame(width: combined ? (width / 2) - 3 : width - 4,
                            height: heightFor(b))
@@ -415,7 +426,9 @@ private struct DayColumnView: View {
                         onMove:          { dx, dy in onMoveClockify(b, dx, dy, width) },
                         onResizeTop:     { dy in onResizeTopClockify(b, dy) },
                         onResizeBottom:  { dh in onResizeBottomClockify(b, dh) },
-                        rowHeight: rowHeight
+                        onDuplicate:     { onDuplicateClockify(b) },
+                        rowHeight: rowHeight,
+                        columnWidth: width
                     )
                     .frame(width: combined ? (width / 2) - 3 : width - 4,
                            height: heightFor(b))

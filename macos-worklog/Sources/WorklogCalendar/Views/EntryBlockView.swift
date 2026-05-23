@@ -99,15 +99,23 @@ struct EntryBlockView: View {
     let onResizeTop: (CGFloat) -> Void
     /// Resize del borde inferior: el padre cambia sólo `duration`.
     let onResizeBottom: (CGFloat) -> Void
+    /// Botón duplicar (esquina superior derecha).
+    let onDuplicate: () -> Void
     /// Altura de cada fila de 30 min (necesaria para snappear el offset
     /// visual al soltar y para detectar el zonado top/bottom).
     let rowHeight: CGFloat
+    /// Ancho de la columna del día — usado para snappear el offset X
+    /// durante el drag-move, así el bloque "salta" de día en día en
+    /// lugar de seguir suavemente al cursor (matchea el "más estático"
+    /// del plasmoide).
+    let columnWidth: CGFloat
 
     @State private var dragMode: DragMode = .none
     @State private var dragOffsetX: CGFloat = 0
     @State private var dragOffsetY: CGFloat = 0
     @State private var resizeTopDy: CGFloat = 0
     @State private var resizeHeightDelta: CGFloat = 0
+    @State private var hovered: Bool = false
 
     enum DragMode { case none, move, resizeTop, resizeBottom }
 
@@ -150,9 +158,16 @@ struct EntryBlockView: View {
                                 height: Swift.max(rowHeight, baseHeight + resizeHeightDelta))
                         .offset(x: dragOffsetX, y: dragOffsetY + resizeTopDy)
                 }
+                .overlay(alignment: .topTrailing) {
+                    if hovered {
+                        duplicateButton
+                            .padding(2)   // 2 px desde la esquina
+                    }
+                }
                 .contentShape(Rectangle())
-                .onHover { hovering in
-                    if hovering {
+                .onHover { isHovering in
+                    hovered = isHovering
+                    if isHovering {
                         NSCursor.resizeUpDown.set()
                     } else {
                         NSCursor.arrow.set()
@@ -175,27 +190,17 @@ struct EntryBlockView: View {
                             apply(translation: value.translation, baseHeight: baseHeight)
                         }
                         .onEnded { value in
+                            // dragOffset*/resize* ya quedaron snappeados
+                            // del último `apply()`.  Sólo emitimos hacia
+                            // el padre con la translation cruda — su
+                            // propio `Int(round(deltaY / rowHeight))` lo
+                            // resnapeará idénticamente.
                             let mode = dragMode
                             dragMode = .none
                             switch mode {
-                            case .move:
-                                let snappedY = (value.translation.height / rowHeight).rounded() * rowHeight
-                                dragOffsetX = value.translation.width
-                                dragOffsetY = snappedY
-                                onMove(value.translation.width, value.translation.height)
-                            case .resizeTop:
-                                var dy = value.translation.height
-                                if baseHeight - dy < rowHeight { dy = baseHeight - rowHeight }
-                                let snapped = (dy / rowHeight).rounded() * rowHeight
-                                resizeTopDy = snapped
-                                resizeHeightDelta = -snapped
-                                onResizeTop(value.translation.height)
-                            case .resizeBottom:
-                                var dh = value.translation.height
-                                if baseHeight + dh < rowHeight { dh = rowHeight - baseHeight }
-                                let snapped = (dh / rowHeight).rounded() * rowHeight
-                                resizeHeightDelta = snapped
-                                onResizeBottom(value.translation.height)
+                            case .move:           onMove(value.translation.width, value.translation.height)
+                            case .resizeTop:      onResizeTop(value.translation.height)
+                            case .resizeBottom:   onResizeBottom(value.translation.height)
                             case .none: break
                             }
                         }
@@ -214,21 +219,28 @@ struct EntryBlockView: View {
         }
     }
 
-    /// Aplica el `translation` del DragGesture al estado de visual del
-    /// bloque según el modo activo.  Se llama desde `.onChanged`.
+    /// Aplica el `translation` del DragGesture al estado visual del
+    /// bloque según el modo activo.  El cursor SE SNAPPEA EN CADA
+    /// `onChanged` (no sólo al soltar), así el bloque salta de celda
+    /// en celda en lugar de seguir suavemente al cursor.
     private func apply(translation: CGSize, baseHeight: CGFloat) {
         switch dragMode {
         case .move:
-            dragOffsetX = translation.width
-            dragOffsetY = translation.height
+            let snappedX = columnWidth > 0
+                ? (translation.width / columnWidth).rounded() * columnWidth
+                : 0
+            let snappedY = (translation.height / rowHeight).rounded() * rowHeight
+            dragOffsetX = snappedX
+            dragOffsetY = snappedY
         case .resizeTop:
-            var dy = translation.height
-            // No dejamos que la altura caiga debajo de una fila.
+            // El delta se snappea a múltiplos de fila para que el borde
+            // top siempre caiga sobre un boundary de slot.
+            var dy = (translation.height / rowHeight).rounded() * rowHeight
             if baseHeight - dy < rowHeight { dy = baseHeight - rowHeight }
             resizeTopDy = dy
             resizeHeightDelta = -dy
         case .resizeBottom:
-            var dh = translation.height
+            var dh = (translation.height / rowHeight).rounded() * rowHeight
             if baseHeight + dh < rowHeight { dh = rowHeight - baseHeight }
             resizeHeightDelta = dh
         case .none:
@@ -274,6 +286,36 @@ struct EntryBlockView: View {
             }
         }
         .frame(width: width, height: height)
+    }
+
+    /// Cuadradito 16×16 con ícono de copia, en la esquina superior
+    /// derecha.  El `.onTapGesture` propio impide que el click viaje al
+    /// DragGesture del bloque (que arrancaría un resize-top), porque
+    /// SwiftUI prioriza la gesture del overlay (más interno) sobre la
+    /// del Color.clear que está abajo.
+    private var duplicateButton: some View {
+        Image(systemName: "doc.on.doc")
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundColor(.white)
+            .frame(width: 16, height: 16)
+            .background(
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(Color.black.opacity(0.35))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 3)
+                            .stroke(Color.white.opacity(0.45), lineWidth: 1)
+                    )
+            )
+            .contentShape(Rectangle())
+            .onHover { isHovering in
+                // Cuando el cursor sale del botón pero sigue dentro del
+                // bloque, volvemos a resizeUpDown (que es lo que pinta
+                // la onHover del bloque exterior).
+                if isHovering { NSCursor.pointingHand.set() }
+                else          { NSCursor.resizeUpDown.set() }
+            }
+            .onTapGesture { onDuplicate() }
+            .help("Duplicar este worklog")
     }
 }
 
