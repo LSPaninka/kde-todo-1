@@ -258,8 +258,11 @@ Item {
             // a new (start, duration) pair.
             onMoveJiraRequested: function(entry, newStartMs, newDurationSec) {
                 if (!jiraStore) return;
+                // _setStatus restarts the auto-clear timer; don't stop it
+                // here — the message should fade naturally after 6 s while
+                // the next status (loading / done) takes over via the
+                // binding fallback.
                 full._setStatus(i18n("Actualizando worklog Jira…"), false);
-                _clearStatusTimer.stop();
                 jiraStore.updateWorklog(
                     entry.issueKey,
                     entry.id,
@@ -271,7 +274,6 @@ Item {
             onMoveClockifyRequested: function(entry, newStartMs, newDurationSec) {
                 if (!clockifyStore) return;
                 full._setStatus(i18n("Actualizando entrada Clockify…"), false);
-                _clearStatusTimer.stop();
                 var newStart = new Date(newStartMs);
                 var newEnd   = new Date(newStartMs + newDurationSec * 1000);
                 clockifyStore.updateEntry(
@@ -290,7 +292,6 @@ Item {
             onDuplicateJiraRequested: function(entry) {
                 if (!jiraStore) return;
                 full._setStatus(i18n("Duplicando worklog Jira…"), false);
-                _clearStatusTimer.stop();
                 jiraStore.createWorklog(
                     entry.issueKey,
                     new Date(entry.started),
@@ -301,7 +302,6 @@ Item {
             onDuplicateClockifyRequested: function(entry) {
                 if (!clockifyStore) return;
                 full._setStatus(i18n("Duplicando entrada Clockify…"), false);
-                _clearStatusTimer.stop();
                 clockifyStore.createEntry(
                     new Date(entry.started),
                     new Date(entry.started + entry.durationSec * 1000),

@@ -120,6 +120,8 @@ Item {
                d.getMonth()    === t.getMonth() &&
                d.getDate()     === t.getDate();
     }
+    // weekStart is Sunday → index 0 = Sun, 6 = Sat.
+    function _isWeekend(idx) { return idx === 0 || idx === 6; }
 
     function _formatDayHeader(idx) {
         var d = new Date(_dayMs(idx));
@@ -219,7 +221,9 @@ Item {
                                    ? Qt.rgba(PlasmaCore.Theme.highlightColor.r,
                                              PlasmaCore.Theme.highlightColor.g,
                                              PlasmaCore.Theme.highlightColor.b, 0.22)
-                                   : Qt.rgba(1, 1, 1, 0.04)
+                                   : cal._isWeekend(index)
+                                       ? Qt.rgba(0, 0, 0, 0.18)
+                                       : Qt.rgba(1, 1, 1, 0.04)
                             border.width: 1
                             border.color: Qt.rgba(1, 1, 1, 0.1)
                             PlasmaComponents3.Label {
@@ -291,6 +295,15 @@ Item {
                     Layout.preferredHeight: cal.slotsPerDay * cal.rowHeight
                     property int dayIndex: index
 
+                    // Weekend tint — Sat/Sun get a slight darken so they
+                    // stand out from weekdays. Drawn before the today
+                    // overlay so both can stack on a Saturday-that-is-
+                    // today.
+                    Rectangle {
+                        visible: cal._isWeekend(dayCol.dayIndex)
+                        anchors.fill: parent
+                        color: Qt.rgba(0, 0, 0, 0.18)
+                    }
                     // Today-column tint sits underneath the slot grid so
                     // the alternating-row pattern still shows through.
                     Rectangle {

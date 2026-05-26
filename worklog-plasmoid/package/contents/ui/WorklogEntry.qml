@@ -262,37 +262,51 @@ Rectangle {
 
             if (_mode === 1) {
                 // Manual drag with cell-snapping. The block hops between
-                // grid cells; there's no smooth follow.
+                // grid cells; there's no smooth follow. Y is clamped to
+                // [0, columnHeight - height] so the block can't escape
+                // the visible hour range (9:00–18:00 in 9h mode, etc.).
                 if (!_dragged && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
                 _dragged = true;
                 var snappedDx = block.columnWidth > 0
                               ? Math.round(dx / block.columnWidth) * block.columnWidth
                               : 0;
                 var snappedDy = Math.round(dy / block.rowHeight) * block.rowHeight;
+                var newY = _origBlockY + snappedDy;
+                if (block.columnHeight > 0) {
+                    var maxY = Math.max(0, block.columnHeight - block.height);
+                    if (newY < 0)    newY = 0;
+                    if (newY > maxY) newY = maxY;
+                }
                 block.x = _origBlockX + snappedDx;
-                block.y = _origBlockY + snappedDy;
+                block.y = newY;
             } else if (_mode === 2) {
                 // Top resize — snap delta to whole rows so the top edge
-                // always lands on a slot boundary.
+                // always lands on a slot boundary, clamped to row 0
+                // (= the view's startHour).
                 if (Math.abs(dy) > 2) _dragged = true;
                 var stepY = Math.round(dy / block.rowHeight) * block.rowHeight;
-                var newY  = _origBlockY + stepY;
+                var newY2 = _origBlockY + stepY;
                 var newH  = _origH - stepY;
-                if (newY < 0) { newH += newY; newY = 0; }
+                if (newY2 < 0) { newH += newY2; newY2 = 0; }
                 if (newH < block.rowHeight) {
                     newH = block.rowHeight;
-                    newY = _origBlockY + _origH - block.rowHeight;
+                    newY2 = _origBlockY + _origH - block.rowHeight;
                 }
-                block.y = newY;
+                block.y = newY2;
                 block.height = newH;
             } else if (_mode === 3) {
-                // Bottom resize — snap height delta to whole rows.
+                // Bottom resize — snap height delta to whole rows. Clamp
+                // so the bottom edge stays inside columnHeight (= the
+                // view's endHour), preventing the block from spilling
+                // past 18:00 in 9h mode.
                 if (Math.abs(dy) > 2) _dragged = true;
                 var stepDH = Math.round(dy / block.rowHeight) * block.rowHeight;
                 var newHb  = _origH + stepDH;
                 if (newHb < block.rowHeight) newHb = block.rowHeight;
-                var maxH = Math.max(block.rowHeight, block.columnHeight - block.y);
-                if (newHb > maxH) newHb = maxH;
+                if (block.columnHeight > 0) {
+                    var maxH = Math.max(block.rowHeight, block.columnHeight - block.y);
+                    if (newHb > maxH) newHb = maxH;
+                }
                 block.height = newHb;
             }
             // _mode === 0 (idle) intentionally falls through with no-op.
@@ -318,13 +332,12 @@ Rectangle {
         }
     }
 
-    // Hover detector that doesn't compete with the MouseArea — used to
-    // show the duplicate button only while the cursor is over the block.
-    HoverHandler { id: _blockHover }
-
     // Duplicate button (top-right corner). Declared *after* the main
-    // MouseArea so it intercepts clicks in its little square — that way
-    // pressing the icon doesn't accidentally start a resize-top gesture.
+    // MouseArea so its 16×16 area intercepts clicks (pressing the icon
+    // doesn't accidentally start a resize-top gesture). Visibility is
+    // bound to the main MouseArea's containsMouse so the button shows
+    // any time the cursor is over the block — HoverHandler was unreliable
+    // in this layout because the MouseArea fills the same area.
     Rectangle {
         id: dupBtn
         anchors.top: parent.top
@@ -334,7 +347,7 @@ Rectangle {
         width: 16
         height: 16
         radius: 3
-        visible: _blockHover.hovered || dupBtnMA.containsMouse
+        visible: ma.containsMouse || dupBtnMA.containsMouse
         color: dupBtnMA.containsMouse ? Qt.rgba(1, 1, 1, 0.30) : Qt.rgba(0, 0, 0, 0.30)
         border.width: 1
         border.color: Qt.rgba(1, 1, 1, 0.45)

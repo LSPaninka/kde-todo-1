@@ -43,6 +43,18 @@
             <min>400</min>
             <max>1500</max>
         </entry>
+        <entry name="worklogModalWidth" type="Int">
+            <label>Default width of the new/edit worklog modal, in pixels.</label>
+            <default>720</default>
+            <min>420</min>
+            <max>1600</max>
+        </entry>
+        <entry name="worklogModalHeight" type="Int">
+            <label>Default height of the new/edit worklog modal, in pixels.</label>
+            <default>520</default>
+            <min>360</min>
+            <max>1200</max>
+        </entry>
         <entry name="worklogShowSprintGauges" type="Bool">
             <label>Show the Sprint + Horas ring gauges below the calendar (9h mode only, Jira / Jira-Clockify sources only).</label>
             <default>true</default>

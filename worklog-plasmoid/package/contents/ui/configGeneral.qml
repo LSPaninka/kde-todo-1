@@ -14,6 +14,8 @@ Kirigami.FormLayout {
     property string cfg_worklogViewMode: "9h"
     property alias  cfg_worklogPopupWidth:        popupW.value
     property alias  cfg_worklogPopupHeight:       popupH.value
+    property alias  cfg_worklogModalWidth:        modalW.value
+    property alias  cfg_worklogModalHeight:       modalH.value
     property alias  cfg_worklogDailyTargetHours:  targetSpin.value
     property alias  cfg_worklogIssueJql:          jqlField.text
     property alias  cfg_worklogIssueMax:          maxSpin.value
@@ -59,6 +61,21 @@ Kirigami.FormLayout {
         Kirigami.FormData.label: i18n("Alto del popup (px):")
         from: 400
         to: 1500
+        stepSize: 20
+    }
+
+    SpinBox {
+        id: modalW
+        Kirigami.FormData.label: i18n("Ancho del modal (px):")
+        from: 420
+        to: 1600
+        stepSize: 20
+    }
+    SpinBox {
+        id: modalH
+        Kirigami.FormData.label: i18n("Alto del modal (px):")
+        from: 360
+        to: 1200
         stepSize: 20
     }
 

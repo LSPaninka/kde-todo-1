@@ -1,5 +1,63 @@
 # Changelog — Jira / Clockify Worklog Calendar
 
+## 0.4.5 — Status auto-clear, in-view clamping, modal polish, weekend tint
+
+A bunch of post-drag-refactor cleanups:
+
+- **Status line auto-clears again.** The move / duplicate handlers
+  were stopping `_clearStatusTimer` after `_setStatus()` restarted it,
+  so the status string ("Actualizando worklog Jira…", etc.) stayed
+  visible until the next event. Removed those `stop()` calls — only
+  `syncJiraIntoClockify` keeps the manual stop (it's a multi-second
+  multi-POST and needs the message to persist throughout). The status
+  binding still reserves vertical space via a non-breaking-space
+  fallback, so the grid never moves when messages appear/disappear.
+
+- **Drag stays inside the visible hours.** In 9h mode (or any non-
+  24h mode), pressing a block and dragging past the bottom would let
+  it spill below 18:00. Same with bottom-resize. Both `block.y` and
+  `block.height` are now clamped to `[0, columnHeight]` in
+  `onPositionChanged` for the move and bottom-resize paths. Top-resize
+  was already clamped to 0.
+
+- **Duplicate button visible on hover.** Switched from a
+  `HoverHandler` (which silently misbehaved alongside the
+  hoverEnabled MouseArea) to binding `dupBtn.visible` directly to
+  `ma.containsMouse || dupBtnMA.containsMouse`. Button now appears
+  as soon as the cursor enters the block.
+
+- **Modal size is configurable.** New kcfg entries
+  `worklogModalWidth` (default 720) and `worklogModalHeight`
+  (default 520). Two SpinBoxes in General → Popup expose them. Both
+  dialogs (Jira `WorklogEditDialog` and `ClockifyEditDialog`) read
+  these values, clamped to the parent popup's available size minus
+  a small margin so they never spill out.
+
+- **Escape closes the modal.** `focus: visible` + `Keys.onEscapePressed`
+  on the root Item, plus an explicit `dlg.forceActiveFocus()` in both
+  `openCreate` and `openEdit` so Plasma actually delivers key events
+  to the dialog. Skipped while loading (so you don't bail mid-save).
+
+- **Inicio / Fin times are directly editable.** The `09:30` labels
+  next to the +/- buttons in both modals were swapped for
+  `QQC2.TextField`s with `inputMask: "99:99;_"`. Typing a valid
+  HH:MM and hitting Enter (or losing focus) applies the value via a
+  new `_applyTimeText(text, isStart)` helper that preserves the date
+  portion of `startMs` / `endMs` and rejects invalid input (bouncing
+  the field back to the current formatted value). The +/- buttons
+  still work and update the field through a `Connections` block on
+  `startMsChanged` / `endMsChanged` — the field is only re-set when
+  it isn't actively focused, so external changes don't yank the
+  cursor while you're typing.
+
+- **Saturday + Sunday columns slightly darker.** New `_isWeekend(idx)`
+  helper in `WorklogCalendar`; weekends get a `Qt.rgba(0,0,0,0.18)`
+  overlay both in the day-column body and in the day-header cell.
+  Stacks with the today tint (a Saturday-that-is-today still gets
+  the highlight color over the weekend darken).
+
+Bumped metadata 0.4.4 → 0.4.5.
+
 ## 0.4.4 — Stop the ScrollView from stealing block-drag events
 
 0.4.3 dropped `drag.target: block` to make the move snap-to-cell, but

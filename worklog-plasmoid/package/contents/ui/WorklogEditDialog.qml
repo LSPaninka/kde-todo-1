@@ -38,6 +38,15 @@ Item {
     visible: false
     z: 1000
 
+    // Grab keyboard focus when visible so Escape closes the modal.
+    focus: visible
+    Keys.onEscapePressed: function(event) {
+        if (!dlg.loading) {
+            dlg.visible = false;
+            event.accepted = true;
+        }
+    }
+
     function openCreate(dayMs, sMs, eMs) {
         isEdit = false;
         editingEntry = null;
@@ -49,6 +58,7 @@ Item {
         searchField.text = "";
         statusText = "";
         visible = true;
+        dlg.forceActiveFocus();
         _refreshPicker();
     }
 
@@ -63,6 +73,7 @@ Item {
         searchField.text = "";
         statusText = "";
         visible = true;
+        dlg.forceActiveFocus();
     }
 
     function _refreshPicker() {
@@ -86,6 +97,29 @@ Item {
     function _adjust(ms, deltaMin) {
         return ms + deltaMin * 60000;
     }
+    // Parses "HH:MM" from a TextField and applies the hour/minute pair to
+    // dlg.startMs or dlg.endMs (preserving the date part). On invalid
+    // input we just refuse — the TextField's binding-via-onChanged
+    // re-formats the value back to the current ms.
+    function _applyTimeText(text, isStart) {
+        if (!text) return false;
+        var m = text.match(/^\s*(\d{1,2})\s*:\s*(\d{1,2})\s*$/);
+        if (!m) return false;
+        var hh = parseInt(m[1], 10);
+        var mm = parseInt(m[2], 10);
+        if (isNaN(hh) || isNaN(mm) || hh < 0 || hh > 23 || mm < 0 || mm > 59) return false;
+        var d = new Date(isStart ? startMs : endMs);
+        d.setHours(hh, mm, 0, 0);
+        var newMs = d.getTime();
+        if (isStart) {
+            if (newMs >= endMs) return false;   // keep start < end
+            startMs = newMs;
+        } else {
+            if (newMs <= startMs) return false; // keep end > start
+            endMs = newMs;
+        }
+        return true;
+    }
     function _durationSec() { return Math.max(60, Math.round((endMs - startMs) / 1000)); }
     function _fmtDuration(sec) {
         var h = Math.floor(sec / 3600);
@@ -104,10 +138,15 @@ Item {
     }
 
     // -------- card --------
+    // Size taken from the configurable worklogModalWidth/Height kcfgs,
+    // capped at the parent's available size minus a small margin so the
+    // modal never spills outside the popup.
     Rectangle {
         anchors.centerIn: parent
-        width: Math.max(520, parent.width - 40)
-        height: Math.max(440, parent.height - 60)
+        width: Math.min(plasmoid.configuration.worklogModalWidth || 720,
+                        Math.max(420, parent.width  - 24))
+        height: Math.min(plasmoid.configuration.worklogModalHeight || 520,
+                        Math.max(360, parent.height - 36))
         color: PlasmaCore.Theme.backgroundColor
         border.color: PlasmaCore.Theme.textColor
         border.width: 1
@@ -157,11 +196,29 @@ Item {
                     icon.name: "list-remove"
                     onClicked: dlg.startMs = dlg._adjust(dlg.startMs, -30)
                 }
-                PlasmaComponents3.Label {
-                    Layout.preferredWidth: 50
+                QQC2.TextField {
+                    id: startTimeField
+                    Layout.preferredWidth: 60
                     horizontalAlignment: Text.AlignHCenter
-                    text: dlg._fmtTime(dlg.startMs)
                     font.family: "monospace"
+                    inputMask: "99:99;_"
+                    text: dlg._fmtTime(dlg.startMs)
+                    onEditingFinished: {
+                        if (!dlg._applyTimeText(text, true)) {
+                            text = dlg._fmtTime(dlg.startMs);   // bounce back if invalid
+                        }
+                    }
+                    // External changes (via ± buttons) should re-format the
+                    // field — but only when the field isn't being edited,
+                    // so we don't yank the cursor while the user types.
+                    Connections {
+                        target: dlg
+                        function onStartMsChanged() {
+                            if (!startTimeField.activeFocus) {
+                                startTimeField.text = dlg._fmtTime(dlg.startMs);
+                            }
+                        }
+                    }
                 }
                 PlasmaComponents3.ToolButton {
                     icon.name: "list-add"
@@ -182,11 +239,26 @@ Item {
                         if (prev > dlg.startMs) dlg.endMs = prev;
                     }
                 }
-                PlasmaComponents3.Label {
-                    Layout.preferredWidth: 50
+                QQC2.TextField {
+                    id: endTimeField
+                    Layout.preferredWidth: 60
                     horizontalAlignment: Text.AlignHCenter
-                    text: dlg._fmtTime(dlg.endMs)
                     font.family: "monospace"
+                    inputMask: "99:99;_"
+                    text: dlg._fmtTime(dlg.endMs)
+                    onEditingFinished: {
+                        if (!dlg._applyTimeText(text, false)) {
+                            text = dlg._fmtTime(dlg.endMs);
+                        }
+                    }
+                    Connections {
+                        target: dlg
+                        function onEndMsChanged() {
+                            if (!endTimeField.activeFocus) {
+                                endTimeField.text = dlg._fmtTime(dlg.endMs);
+                            }
+                        }
+                    }
                 }
                 PlasmaComponents3.ToolButton {
                     icon.name: "list-add"

@@ -34,6 +34,14 @@ Item {
     visible: false
     z: 1000
 
+    focus: visible
+    Keys.onEscapePressed: function(event) {
+        if (!dlg.loading) {
+            dlg.visible = false;
+            event.accepted = true;
+        }
+    }
+
     function openCreate(sMs, eMs) {
         isEdit = false;
         editingEntry = null;
@@ -45,6 +53,7 @@ Item {
         billable = plasmoidConfigDefaultBillable();
         statusText = "";
         visible = true;
+        dlg.forceActiveFocus();
         _ensureContext();
     }
     function openEdit(entry) {
@@ -58,6 +67,7 @@ Item {
         billable = entry.billable === true;
         statusText = "";
         visible = true;
+        dlg.forceActiveFocus();
         _ensureContext();
     }
 
@@ -89,6 +99,25 @@ Item {
         return p(d.getHours()) + ":" + p(d.getMinutes());
     }
     function _adjust(ms, deltaMin) { return ms + deltaMin * 60000; }
+    function _applyTimeText(text, isStart) {
+        if (!text) return false;
+        var m = text.match(/^\s*(\d{1,2})\s*:\s*(\d{1,2})\s*$/);
+        if (!m) return false;
+        var hh = parseInt(m[1], 10);
+        var mm = parseInt(m[2], 10);
+        if (isNaN(hh) || isNaN(mm) || hh < 0 || hh > 23 || mm < 0 || mm > 59) return false;
+        var d = new Date(isStart ? startMs : endMs);
+        d.setHours(hh, mm, 0, 0);
+        var newMs = d.getTime();
+        if (isStart) {
+            if (newMs >= endMs) return false;
+            startMs = newMs;
+        } else {
+            if (newMs <= startMs) return false;
+            endMs = newMs;
+        }
+        return true;
+    }
     function _durationSec() { return Math.max(60, Math.round((endMs - startMs) / 1000)); }
     function _fmtDur(sec) {
         var h = Math.floor(sec / 3600);
@@ -105,10 +134,14 @@ Item {
         MouseArea { anchors.fill: parent; onClicked: if (!dlg.loading) dlg.visible = false }
     }
 
+    // Card size taken from the configurable worklogModalWidth/Height
+    // kcfg, capped at parent's available size minus a small margin.
     Rectangle {
         anchors.centerIn: parent
-        width: Math.max(540, parent.width - 40)
-        height: Math.max(440, parent.height - 60)
+        width: Math.min(plasmoid.configuration.worklogModalWidth || 720,
+                        Math.max(420, parent.width  - 24))
+        height: Math.min(plasmoid.configuration.worklogModalHeight || 520,
+                        Math.max(360, parent.height - 36))
         color: PlasmaCore.Theme.backgroundColor
         border.color: PlasmaCore.Theme.textColor
         border.width: 1
@@ -159,11 +192,26 @@ Item {
                     icon.name: "list-remove"
                     onClicked: dlg.startMs = dlg._adjust(dlg.startMs, -30)
                 }
-                PlasmaComponents3.Label {
-                    Layout.preferredWidth: 50
+                QQC2.TextField {
+                    id: startTimeFieldC
+                    Layout.preferredWidth: 60
                     horizontalAlignment: Text.AlignHCenter
-                    text: dlg._fmtTime(dlg.startMs)
                     font.family: "monospace"
+                    inputMask: "99:99;_"
+                    text: dlg._fmtTime(dlg.startMs)
+                    onEditingFinished: {
+                        if (!dlg._applyTimeText(text, true)) {
+                            text = dlg._fmtTime(dlg.startMs);
+                        }
+                    }
+                    Connections {
+                        target: dlg
+                        function onStartMsChanged() {
+                            if (!startTimeFieldC.activeFocus) {
+                                startTimeFieldC.text = dlg._fmtTime(dlg.startMs);
+                            }
+                        }
+                    }
                 }
                 PlasmaComponents3.ToolButton {
                     icon.name: "list-add"
@@ -181,11 +229,26 @@ Item {
                         if (p > dlg.startMs) dlg.endMs = p;
                     }
                 }
-                PlasmaComponents3.Label {
-                    Layout.preferredWidth: 50
+                QQC2.TextField {
+                    id: endTimeFieldC
+                    Layout.preferredWidth: 60
                     horizontalAlignment: Text.AlignHCenter
-                    text: dlg._fmtTime(dlg.endMs)
                     font.family: "monospace"
+                    inputMask: "99:99;_"
+                    text: dlg._fmtTime(dlg.endMs)
+                    onEditingFinished: {
+                        if (!dlg._applyTimeText(text, false)) {
+                            text = dlg._fmtTime(dlg.endMs);
+                        }
+                    }
+                    Connections {
+                        target: dlg
+                        function onEndMsChanged() {
+                            if (!endTimeFieldC.activeFocus) {
+                                endTimeFieldC.text = dlg._fmtTime(dlg.endMs);
+                            }
+                        }
+                    }
                 }
                 PlasmaComponents3.ToolButton {
                     icon.name: "list-add"
