@@ -53,6 +53,9 @@ struct CalendarView: View {
         return Calendar.current.isDateInToday(day)
     }
 
+    /// `weekStart` es Domingo → idx 0 (Dom) y 6 (Sáb) son fin de semana.
+    private func isWeekend(_ idx: Int) -> Bool { idx == 0 || idx == 6 }
+
     /// Único punto de salida hacia el padre para los tres gestos.
     /// Clampea al rango visible (Domingo→Sábado siguiente) y obliga un
     /// piso de 30 min de duración.  No clampea por día: bloques que
@@ -194,10 +197,13 @@ struct CalendarView: View {
             ForEach(0..<7, id: \.self) { i in
                 VStack(spacing: 0) {
                     ZStack {
+                        // Hoy gana sobre weekend; weekend gana sobre weekday normal.
                         Rectangle()
                             .fill(isToday(i)
                                   ? Color.accentColor.opacity(0.22)
-                                  : Color.white.opacity(0.04))
+                                  : (isWeekend(i)
+                                     ? Color.black.opacity(0.18)
+                                     : Color.white.opacity(0.04)))
                             .overlay(Rectangle().stroke(Color.white.opacity(0.08), lineWidth: 1))
                         Text(dayHeader(i))
                             .font(.system(size: 10, weight: .semibold))
@@ -244,6 +250,7 @@ struct CalendarView: View {
                     combined: combined,
                     sourcePure: source,
                     isToday: isToday(i),
+                    isWeekend: isWeekend(i),
                     onCreateJira: onCreateJira,
                     onCreateClockify: onCreateClockify,
                     onEditJira: onEditJira,
@@ -301,6 +308,7 @@ private struct DayColumnView: View {
     let combined: Bool
     let sourcePure: WorklogSource
     let isToday: Bool
+    let isWeekend: Bool
     let onCreateJira: (DragSelection) -> Void
     let onCreateClockify: (DragSelection) -> Void
     let onEditJira: (CalendarBlock) -> Void
@@ -360,6 +368,12 @@ private struct DayColumnView: View {
         GeometryReader { geo in
             let width = geo.size.width
             ZStack(alignment: .topLeading) {
+                // Tinte de fin de semana debajo del de "hoy" (así un
+                // sábado-que-es-hoy se ve con el acento, no oscuro).
+                if isWeekend {
+                    Rectangle()
+                        .fill(Color.black.opacity(0.18))
+                }
                 // Tinte del día actual debajo del grid, así el patrón de
                 // filas alternadas sigue siendo visible por encima.
                 if isToday {
@@ -409,7 +423,9 @@ private struct DayColumnView: View {
                         onResizeBottom:  { dh in onResizeBottomJira(b, dh) },
                         onDuplicate:     { onDuplicateJira(b) },
                         rowHeight: rowHeight,
-                        columnWidth: width
+                        columnWidth: width,
+                        columnHeight: totalHeight,
+                        blockYInColumn: yFor(b)
                     )
                     .frame(width: combined ? (width / 2) - 3 : width - 4,
                            height: heightFor(b))
@@ -428,7 +444,9 @@ private struct DayColumnView: View {
                         onResizeBottom:  { dh in onResizeBottomClockify(b, dh) },
                         onDuplicate:     { onDuplicateClockify(b) },
                         rowHeight: rowHeight,
-                        columnWidth: width
+                        columnWidth: width,
+                        columnHeight: totalHeight,
+                        blockYInColumn: yFor(b)
                     )
                     .frame(width: combined ? (width / 2) - 3 : width - 4,
                            height: heightFor(b))

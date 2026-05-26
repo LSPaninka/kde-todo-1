@@ -67,6 +67,21 @@ struct SettingsWindow: View {
                 )
             }
 
+            Section("Tamaño de los modals (Jira / Clockify)") {
+                Stepper(
+                    "Ancho: \(settings.modalWidth) px",
+                    value: $settings.modalWidth,
+                    in: 420...1400,
+                    step: 20
+                )
+                Stepper(
+                    "Alto: \(settings.modalHeight) px",
+                    value: $settings.modalHeight,
+                    in: 360...1200,
+                    step: 20
+                )
+            }
+
             Section("Sprint (experimental)") {
                 Toggle("Mostrar anillos Sprint / Horas debajo del calendario",
                        isOn: $settings.showSprintGauges)

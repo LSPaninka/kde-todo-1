@@ -109,6 +109,15 @@ struct EntryBlockView: View {
     /// lugar de seguir suavemente al cursor (matchea el "más estático"
     /// del plasmoide).
     let columnWidth: CGFloat
+    /// Alto total de la columna del día (= slotsPerDay × rowHeight).
+    /// Sirve para clampear el bloque dentro de las horas visibles —
+    /// sin esto, en modo 9h el bloque podía escaparse por debajo de
+    /// las 18:00.
+    let columnHeight: CGFloat
+    /// Y del bloque dentro de la columna (lo que pone el padre con
+    /// `.offset(y: yFor(b))`).  El bloque lo necesita para calcular
+    /// los límites válidos del drag y del resize.
+    let blockYInColumn: CGFloat
 
     @State private var dragMode: DragMode = .none
     @State private var dragOffsetX: CGFloat = 0
@@ -178,7 +187,12 @@ struct EntryBlockView: View {
                 // menos no queda detrás de bloques contiguos).
                 .zIndex(dragMode == .move ? 999 : 0)
                 .onTapGesture(perform: onTap)
-                .gesture(
+                // `highPriorityGesture` (en vez de `gesture`) es el
+                // equivalente al `preventStealing: true` del MouseArea
+                // QML: gana frente al pan del ScrollView que envuelve
+                // al calendario, así un drag sobre un bloque no termina
+                // scrolleando la grilla.
+                .highPriorityGesture(
                     DragGesture(minimumDistance: 4, coordinateSpace: .local)
                         .onChanged { value in
                             if dragMode == .none {
@@ -223,25 +237,45 @@ struct EntryBlockView: View {
     /// bloque según el modo activo.  El cursor SE SNAPPEA EN CADA
     /// `onChanged` (no sólo al soltar), así el bloque salta de celda
     /// en celda en lugar de seguir suavemente al cursor.
+    ///
+    /// Para move y resize-bottom clampamos al rango de la columna
+    /// (`[0, columnHeight]`) para que el bloque no se escape por
+    /// debajo de las 18:00 en modo 9h.
     private func apply(translation: CGSize, baseHeight: CGFloat) {
         switch dragMode {
         case .move:
             let snappedX = columnWidth > 0
                 ? (translation.width / columnWidth).rounded() * columnWidth
                 : 0
-            let snappedY = (translation.height / rowHeight).rounded() * rowHeight
+            var snappedY = (translation.height / rowHeight).rounded() * rowHeight
+            if columnHeight > 0 {
+                // newY (= blockYInColumn + snappedY) ∈ [0, columnHeight − height]
+                let maxOffset = Swift.max(0, columnHeight - blockYInColumn - baseHeight)
+                let minOffset = -blockYInColumn
+                if snappedY < minOffset { snappedY = minOffset }
+                if snappedY > maxOffset { snappedY = maxOffset }
+            }
             dragOffsetX = snappedX
             dragOffsetY = snappedY
         case .resizeTop:
             // El delta se snappea a múltiplos de fila para que el borde
-            // top siempre caiga sobre un boundary de slot.
+            // top siempre caiga sobre un boundary de slot.  Clampamos
+            // contra el límite superior (= row 0 = startHour) y el
+            // mínimo de una fila de altura.
             var dy = (translation.height / rowHeight).rounded() * rowHeight
             if baseHeight - dy < rowHeight { dy = baseHeight - rowHeight }
+            if blockYInColumn + dy < 0     { dy = -blockYInColumn }
             resizeTopDy = dy
             resizeHeightDelta = -dy
         case .resizeBottom:
             var dh = (translation.height / rowHeight).rounded() * rowHeight
             if baseHeight + dh < rowHeight { dh = rowHeight - baseHeight }
+            if columnHeight > 0 {
+                // newH = baseHeight + dh ≤ columnHeight - blockYInColumn
+                let maxDh = Swift.max(rowHeight - baseHeight,
+                                      columnHeight - blockYInColumn - baseHeight)
+                if dh > maxDh { dh = maxDh }
+            }
             resizeHeightDelta = dh
         case .none:
             break

@@ -122,6 +122,7 @@ struct MainView: View {
             if let sel = jiraSheetSelection {
                 JiraEditSheet(
                     store: jira,
+                    settings: settings,
                     presented: $jiraSheet,
                     editing: sel.editing,
                     start: sel.start,
@@ -136,6 +137,7 @@ struct MainView: View {
             if let sel = clockifySheetSelection {
                 ClockifyEditSheet(
                     store: clockify,
+                    settings: settings,
                     presented: $clockifySheet,
                     editing: sel.editing,
                     start: sel.start,

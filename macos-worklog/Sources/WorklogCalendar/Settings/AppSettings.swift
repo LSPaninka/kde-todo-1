@@ -46,6 +46,12 @@ final class AppSettings: ObservableObject {
     @Published var windowWidth: Int = 1100 { didSet { ud.set(windowWidth, forKey: "worklogWindowWidth") } }
     @Published var windowHeight: Int = 800 { didSet { ud.set(windowHeight, forKey: "worklogWindowHeight") } }
 
+    // Tamaño deseado de los sheets de edición (Jira / Clockify).  El
+    // sheet los respeta como min y la ventana macOS los expande si hay
+    // espacio.  Valores chicos quedan claustrofóbicos para el picker.
+    @Published var modalWidth: Int = 720 { didSet { ud.set(modalWidth, forKey: "worklogModalWidth") } }
+    @Published var modalHeight: Int = 600 { didSet { ud.set(modalHeight, forKey: "worklogModalHeight") } }
+
     // MARK: - Jira
 
     @Published var jiraSite: String = "" { didSet { ud.set(jiraSite, forKey: "jiraSite") } }
@@ -104,6 +110,8 @@ final class AppSettings: ObservableObject {
         if ud.object(forKey: "worklogDebug") != nil { debug = ud.bool(forKey: "worklogDebug") }
         if let w = ud.object(forKey: "worklogWindowWidth")  as? Int { windowWidth  = w }
         if let h = ud.object(forKey: "worklogWindowHeight") as? Int { windowHeight = h }
+        if let w = ud.object(forKey: "worklogModalWidth")   as? Int { modalWidth   = w }
+        if let h = ud.object(forKey: "worklogModalHeight")  as? Int { modalHeight  = h }
 
         jiraSite  = ud.string(forKey: "jiraSite")  ?? ""
         jiraEmail = ud.string(forKey: "jiraEmail") ?? ""
