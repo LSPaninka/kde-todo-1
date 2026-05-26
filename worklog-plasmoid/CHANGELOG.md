@@ -1,5 +1,20 @@
 # Changelog — Jira / Clockify Worklog Calendar
 
+## 0.4.4 — Stop the ScrollView from stealing block-drag events
+
+0.4.3 dropped `drag.target: block` to make the move snap-to-cell, but
+that change also turned off Qt's drag heuristic — and the
+`QQC2.ScrollView` (Flickable) hosting the calendar started
+interpreting press-and-move on a block as a scroll gesture, hijacking
+the events. Result: dragging a block scrolled the grid up/down while
+the block stayed put.
+
+Fix: `preventStealing: true` on `WorklogEntry`'s MouseArea so the
+press stays with the block for the entire gesture, regardless of the
+Flickable behind it.
+
+Bumped metadata 0.4.3 → 0.4.4.
+
 ## 0.4.3 — Hover-resize bug, snap-during-drag, duplicate button
 
 Three blocks of work on the calendar entry interaction:

@@ -201,6 +201,13 @@ Rectangle {
         id: ma
         anchors.fill: parent
         hoverEnabled: true
+        // The calendar lives inside a QQC2.ScrollView (Flickable under
+        // the hood). Without `drag.target` set, the Flickable interprets
+        // a press-and-move on the block as a scroll gesture and steals
+        // the events — the user would scroll the grid instead of moving
+        // the block. preventStealing keeps the pointer on this MouseArea
+        // for the whole gesture, regardless of how far the cursor moves.
+        preventStealing: true
 
         property int  _mode: 0          // 0=idle, 1=move, 2=resizeTop, 3=resizeBottom
         property real _origBlockX: 0
