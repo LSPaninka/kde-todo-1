@@ -27,8 +27,13 @@ QtObject {
 
     // Active sprint of the user (or null). Filled by fetchSprintInfo().
     property var currentSprint: null  // {id, name, startDate, endDate}
-    property real sprintAvailableSec: 0   // sum of originalEstimate across the sprint's issues
+    property real sprintAvailableSec: 0   // sum of remaining estimate across the sprint's issues
     property real sprintConsumedSec: 0    // sum of *my* worklogs inside the sprint's date range
+    // Per-issue breakdown of the available hours (for the tooltip under
+    // the Horas ring): [{ key, summary, remainingSec }], only issues with
+    // remainingSec > 0, sorted descending by remainingSec. Always sums to
+    // sprintAvailableSec.
+    property var sprintAvailableBreakdown: []
 
     property bool loading: false
     property string lastError: ""
@@ -374,6 +379,7 @@ QtObject {
                         // We still have the sprint id + dates; just zero out totals.
                         store.sprintAvailableSec = 0;
                         store.sprintConsumedSec  = 0;
+                        store.sprintAvailableBreakdown = [];
                         store._bump();
                         callback(true);
                         return;
@@ -449,6 +455,7 @@ QtObject {
         store.currentSprint = null;
         store.sprintAvailableSec = 0;
         store.sprintConsumedSec  = 0;
+        store.sprintAvailableBreakdown = [];
         store._bump();
     }
 
@@ -485,6 +492,7 @@ QtObject {
         var sStart = new Date(active.startDate).getTime();
         var sEnd   = new Date(active.endDate).getTime();
         var available = 0, consumed = 0;
+        var breakdown = [];
         for (var k = 0; k < issues.length; k++) {
             var f = issues[k].fields || {};
             if (fieldOrNull) {
@@ -499,7 +507,15 @@ QtObject {
             // "Disponible" is now what's still pending for THIS issue, not
             // the original estimate — issues fully consumed in earlier
             // sprints contribute 0 instead of bloating the total.
-            available += _remainingSec(f);
+            var rem = _remainingSec(f);
+            available += rem;
+            if (rem > 0) {
+                breakdown.push({
+                    key: issues[k].key || "",
+                    summary: f.summary || "",
+                    remainingSec: rem
+                });
+            }
 
             var wls = (f.worklog && f.worklog.worklogs) || [];
             for (var w = 0; w < wls.length; w++) {
@@ -511,10 +527,13 @@ QtObject {
                 consumed += wo.timeSpentSeconds | 0;
             }
         }
+        breakdown.sort(function(a, b) { return b.remainingSec - a.remainingSec; });
         store.sprintAvailableSec = available;
         store.sprintConsumedSec  = consumed;
+        store.sprintAvailableBreakdown = breakdown;
         store._bump();
-        _log("Sprint '" + active.name + "': remaining=" + available + "s, consumed=" + consumed + "s.");
+        _log("Sprint '" + active.name + "': remaining=" + available + "s, consumed=" + consumed +
+             "s, breakdown=" + breakdown.length + " issue(s).");
     }
 
     // ------------------------------------------------------------------

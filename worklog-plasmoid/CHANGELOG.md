@@ -1,5 +1,23 @@
 # Changelog — Jira / Clockify Worklog Calendar
 
+## 0.4.6 — Available-hours breakdown tooltip
+
+- **Tooltip on "Disponible".** Hovering the *Disponible: Nh* legend
+  under the Horas ring now shows a tooltip listing which issues make
+  up those available hours, one per line, e.g. `CP-123: 4h` /
+  `CP-124: 2h 30m`. Sorted descending by remaining hours, capped at
+  20 rows with a "…y N más" footer.
+- `JiraWorklogStore` now exposes `sprintAvailableBreakdown`
+  (`[{ key, summary, remainingSec }]`, only issues with remaining > 0),
+  populated next to `sprintAvailableSec` in
+  `_computeSprintTotalsFromIssues` and cleared in `_clearSprint` and
+  the agile-board error path. It honors the same `worklogRemainingMode`
+  (api / calculated) as the ring, so the per-issue rows always sum to
+  the Disponible value.
+- The Horas legend was split into two labels ("Disponible" and
+  "Quemadas") so only the available-hours line carries the hover
+  target.
+
 ## 0.4.5 — Status auto-clear, in-view clamping, modal polish, weekend tint
 
 A bunch of post-drag-refactor cleanups:

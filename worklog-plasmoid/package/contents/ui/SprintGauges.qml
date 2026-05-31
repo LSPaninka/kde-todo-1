@@ -21,6 +21,7 @@
 
 import QtQuick 2.15
 import QtQuick.Layouts 1.15
+import QtQuick.Controls 2.15 as QQC2
 import org.kde.plasma.core 2.0 as PlasmaCore
 import org.kde.plasma.components 3.0 as PlasmaComponents3
 
@@ -90,6 +91,27 @@ Item {
         if (h > 0 && m > 0) return h + "h " + m + "m";
         if (h > 0)          return h + "h";
         return m + "m";
+    }
+
+    // Whether there's any per-issue available-hours data for the tooltip.
+    function _hasBreakdown() {
+        return jiraStore && jiraStore.sprintAvailableBreakdown &&
+               jiraStore.sprintAvailableBreakdown.length > 0;
+    }
+
+    // Tooltip body for the "Disponible" legend: one issue per line, e.g.
+    // "CP-123: 4h\nCP-124: 2h 30m". Sorted descending (already done in the
+    // store), capped at 20 rows with a "…y N más" footer.
+    function _breakdownText() {
+        if (!_hasBreakdown()) return "";
+        var arr = jiraStore.sprintAvailableBreakdown;
+        var lines = [];
+        var max = Math.min(arr.length, 20);
+        for (var i = 0; i < max; i++) {
+            lines.push(arr[i].key + ": " + _fmtHours(arr[i].remainingSec));
+        }
+        if (arr.length > max) lines.push(i18n("…y %1 más", arr.length - max));
+        return lines.join("\n");
     }
 
     // Re-read percentages when the store version bumps.
@@ -174,13 +196,32 @@ Item {
                 useFadeLoop: true
                 intermittent: gauges._hoursIntermittent
             }
+            // "Disponible" — hovering shows the per-issue breakdown of the
+            // available hours as a tooltip list.
+            PlasmaComponents3.Label {
+                id: dispLabel
+                Layout.alignment: Qt.AlignHCenter
+                horizontalAlignment: Text.AlignHCenter
+                text: jiraStore
+                      ? i18n("Disponible: %1", gauges._fmtHours(jiraStore.sprintAvailableSec))
+                      : ""
+                opacity: 0.75
+                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+
+                MouseArea {
+                    id: dispHover
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    QQC2.ToolTip.visible: containsMouse && gauges._hasBreakdown()
+                    QQC2.ToolTip.text: gauges._breakdownText()
+                    QQC2.ToolTip.delay: 400
+                }
+            }
             PlasmaComponents3.Label {
                 Layout.alignment: Qt.AlignHCenter
                 horizontalAlignment: Text.AlignHCenter
                 text: jiraStore
-                      ? i18n("Disponible: %1\nQuemadas: %2",
-                             gauges._fmtHours(jiraStore.sprintAvailableSec),
-                             gauges._fmtHours(jiraStore.sprintConsumedSec))
+                      ? i18n("Quemadas: %1", gauges._fmtHours(jiraStore.sprintConsumedSec))
                       : ""
                 opacity: 0.75
                 font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
