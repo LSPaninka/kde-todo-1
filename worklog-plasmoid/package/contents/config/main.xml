@@ -59,6 +59,14 @@
             <label>Show the Sprint + Horas ring gauges below the calendar (9h mode only, Jira / Jira-Clockify sources only).</label>
             <default>true</default>
         </entry>
+        <entry name="worklogShowMonthHeatmap" type="Bool">
+            <label>Show the monthly hours heatmap below the calendar in Clockify mode.</label>
+            <default>true</default>
+        </entry>
+        <entry name="worklogHeatmapShowJira" type="Bool">
+            <label>Add a 4th row to the monthly heatmap with the Jira burned hours per day.</label>
+            <default>true</default>
+        </entry>
         <entry name="worklogSprintStrategy" type="String">
             <label>How to discover the active sprint. One of:
             "subtask-customfield" (default) — scan subtasks assigned to the user and pick the entry with state="active" in their sprint custom field. Works when only subtasks are assigned to the user.

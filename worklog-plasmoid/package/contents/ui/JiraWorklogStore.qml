@@ -203,6 +203,74 @@ QtObject {
     }
 
     // ------------------------------------------------------------------
+    // Month totals (for the monthly heatmap; does NOT touch worklogs[])
+    // ------------------------------------------------------------------
+    // Aggregates *my* worklog seconds per day-of-month for the given
+    // month. callback(ok, { 1: sec, 2: sec, ... }).
+    function fetchMonthTotals(year, monthIndex, callback) {
+        if (!callback) callback = function() {};
+        var creds = _creds();
+        if (!creds) { callback(false, {}); return; }
+
+        var startD = new Date(year, monthIndex, 1, 0, 0, 0, 0);
+        var endD   = new Date(year, monthIndex + 1, 0, 0, 0, 0, 0); // last day of month
+        var startMs = startD.getTime();
+        var endMs   = new Date(year, monthIndex + 1, 1, 0, 0, 0, 0).getTime(); // first of next
+
+        var run = function() {
+            var jql = "worklogAuthor = currentUser() AND worklogDate >= \"" +
+                       _formatJqlDate(startD) + "\" AND worklogDate <= \"" +
+                       _formatJqlDate(endD) + "\"";
+            var url = creds.site + "/rest/api/3/search/jql?jql=" +
+                      encodeURIComponent(jql) + "&maxResults=200&fields=worklog";
+            _log("Month(Jira) GET " + url);
+            _jiraGet(url, creds, function(code, body) {
+                if (code !== 200) {
+                    _warn("month totals exit=" + code + ": " + body.substring(0, 200));
+                    callback(false, {});
+                    return;
+                }
+                try {
+                    var data = JSON.parse(body);
+                    var issues = data.issues || [];
+                    var totals = {};
+                    for (var i = 0; i < issues.length; i++) {
+                        var wls = (issues[i].fields && issues[i].fields.worklog &&
+                                   issues[i].fields.worklog.worklogs) || [];
+                        for (var j = 0; j < wls.length; j++) {
+                            var w = wls[j];
+                            var sm = _parseJiraDate(w.started);
+                            if (sm < startMs || sm >= endMs) continue;
+                            var auth = w.author || {};
+                            if (myAccountId && auth.accountId !== myAccountId) continue;
+                            var day = new Date(sm).getDate();
+                            totals[day] = (totals[day] || 0) + (w.timeSpentSeconds | 0);
+                        }
+                    }
+                    _log("Month(Jira) " + (monthIndex + 1) + "/" + year + ": " +
+                         Object.keys(totals).length + " day(s) with worklogs.");
+                    callback(true, totals);
+                } catch (e) {
+                    _warn("month parse: " + e);
+                    callback(false, {});
+                }
+            });
+        };
+
+        if (!myAccountId) {
+            _jiraGet(creds.site + "/rest/api/3/myself", creds, function(code, body) {
+                if (code === 200) {
+                    try { store.myAccountId = JSON.parse(body).accountId || ""; }
+                    catch (e) { /* swallow */ }
+                }
+                run();
+            });
+        } else {
+            run();
+        }
+    }
+
+    // ------------------------------------------------------------------
     // Issue picker (for the new-worklog modal)
     // ------------------------------------------------------------------
 

@@ -88,10 +88,16 @@ Item {
         plasmoid.configuration.worklogViewMode === "9h" &&
         (source === "jira" || source === "jira-clockify")
 
+    // Monthly heatmap fills the otherwise-empty bottom area in Clockify mode.
+    readonly property bool _showHeatmap:
+        plasmoid.configuration.worklogShowMonthHeatmap !== false &&
+        source === "clockify"
+
     function syncNow() {
         if (_showJira     && jiraStore)     jiraStore.fetchWeek(currentWeekStart);
         if (_showClockify && clockifyStore) clockifyStore.fetchWeek(currentWeekStart);
         if (_showGauges   && jiraStore)     jiraStore.fetchSprintInfo();
+        if (_showHeatmap)                   monthHeatmap.refresh();
     }
 
     function syncJiraIntoClockify() {
@@ -356,6 +362,16 @@ Item {
             jiraStore: full.jiraStore
         }
 
+        // -------- Monthly hours heatmap (Clockify mode) --
+        MonthHeatmap {
+            id: monthHeatmap
+            Layout.fillWidth: true
+            visible: full._showHeatmap
+            clockifyStore: full.clockifyStore
+            jiraStore: full.jiraStore
+            showJiraRow: plasmoid.configuration.worklogHeatmapShowJira !== false
+        }
+
         // -------- Footer --------
         RowLayout {
             Layout.fillWidth: true
@@ -604,6 +620,7 @@ Item {
         if (clockifyStore && clockifyStore.lastFetchedAt === 0 && _showClockify) clockifyStore.fetchWeek(currentWeekStart);
         if (_showGauges && jiraStore) jiraStore.fetchSprintInfo();
         if (_showGauges) sprintGauges.startFillAnimation();
+        if (_showHeatmap) monthHeatmap.refresh();
     }
 
     // Re-trigger the fill animation every time the popup re-opens (Plasma
@@ -618,6 +635,7 @@ Item {
                 sprintGauges.startFillAnimation();
                 if (jiraStore) jiraStore.fetchSprintInfo();
             }
+            if (full._showHeatmap) monthHeatmap.refresh();
         }
     }
 

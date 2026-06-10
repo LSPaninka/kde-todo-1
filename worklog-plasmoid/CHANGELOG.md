@@ -1,5 +1,36 @@
 # Changelog — Jira / Clockify Worklog Calendar
 
+## 0.5.0 — Monthly hours heatmap + Clockify default-project picker
+
+- **Monthly heatmap** (Clockify mode). The previously-empty area below
+  the calendar in Clockify mode now shows a horizontal month table, one
+  column per day:
+  - Row 1: weekday letter (D L M Mi J V S) — gray on weekends.
+  - Row 2: day number — gray on weekends.
+  - Row 3: Clockify hours that day as a decimal (3h30m → 3.5, 4h → 4).
+    The cell background is graded gray (0) → red → yellow → light green
+    from 0 to 4 h, staying green above 4.
+  - Row 4 (optional): Jira burned hours that day, same format + grading.
+  - ◀ / ▶ toggle between the **current month** and the **last month**.
+  - New `MonthHeatmap.qml`. Per-day totals come from two new aggregation
+    methods, `ClockifyStore.fetchMonthTotals` (paginated) and
+    `JiraWorklogStore.fetchMonthTotals`, neither of which touches the
+    stores' week-scoped arrays used by the calendar.
+  - Config: `worklogShowMonthHeatmap` (Bool, default true) gates the
+    whole table; `worklogHeatmapShowJira` (Bool, default true) gates the
+    optional 4th Jira row. Both exposed as checkboxes in General.
+  - Refreshed on popup open, on ↻ sync, and on month toggle.
+
+- **Clockify default project is now a ComboBox.** The Clockify config
+  tab's "Proyecto por defecto" field changed from a raw hex-ID TextField
+  to a ComboBox. Clicking **Probar conexión** validates the key and then
+  fetches the workspace's projects (`GET /workspaces/{wid}/projects`),
+  populating the dropdown so you pick the project by name. A saved id
+  that isn't in the fetched list shows as a `[abcd1234] (probá la
+  conexión)` placeholder so it isn't silently dropped.
+
+Bumped metadata 0.4.6 → 0.5.0.
+
 ## 0.4.6 — Available-hours breakdown tooltip
 
 - **Tooltip on "Disponible".** Hovering the *Disponible: Nh* legend

@@ -101,6 +101,10 @@ value after a Plasma reload.
 | `worklogIssueMax`      | Int    | `50`             | Max picker rows |
 | `worklogShowIssueSummary` | Bool | `false`          | Append issue title after the key on each block |
 | `worklogShowSprintGauges` | Bool | `true`           | Sprint + Horas rings (9h + Jira/JC source only) |
+| `worklogShowMonthHeatmap` | Bool | `true`           | Monthly hours heatmap (Clockify source only) |
+| `worklogHeatmapShowJira`  | Bool | `true`           | Add the 4th Jira-hours row to the heatmap |
+| `worklogModalWidth`    | Int    | `720`            | New/edit worklog modal width (px) |
+| `worklogModalHeight`   | Int    | `520`            | New/edit worklog modal height (px) |
 | `worklogPinned`        | Bool   | `false`          | Pin button state |
 | `worklogDebug`         | Bool   | `true`           | |
 

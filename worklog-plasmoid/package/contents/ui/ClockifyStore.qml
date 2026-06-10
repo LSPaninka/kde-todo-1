@@ -317,6 +317,58 @@ QtObject {
         }
     }
 
+    // Aggregates my Clockify time-entry seconds per day-of-month for the
+    // given month. Paginates (200/page) and does NOT touch entries[].
+    // callback(ok, { 1: sec, 2: sec, ... }).
+    function fetchMonthTotals(year, monthIndex, callback) {
+        if (!callback) callback = function() {};
+        ensureContext(function(ok) {
+            if (!ok) { callback(false, {}); return; }
+            var startD = new Date(year, monthIndex, 1, 0, 0, 0, 0);
+            var endD   = new Date(year, monthIndex + 1, 1, 0, 0, 0, 0);
+            var totals = {};
+            var page = 1;
+            var pageSize = 200;
+            var fetchPage = function() {
+                var url = "https://api.clockify.me/api/v1/workspaces/" + workspaceId +
+                          "/user/" + userId + "/time-entries" +
+                          "?start=" + encodeURIComponent(_toUtcIso(startD)) +
+                          "&end="   + encodeURIComponent(_toUtcIso(endD)) +
+                          "&page-size=" + pageSize + "&page=" + page;
+                _log("Month(Clockify) GET " + url);
+                _send("GET", url, null, function(code, body) {
+                    if (code !== 200) {
+                        _warn("month totals exit=" + code + ": " + body.substring(0, 200));
+                        callback(false, totals);
+                        return;
+                    }
+                    var raw;
+                    try { raw = JSON.parse(body); }
+                    catch (e) { _warn("month parse: " + e); callback(false, totals); return; }
+                    for (var i = 0; i < raw.length; i++) {
+                        var ti = raw[i].timeInterval || {};
+                        if (!ti.start || !ti.end) continue;
+                        var s  = new Date(ti.start).getTime();
+                        var en = new Date(ti.end).getTime();
+                        if (isNaN(s) || isNaN(en) || en <= s) continue;
+                        var d = new Date(s);
+                        if (d.getFullYear() === year && d.getMonth() === monthIndex) {
+                            var day = d.getDate();
+                            totals[day] = (totals[day] || 0) + Math.round((en - s) / 1000);
+                        }
+                    }
+                    if (raw.length >= pageSize) { page++; fetchPage(); }
+                    else {
+                        _log("Month(Clockify) " + (monthIndex + 1) + "/" + year + ": " +
+                             Object.keys(totals).length + " day(s) with entries.");
+                        callback(true, totals);
+                    }
+                });
+            };
+            fetchPage();
+        });
+    }
+
     function _projectById(id) {
         if (!id) return null;
         for (var i = 0; i < projects.length; i++) {
