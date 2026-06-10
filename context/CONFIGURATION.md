@@ -100,9 +100,8 @@ value after a Plasma reload.
 | `worklogIssueJql`      | String | "(default JQL)"  | JQL for the new-worklog issue picker |
 | `worklogIssueMax`      | Int    | `50`             | Max picker rows |
 | `worklogShowIssueSummary` | Bool | `false`          | Append issue title after the key on each block |
-| `worklogShowSprintGauges` | Bool | `true`           | Sprint + Horas rings (9h + Jira/JC source only) |
-| `worklogShowMonthHeatmap` | Bool | `true`           | Monthly hours heatmap (Clockify source only) |
-| `worklogHeatmapShowJira`  | Bool | `true`           | Add the 4th Jira-hours row to the heatmap |
+| `worklogShowSprintGauges` | Bool | `true`           | Master toggle for the bottom panel (rings or heatmap), all modes |
+| `worklogBottomView`    | String | `rings`          | Bottom-panel view: `rings` or `heatmap` (vertical switch) |
 | `worklogModalWidth`    | Int    | `720`            | New/edit worklog modal width (px) |
 | `worklogModalHeight`   | Int    | `520`            | New/edit worklog modal height (px) |
 | `worklogPinned`        | Bool   | `false`          | Pin button state |

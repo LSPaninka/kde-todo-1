@@ -83,21 +83,22 @@ Item {
                end.getDate()   + " " + months[end.getMonth()] + " " + end.getFullYear();
     }
 
-    readonly property bool _showGauges:
-        plasmoid.configuration.worklogShowSprintGauges !== false &&
-        plasmoid.configuration.worklogViewMode === "9h" &&
-        (source === "jira" || source === "jira-clockify")
-
-    // Monthly heatmap fills the otherwise-empty bottom area in Clockify mode.
-    readonly property bool _showHeatmap:
-        plasmoid.configuration.worklogShowMonthHeatmap !== false &&
-        source === "clockify"
+    // The bottom panel (below the calendar) is available in EVERY mode and
+    // can show either the Sprint/Horas rings or the monthly heatmap. A
+    // vertical switch on its right flips between the two views. The whole
+    // panel can be hidden via worklogShowSprintGauges (master toggle).
+    readonly property bool _showBottomPanel:
+        plasmoid.configuration.worklogShowSprintGauges !== false
+    readonly property string _bottomView:
+        plasmoid.configuration.worklogBottomView || "rings"
+    readonly property bool _bottomIsRings:   _bottomView !== "heatmap"
+    readonly property bool _bottomIsHeatmap: _bottomView === "heatmap"
 
     function syncNow() {
         if (_showJira     && jiraStore)     jiraStore.fetchWeek(currentWeekStart);
         if (_showClockify && clockifyStore) clockifyStore.fetchWeek(currentWeekStart);
-        if (_showGauges   && jiraStore)     jiraStore.fetchSprintInfo();
-        if (_showHeatmap)                   monthHeatmap.refresh();
+        if (_showBottomPanel && _bottomIsRings   && jiraStore) jiraStore.fetchSprintInfo();
+        if (_showBottomPanel && _bottomIsHeatmap)              monthHeatmap.refresh();
     }
 
     function syncJiraIntoClockify() {
@@ -353,23 +354,65 @@ Item {
             }
         }
 
-        // -------- Sprint + Horas gauges (Jira / Jira-Clockify, 9h only) --
-        SprintGauges {
-            id: sprintGauges
+        // -------- Bottom panel: rings ⟷ heatmap, with a vertical switch --
+        RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: 190
-            visible: full._showGauges
-            jiraStore: full.jiraStore
-        }
+            visible: full._showBottomPanel
+            spacing: PlasmaCore.Units.smallSpacing
 
-        // -------- Monthly hours heatmap (Clockify mode) --
-        MonthHeatmap {
-            id: monthHeatmap
-            Layout.fillWidth: true
-            visible: full._showHeatmap
-            clockifyStore: full.clockifyStore
-            jiraStore: full.jiraStore
-            showJiraRow: plasmoid.configuration.worklogHeatmapShowJira !== false
+            // Content area — both views exist; only the selected one shows.
+            Item {
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.max(
+                    full._bottomIsRings ? sprintGauges.implicitHeight : 0,
+                    full._bottomIsHeatmap ? monthHeatmap.implicitHeight : 0)
+
+                SprintGauges {
+                    id: sprintGauges
+                    anchors.fill: parent
+                    visible: full._bottomIsRings
+                    jiraStore: full.jiraStore
+                }
+                MonthHeatmap {
+                    id: monthHeatmap
+                    anchors.fill: parent
+                    visible: full._bottomIsHeatmap
+                    clockifyStore: full.clockifyStore
+                    jiraStore: full.jiraStore
+                }
+            }
+
+            // Vertical switch: two stacked icon buttons (rings / heatmap).
+            ColumnLayout {
+                Layout.alignment: Qt.AlignVCenter
+                spacing: 2
+
+                PlasmaComponents3.ToolButton {
+                    icon.name: "office-chart-ring"
+                    checkable: true
+                    checked: full._bottomIsRings
+                    onClicked: {
+                        plasmoid.configuration.worklogBottomView = "rings";
+                        if (jiraStore) jiraStore.fetchSprintInfo();
+                        sprintGauges.startFillAnimation();
+                    }
+                    PlasmaComponents3.ToolTip.text: i18n("Ver anillos (Sprint / Horas)")
+                    PlasmaComponents3.ToolTip.visible: hovered
+                    PlasmaComponents3.ToolTip.delay: 500
+                }
+                PlasmaComponents3.ToolButton {
+                    icon.name: "view-calendar-month"
+                    checkable: true
+                    checked: full._bottomIsHeatmap
+                    onClicked: {
+                        plasmoid.configuration.worklogBottomView = "heatmap";
+                        monthHeatmap.refresh();
+                    }
+                    PlasmaComponents3.ToolTip.text: i18n("Ver heatmap mensual")
+                    PlasmaComponents3.ToolTip.visible: hovered
+                    PlasmaComponents3.ToolTip.delay: 500
+                }
+            }
         }
 
         // -------- Footer --------
@@ -618,24 +661,27 @@ Item {
     Component.onCompleted: {
         if (jiraStore && jiraStore.lastFetchedAt === 0 && _showJira) jiraStore.fetchWeek(currentWeekStart);
         if (clockifyStore && clockifyStore.lastFetchedAt === 0 && _showClockify) clockifyStore.fetchWeek(currentWeekStart);
-        if (_showGauges && jiraStore) jiraStore.fetchSprintInfo();
-        if (_showGauges) sprintGauges.startFillAnimation();
-        if (_showHeatmap) monthHeatmap.refresh();
+        if (_showBottomPanel && _bottomIsRings && jiraStore) {
+            jiraStore.fetchSprintInfo();
+            sprintGauges.startFillAnimation();
+        }
+        if (_showBottomPanel && _bottomIsHeatmap) monthHeatmap.refresh();
     }
 
     // Re-trigger the fill animation every time the popup re-opens (Plasma
     // reuses the same FullRepresentation instance so Component.onCompleted
-    // only fires once on first open). Also re-fetch the sprint so the
-    // legend matches whatever was added externally.
+    // only fires once on first open). Also re-fetch the visible bottom view.
     Connections {
         target: plasmoid
         function onExpandedChanged() {
             if (!plasmoid.expanded) return;
-            if (full._showGauges) {
+            if (!full._showBottomPanel) return;
+            if (full._bottomIsRings) {
                 sprintGauges.startFillAnimation();
                 if (jiraStore) jiraStore.fetchSprintInfo();
+            } else {
+                monthHeatmap.refresh();
             }
-            if (full._showHeatmap) monthHeatmap.refresh();
         }
     }
 
@@ -644,17 +690,13 @@ Item {
     // without a manual sync click.
     Connections {
         target: plasmoid.configuration
-        function onWorklogSprintStrategyChanged() {
-            if (full._showGauges && jiraStore) jiraStore.fetchSprintInfo();
+        function _refetchRings() {
+            if (full._showBottomPanel && full._bottomIsRings && jiraStore)
+                jiraStore.fetchSprintInfo();
         }
-        function onWorklogSprintFieldChanged() {
-            if (full._showGauges && jiraStore) jiraStore.fetchSprintInfo();
-        }
-        function onWorklogSprintBoardIdChanged() {
-            if (full._showGauges && jiraStore) jiraStore.fetchSprintInfo();
-        }
-        function onWorklogRemainingModeChanged() {
-            if (full._showGauges && jiraStore) jiraStore.fetchSprintInfo();
-        }
+        function onWorklogSprintStrategyChanged() { _refetchRings(); }
+        function onWorklogSprintFieldChanged()    { _refetchRings(); }
+        function onWorklogSprintBoardIdChanged()  { _refetchRings(); }
+        function onWorklogRemainingModeChanged()  { _refetchRings(); }
     }
 }

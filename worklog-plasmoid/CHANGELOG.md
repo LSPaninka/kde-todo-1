@@ -1,5 +1,31 @@
 # Changelog — Jira / Clockify Worklog Calendar
 
+## 0.6.0 — Bottom panel switch (rings ⟷ heatmap), heatmap polish
+
+- **Heatmap available in every mode.** The bottom panel below the
+  calendar is no longer Clockify-only / Jira-only. It now appears in all
+  modes and a **vertical switch on its right** flips between the
+  Sprint/Horas rings and the monthly heatmap. New `worklogBottomView`
+  kcfg (`rings` | `heatmap`, default `rings`) backs the switch;
+  `worklogShowSprintGauges` is repurposed as the master "show bottom
+  panel" toggle (relabelled "Panel inferior" in config). The old
+  `worklogShowMonthHeatmap` / `worklogHeatmapShowJira` toggles were
+  removed (superseded by the switch and the always-on Jira row).
+- **Month change clears stale data.** Switching months now wipes the
+  totals immediately and tags each request so a late response for the
+  previous month can't repaint the grid. Fixes the "leftover last-month
+  values" glitch.
+- **Help labels replaced by a left icon column.** The legend text under
+  the heatmap is gone. Instead the table has a leftmost column whose
+  rows 3 and 4 carry a Clockify and a Jira icon respectively, each with
+  a small tooltip, aligned to the colored rows via fixed row heights.
+- **Jira row is always shown** (4th row), no longer optional.
+- **Hover fade on cells.** Each hours cell lightens with a short
+  ~180 ms fade when hovered and fades back on leave (a white overlay
+  with a `Behavior on opacity`).
+
+Bumped metadata 0.5.0 → 0.6.0.
+
 ## 0.5.0 — Monthly hours heatmap + Clockify default-project picker
 
 - **Monthly heatmap** (Clockify mode). The previously-empty area below

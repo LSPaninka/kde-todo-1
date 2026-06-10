@@ -1,19 +1,21 @@
 /*
- * MonthHeatmap.qml - month-at-a-glance hours table for Clockify mode.
+ * MonthHeatmap.qml - month-at-a-glance hours table, available in every mode
+ * (toggled against the Sprint/Horas rings by the vertical switch in
+ * FullRepresentation).
  *
- * A horizontal table spanning the popup width with one column per day of
- * the visible month. Rows:
- *   1. weekday letter (D L M Mi J V S) — gray on weekends
- *   2. day number — gray on weekends
- *   3. Clockify hours that day as a decimal number (3h30m → 3.5), the
- *      cell background graded gray→red→yellow→green from 0 to 4 (≥4 green).
- *   4. (optional) Jira burned hours that day, same format + grading.
+ * Leftmost column = row icons (Clockify / Jira). Then one column per day:
+ *   row 1: weekday letter (D L M Mi J V S) — gray on weekends
+ *   row 2: day number — gray on weekends
+ *   row 3: Clockify hours that day in decimal (3h30m → 3.5)
+ *   row 4: Jira burned hours that day in decimal (always shown)
+ * The colored cells (rows 3-4) are graded gray(0)→red→yellow→green from
+ * 0 to 4h, green above 4, and lighten with a short fade on hover.
  *
- * Two views: current month and last month, toggled with ◀ / ▶.
- *
- * The per-day totals come from clockifyStore.fetchMonthTotals /
- * jiraStore.fetchMonthTotals, which aggregate without disturbing the
- * stores' week-scoped arrays.
+ * Two views: current month and last month (◀ / ▶). Per-day totals come
+ * from clockifyStore.fetchMonthTotals / jiraStore.fetchMonthTotals, which
+ * aggregate without disturbing the stores' week-scoped arrays. Totals are
+ * cleared on every month change (and stale responses are dropped) so the
+ * grid never shows the previous month's numbers.
  */
 
 import QtQuick 2.15
@@ -26,10 +28,15 @@ Item {
 
     property var clockifyStore
     property var jiraStore
-    property bool showJiraRow: true
     property int monthOffset: 0   // 0 = current month, -1 = last month
 
     implicitHeight: col.implicitHeight
+
+    // Fixed row heights so the left icon column lines up with the grid.
+    readonly property int letterRowH: 13
+    readonly property int numberRowH: 14
+    readonly property int cellRowH: 18
+    readonly property int iconColW: 22
 
     // Reference date = first day of the visible month.
     readonly property var _ref: {
@@ -46,20 +53,30 @@ Item {
     property var clockifyTotals: ({})   // { day: seconds }
     property var jiraTotals: ({})
     property int _v: 0                   // bumped when totals arrive
+    property int _reqId: 0              // stale-response guard
 
     readonly property var _monthNames: ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
                                         "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
     readonly property var _dowLetters: ["D","L","M","Mi","J","V","S"]
 
     function refresh() {
+        // Clear immediately so the previous month's numbers never linger
+        // while the new fetch is in flight.
+        clockifyTotals = {};
+        jiraTotals = {};
+        _v++;
+        var req = ++_reqId;
+        var y = year, m = month;
         if (clockifyStore && clockifyStore.fetchMonthTotals) {
-            clockifyStore.fetchMonthTotals(year, month, function(ok, t) {
-                if (ok) { heat.clockifyTotals = t; heat._v++; }
+            clockifyStore.fetchMonthTotals(y, m, function(ok, t) {
+                if (!ok || req !== heat._reqId) return;   // dropped if month changed
+                heat.clockifyTotals = t; heat._v++;
             });
         }
-        if (showJiraRow && jiraStore && jiraStore.fetchMonthTotals) {
-            jiraStore.fetchMonthTotals(year, month, function(ok, t) {
-                if (ok) { heat.jiraTotals = t; heat._v++; }
+        if (jiraStore && jiraStore.fetchMonthTotals) {
+            jiraStore.fetchMonthTotals(y, m, function(ok, t) {
+                if (!ok || req !== heat._reqId) return;
+                heat.jiraTotals = t; heat._v++;
             });
         }
     }
@@ -101,12 +118,44 @@ Item {
 
     readonly property color _weekendColor: PlasmaCore.Theme.disabledTextColor
 
+    // Reusable hours cell with a short hover-lighten fade.
+    component HoursCell: Rectangle {
+        property real hours: 0
+        Layout.fillWidth: true
+        Layout.preferredHeight: heat.cellRowH
+        radius: 2
+        color: heat._cellColor(hours)
+        border.width: 1
+        border.color: Qt.rgba(0, 0, 0, 0.15)
+
+        Rectangle {
+            id: hoverGlow
+            anchors.fill: parent
+            radius: parent.radius
+            color: "white"
+            opacity: cellMA.containsMouse ? 0.28 : 0.0
+            Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutQuad } }
+        }
+        PlasmaComponents3.Label {
+            anchors.centerIn: parent
+            text: heat._fmtNum(parent.hours)
+            color: heat._cellTextColor(parent.hours)
+            font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+            font.bold: true
+        }
+        MouseArea {
+            id: cellMA
+            anchors.fill: parent
+            hoverEnabled: true
+        }
+    }
+
     ColumnLayout {
         id: col
         anchors.fill: parent
         spacing: 2
 
-        // Header: month label + prev/next.
+        // Header: title + month label + prev/next.
         RowLayout {
             Layout.fillWidth: true
             spacing: PlasmaCore.Units.smallSpacing
@@ -140,11 +189,54 @@ Item {
             }
         }
 
-        // The day grid: one column per day, sharing the width equally.
+        // Grid: icon column + one column per day.
         RowLayout {
             Layout.fillWidth: true
             spacing: 1
 
+            // Left icon column (aligned to rows 3 and 4).
+            ColumnLayout {
+                Layout.preferredWidth: heat.iconColW
+                spacing: 1
+                Item { Layout.fillWidth: true; Layout.preferredHeight: heat.letterRowH }
+                Item { Layout.fillWidth: true; Layout.preferredHeight: heat.numberRowH }
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: heat.cellRowH
+                    PlasmaCore.IconItem {
+                        anchors.centerIn: parent
+                        width: 16; height: 16
+                        source: "chronometer"
+                    }
+                    MouseArea {
+                        id: clkIconMA
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        PlasmaComponents3.ToolTip.text: i18n("Clockify")
+                        PlasmaComponents3.ToolTip.visible: containsMouse
+                        PlasmaComponents3.ToolTip.delay: 300
+                    }
+                }
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: heat.cellRowH
+                    PlasmaCore.IconItem {
+                        anchors.centerIn: parent
+                        width: 16; height: 16
+                        source: "view-task"
+                    }
+                    MouseArea {
+                        id: jiraIconMA
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        PlasmaComponents3.ToolTip.text: i18n("Jira")
+                        PlasmaComponents3.ToolTip.visible: containsMouse
+                        PlasmaComponents3.ToolTip.delay: 300
+                    }
+                }
+            }
+
+            // One column per day.
             Repeater {
                 model: heat.daysInMonth
                 delegate: ColumnLayout {
@@ -154,75 +246,29 @@ Item {
                     readonly property int day: index + 1
                     readonly property bool weekend: heat._isWeekend(day)
 
-                    // Row 1: weekday letter
                     PlasmaComponents3.Label {
                         Layout.fillWidth: true
+                        Layout.preferredHeight: heat.letterRowH
                         horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
                         text: heat._weekdayLetter(day)
                         color: weekend ? heat._weekendColor : PlasmaCore.Theme.textColor
                         font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
                         opacity: weekend ? 0.8 : 1.0
                     }
-                    // Row 2: day number
                     PlasmaComponents3.Label {
                         Layout.fillWidth: true
+                        Layout.preferredHeight: heat.numberRowH
                         horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
                         text: "" + day
                         color: weekend ? heat._weekendColor : PlasmaCore.Theme.textColor
                         font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
                         font.bold: !weekend
                     }
-                    // Row 3: Clockify hours cell
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 18
-                        radius: 2
-                        color: heat._cellColor((heat._v, heat._hoursDecimal(heat.clockifyTotals[day] || 0)))
-                        border.width: 1
-                        border.color: Qt.rgba(0, 0, 0, 0.15)
-                        PlasmaComponents3.Label {
-                            anchors.centerIn: parent
-                            text: heat._fmtNum(heat._hoursDecimal(heat.clockifyTotals[day] || 0))
-                            color: heat._cellTextColor(heat._hoursDecimal(heat.clockifyTotals[day] || 0))
-                            font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
-                            font.bold: true
-                        }
-                    }
-                    // Row 4 (optional): Jira hours cell
-                    Rectangle {
-                        visible: heat.showJiraRow
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 18
-                        radius: 2
-                        color: heat._cellColor((heat._v, heat._hoursDecimal(heat.jiraTotals[day] || 0)))
-                        border.width: 1
-                        border.color: Qt.rgba(0, 0, 0, 0.15)
-                        PlasmaComponents3.Label {
-                            anchors.centerIn: parent
-                            text: heat._fmtNum(heat._hoursDecimal(heat.jiraTotals[day] || 0))
-                            color: heat._cellTextColor(heat._hoursDecimal(heat.jiraTotals[day] || 0))
-                            font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
-                            font.bold: true
-                        }
-                    }
+                    HoursCell { hours: (heat._v, heat._hoursDecimal(heat.clockifyTotals[day] || 0)) }
+                    HoursCell { hours: (heat._v, heat._hoursDecimal(heat.jiraTotals[day] || 0)) }
                 }
-            }
-        }
-
-        // Legend.
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: PlasmaCore.Units.smallSpacing
-            PlasmaComponents3.Label {
-                text: i18n("Clockify (fila 3)") + (heat.showJiraRow ? i18n(" · Jira (fila 4)") : "")
-                opacity: 0.6
-                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
-            }
-            Item { Layout.fillWidth: true }
-            PlasmaComponents3.Label {
-                text: i18n("horas en decimal (3h30m = 3.5)")
-                opacity: 0.6
-                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
             }
         }
     }

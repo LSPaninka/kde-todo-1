@@ -21,8 +21,6 @@ Kirigami.FormLayout {
     property alias  cfg_worklogIssueMax:          maxSpin.value
     property alias  cfg_worklogShowIssueSummary:  showSummaryCheck.checked
     property alias  cfg_worklogShowSprintGauges:  sprintGaugesCheck.checked
-    property alias  cfg_worklogShowMonthHeatmap:  monthHeatmapCheck.checked
-    property alias  cfg_worklogHeatmapShowJira:   heatmapJiraCheck.checked
     property string cfg_worklogSprintStrategy:    "subtask-customfield"
     property alias  cfg_worklogSprintField:       sprintFieldField.text
     property alias  cfg_worklogSprintBoardId:     sprintBoardIdSpin.value
@@ -114,22 +112,9 @@ Kirigami.FormLayout {
 
     CheckBox {
         id: sprintGaugesCheck
-        Kirigami.FormData.label: i18n("Gauges:")
-        text: i18n("Mostrar los anillos «Sprint» y «Horas» debajo del calendario " +
-                   "(solo en modo 9h con fuentes Jira / Jira-Clockify)")
-    }
-
-    CheckBox {
-        id: monthHeatmapCheck
-        Kirigami.FormData.label: i18n("Heatmap:")
-        text: i18n("Mostrar la tabla mensual de horas debajo del calendario (modo Clockify)")
-    }
-
-    CheckBox {
-        id: heatmapJiraCheck
-        Kirigami.FormData.label: ""
-        enabled: monthHeatmapCheck.checked
-        text: i18n("Agregar una 4ª fila al heatmap con las horas quemadas en Jira por día")
+        Kirigami.FormData.label: i18n("Panel inferior:")
+        text: i18n("Mostrar el panel debajo del calendario (anillos Sprint/Horas o heatmap " +
+                   "mensual; se alternan con el switch vertical a la derecha del panel)")
     }
 
     CheckBox {
