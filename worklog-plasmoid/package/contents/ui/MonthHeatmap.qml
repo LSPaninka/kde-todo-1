@@ -3,19 +3,19 @@
  * (toggled against the Sprint/Horas rings by the vertical switch in
  * FullRepresentation).
  *
- * Leftmost column = row icons (Clockify / Jira). Then one column per day:
- *   row 1: weekday letter (D L M Mi J V S) — gray on weekends
- *   row 2: day number — gray on weekends
- *   row 3: Clockify hours that day in decimal (3h30m → 3.5)
- *   row 4: Jira burned hours that day in decimal (always shown)
- * The colored cells (rows 3-4) are graded gray(0)→red→yellow→green from
- * 0 to 4h, green above 4, and lighten with a short fade on hover.
+ * Columns are uniform: the first is a row-icon column (Clockify / Jira),
+ * the rest are one per day of the month. Rows:
+ *   1: weekday letter (D L M Mi J V S) — gray on weekends
+ *   2: day number — gray on weekends
+ *   3: Clockify hours that day in decimal (3h30m → 3.5)
+ *   4: Jira burned hours that day in decimal (always shown)
+ * Colored cells grade gray(0)→red→yellow→green from 0 to 4h (green ≥4),
+ * and lighten with a short fade on hover.
  *
- * Two views: current month and last month (◀ / ▶). Per-day totals come
- * from clockifyStore.fetchMonthTotals / jiraStore.fetchMonthTotals, which
- * aggregate without disturbing the stores' week-scoped arrays. Totals are
- * cleared on every month change (and stale responses are dropped) so the
- * grid never shows the previous month's numbers.
+ * Two views: current and last month (◀ / ▶). Per-day totals are tagged
+ * with the month they belong to (clockifyKey / jiraKey); a cell only reads
+ * a value when its month matches the visible one, so navigating months can
+ * never show the previous month's numbers even if a response lands late.
  */
 
 import QtQuick 2.15
@@ -36,9 +36,7 @@ Item {
     readonly property int letterRowH: 13
     readonly property int numberRowH: 14
     readonly property int cellRowH: 18
-    readonly property int iconColW: 22
 
-    // Reference date = first day of the visible month.
     readonly property var _ref: {
         var d = new Date();
         d.setDate(1);
@@ -52,44 +50,59 @@ Item {
 
     property var clockifyTotals: ({})   // { day: seconds }
     property var jiraTotals: ({})
+    property string clockifyKey: ""     // "year-month" the data belongs to
+    property string jiraKey: ""
     property int _v: 0                   // bumped when totals arrive
-    property int _reqId: 0              // stale-response guard
+    property int _reqId: 0
 
     readonly property var _monthNames: ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
                                         "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
     readonly property var _dowLetters: ["D","L","M","Mi","J","V","S"]
 
+    function _curKey() { return year + "-" + month; }
+
     function refresh() {
-        // Clear immediately so the previous month's numbers never linger
-        // while the new fetch is in flight.
-        clockifyTotals = {};
-        jiraTotals = {};
+        // Wipe immediately AND invalidate the keys so nothing from the old
+        // month can render while the new fetch is in flight.
+        clockifyTotals = {}; jiraTotals = {};
+        clockifyKey = ""; jiraKey = "";
         _v++;
         var req = ++_reqId;
         var y = year, m = month;
+        var key = y + "-" + m;
         if (clockifyStore && clockifyStore.fetchMonthTotals) {
             clockifyStore.fetchMonthTotals(y, m, function(ok, t) {
-                if (!ok || req !== heat._reqId) return;   // dropped if month changed
-                heat.clockifyTotals = t; heat._v++;
+                if (!ok || req !== heat._reqId) return;
+                heat.clockifyTotals = t; heat.clockifyKey = key; heat._v++;
             });
         }
         if (jiraStore && jiraStore.fetchMonthTotals) {
             jiraStore.fetchMonthTotals(y, m, function(ok, t) {
                 if (!ok || req !== heat._reqId) return;
-                heat.jiraTotals = t; heat._v++;
+                heat.jiraTotals = t; heat.jiraKey = key; heat._v++;
             });
         }
     }
     onMonthOffsetChanged: refresh()
     Component.onCompleted: refresh()
 
-    function _dow(day) { return new Date(year, month, day).getDay(); } // 0=Sun..6=Sat
+    function _dow(day) { return new Date(year, month, day).getDay(); }
     function _isWeekend(day) { var d = _dow(day); return d === 0 || d === 6; }
     function _weekdayLetter(day) { return _dowLetters[_dow(day)]; }
 
     function _hoursDecimal(sec) {
         if (!sec || sec <= 0) return 0;
-        return Math.round((sec / 3600) * 10) / 10;   // one decimal
+        return Math.round((sec / 3600) * 10) / 10;
+    }
+    // Month-guarded per-day lookups: only return a value if the loaded data
+    // is for the currently visible month.
+    function _clkHours(day) {
+        if (clockifyKey !== _curKey()) return 0;
+        return _hoursDecimal(clockifyTotals[day] || 0);
+    }
+    function _jiraHours(day) {
+        if (jiraKey !== _curKey()) return 0;
+        return _hoursDecimal(jiraTotals[day] || 0);
     }
     function _fmtNum(h) {
         if (h <= 0) return "";
@@ -97,14 +110,13 @@ Item {
         return h.toFixed(1);
     }
 
-    // Gray (0) → red (#e74c3c) → yellow (#f1c40f) → light green (#81c784, ≥4).
     function _lerp(a, b, t) {
         return Qt.rgba(a.r + (b.r - a.r) * t,
                        a.g + (b.g - a.g) * t,
                        a.b + (b.b - a.b) * t, 1);
     }
     function _cellColor(h) {
-        if (h <= 0) return Qt.rgba(1, 1, 1, 0.06);   // gray
+        if (h <= 0) return Qt.rgba(1, 1, 1, 0.06);
         var red    = Qt.rgba(231/255, 76/255,  60/255, 1);
         var yellow = Qt.rgba(241/255, 196/255, 15/255, 1);
         var green  = Qt.rgba(129/255, 199/255, 132/255, 1);
@@ -112,13 +124,10 @@ Item {
         if (c <= 2) return _lerp(red, yellow, c / 2);
         return _lerp(yellow, green, (c - 2) / 2);
     }
-    function _cellTextColor(h) {
-        return h > 0 ? "#1a1a1a" : PlasmaCore.Theme.textColor;
-    }
+    function _cellTextColor(h) { return h > 0 ? "#1a1a1a" : PlasmaCore.Theme.textColor; }
 
     readonly property color _weekendColor: PlasmaCore.Theme.disabledTextColor
 
-    // Reusable hours cell with a short hover-lighten fade.
     component HoursCell: Rectangle {
         property real hours: 0
         Layout.fillWidth: true
@@ -129,7 +138,6 @@ Item {
         border.color: Qt.rgba(0, 0, 0, 0.15)
 
         Rectangle {
-            id: hoverGlow
             anchors.fill: parent
             radius: parent.radius
             color: "white"
@@ -189,14 +197,15 @@ Item {
             }
         }
 
-        // Grid: icon column + one column per day.
+        // Grid: uniform columns — icon column + one per day.
         RowLayout {
             Layout.fillWidth: true
             spacing: 1
 
-            // Left icon column (aligned to rows 3 and 4).
+            // Icon column (same width as a day column).
             ColumnLayout {
-                Layout.preferredWidth: heat.iconColW
+                Layout.fillWidth: true
+                Layout.preferredWidth: 1
                 spacing: 1
                 Item { Layout.fillWidth: true; Layout.preferredHeight: heat.letterRowH }
                 Item { Layout.fillWidth: true; Layout.preferredHeight: heat.numberRowH }
@@ -209,7 +218,6 @@ Item {
                         source: "chronometer"
                     }
                     MouseArea {
-                        id: clkIconMA
                         anchors.fill: parent
                         hoverEnabled: true
                         PlasmaComponents3.ToolTip.text: i18n("Clockify")
@@ -226,7 +234,6 @@ Item {
                         source: "view-task"
                     }
                     MouseArea {
-                        id: jiraIconMA
                         anchors.fill: parent
                         hoverEnabled: true
                         PlasmaComponents3.ToolTip.text: i18n("Jira")
@@ -266,8 +273,8 @@ Item {
                         font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
                         font.bold: !weekend
                     }
-                    HoursCell { hours: (heat._v, heat._hoursDecimal(heat.clockifyTotals[day] || 0)) }
-                    HoursCell { hours: (heat._v, heat._hoursDecimal(heat.jiraTotals[day] || 0)) }
+                    HoursCell { hours: (heat._v, heat._clkHours(day)) }
+                    HoursCell { hours: (heat._v, heat._jiraHours(day)) }
                 }
             }
         }

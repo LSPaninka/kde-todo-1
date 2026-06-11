@@ -1,5 +1,28 @@
 # Changelog — Jira / Clockify Worklog Calendar
 
+## 0.6.1 — Heatmap layout, fixed switch, robust month update, switch fade
+
+- **Icon column is now a normal column.** The left row-icon column
+  (Clockify / Jira) was wider/odd; it's now an equal-width column like
+  the days (`fillWidth` + `preferredWidth: 1`), so the grid spans the
+  full width evenly.
+- **Bottom panel has a fixed height (200 px).** The heatmap (shorter
+  than the rings) sits vertically centered in it, and the vertical
+  switch on the right is pinned to the center so it never jumps when
+  you toggle views.
+- **Month update is now bulletproof.** Per-day totals are tagged with
+  the month they belong to (`clockifyKey` / `jiraKey`); a cell only
+  reads a value when its tag matches the visible month. Combined with
+  clearing on every month change and the stale-response `_reqId` guard,
+  navigating current → last → current can no longer leave the previous
+  month's numbers on screen.
+- **Switch transition.** Flipping rings → heatmap fades the current
+  view out downward and the new one in; heatmap → rings fades upward.
+  Driven by a SequentialAnimation that swaps the displayed view at
+  opacity 0 (down/up direction via a Translate).
+
+Bumped metadata 0.6.0 → 0.6.1.
+
 ## 0.6.0 — Bottom panel switch (rings ⟷ heatmap), heatmap polish
 
 - **Heatmap available in every mode.** The bottom panel below the

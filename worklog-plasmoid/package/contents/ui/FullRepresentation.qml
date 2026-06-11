@@ -94,6 +94,17 @@ Item {
     readonly property bool _bottomIsRings:   _bottomView !== "heatmap"
     readonly property bool _bottomIsHeatmap: _bottomView === "heatmap"
 
+    // The view actually rendered — swapped at the midpoint of the switch
+    // animation (see bottomSwitchAnim). Settable (not a binding).
+    property string _displayBottomView: "rings"
+
+    function _animateBottomSwitch() {
+        if (_bottomView === _displayBottomView) return;
+        bottomSwitchAnim.stop();
+        bottomSwitchAnim.toHeatmap = (_bottomView === "heatmap");
+        bottomSwitchAnim.start();
+    }
+
     function syncNow() {
         if (_showJira     && jiraStore)     jiraStore.fetchWeek(currentWeekStart);
         if (_showClockify && clockifyStore) clockifyStore.fetchWeek(currentWeekStart);
@@ -355,34 +366,42 @@ Item {
         }
 
         // -------- Bottom panel: rings ⟷ heatmap, with a vertical switch --
+        // Fixed height so the vertical switch on the right never moves and
+        // the heatmap (shorter than the rings) sits vertically centered.
         RowLayout {
             Layout.fillWidth: true
             visible: full._showBottomPanel
             spacing: PlasmaCore.Units.smallSpacing
 
-            // Content area — both views exist; only the selected one shows.
+            // Content area — both views exist; only the displayed one shows.
+            // A short slide+fade plays on switch (down for heatmap, up for
+            // rings), driven by full._displayBottomView swapping mid-anim.
             Item {
+                id: bottomContent
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.max(
-                    full._bottomIsRings ? sprintGauges.implicitHeight : 0,
-                    full._bottomIsHeatmap ? monthHeatmap.implicitHeight : 0)
+                Layout.preferredHeight: 200
+                clip: true
+                transform: Translate { id: bottomSlide }
 
                 SprintGauges {
                     id: sprintGauges
-                    anchors.fill: parent
-                    visible: full._bottomIsRings
+                    anchors.centerIn: parent
+                    width: parent.width
+                    visible: full._displayBottomView !== "heatmap"
                     jiraStore: full.jiraStore
                 }
                 MonthHeatmap {
                     id: monthHeatmap
-                    anchors.fill: parent
-                    visible: full._bottomIsHeatmap
+                    anchors.centerIn: parent
+                    width: parent.width
+                    visible: full._displayBottomView === "heatmap"
                     clockifyStore: full.clockifyStore
                     jiraStore: full.jiraStore
                 }
             }
 
-            // Vertical switch: two stacked icon buttons (rings / heatmap).
+            // Vertical switch: two stacked icon buttons (rings / heatmap),
+            // pinned to the vertical center of the fixed-height panel.
             ColumnLayout {
                 Layout.alignment: Qt.AlignVCenter
                 spacing: 2
@@ -412,6 +431,26 @@ Item {
                     PlasmaComponents3.ToolTip.visible: hovered
                     PlasmaComponents3.ToolTip.delay: 500
                 }
+            }
+        }
+
+        // Switch transition: phase 1 fades the current view out in the
+        // direction of travel (down → heatmap, up → rings), swaps the
+        // displayed view at opacity 0, then fades the new one in from the
+        // opposite side.
+        SequentialAnimation {
+            id: bottomSwitchAnim
+            property bool toHeatmap: true
+            property real dir: toHeatmap ? 1 : -1
+            ParallelAnimation {
+                NumberAnimation { target: bottomContent; property: "opacity"; to: 0; duration: 130; easing.type: Easing.InQuad }
+                NumberAnimation { target: bottomSlide; property: "y"; to: bottomSwitchAnim.dir * 26; duration: 130; easing.type: Easing.InQuad }
+            }
+            PropertyAction { target: full; property: "_displayBottomView"; value: full._bottomView }
+            PropertyAction { target: bottomSlide; property: "y"; value: -bottomSwitchAnim.dir * 26 }
+            ParallelAnimation {
+                NumberAnimation { target: bottomContent; property: "opacity"; to: 1; duration: 160; easing.type: Easing.OutQuad }
+                NumberAnimation { target: bottomSlide; property: "y"; to: 0; duration: 160; easing.type: Easing.OutQuad }
             }
         }
 
@@ -659,6 +698,8 @@ Item {
     }
 
     Component.onCompleted: {
+        // Start with the displayed view matching the saved one (no anim).
+        _displayBottomView = _bottomView;
         if (jiraStore && jiraStore.lastFetchedAt === 0 && _showJira) jiraStore.fetchWeek(currentWeekStart);
         if (clockifyStore && clockifyStore.lastFetchedAt === 0 && _showClockify) clockifyStore.fetchWeek(currentWeekStart);
         if (_showBottomPanel && _bottomIsRings && jiraStore) {
@@ -666,6 +707,13 @@ Item {
             sprintGauges.startFillAnimation();
         }
         if (_showBottomPanel && _bottomIsHeatmap) monthHeatmap.refresh();
+    }
+
+    // Animate the bottom-panel switch whenever the view changes (from the
+    // vertical switch buttons or the config dialog).
+    Connections {
+        target: plasmoid.configuration
+        function onWorklogBottomViewChanged() { full._animateBottomSwitch(); }
     }
 
     // Re-trigger the fill animation every time the popup re-opens (Plasma
