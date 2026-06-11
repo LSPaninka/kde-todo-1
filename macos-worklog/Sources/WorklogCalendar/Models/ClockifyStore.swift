@@ -129,6 +129,80 @@ final class ClockifyStore: ObservableObject {
         }
     }
 
+    // MARK: - Month totals (heatmap)
+
+    /// Agrega mis segundos de time-entries por día-del-mes (1-indexed)
+    /// para el mes `monthIndex` (0..11).  Pagina hasta agotar y no
+    /// toca el array `entries[]`.  El callback recibe el dict o `nil`.
+    func fetchMonthTotals(year: Int,
+                          monthIndex: Int,
+                          completion: @escaping ([Int: Int]?) -> Void) {
+        ensureContext { [weak self] ok in
+            guard let self, ok else { completion(nil); return }
+            var cal = Calendar(identifier: .gregorian)
+            cal.timeZone = .current
+            var startComps = DateComponents()
+            startComps.year = year; startComps.month = monthIndex + 1; startComps.day = 1
+            var nextComps = DateComponents()
+            nextComps.year = year; nextComps.month = monthIndex + 2; nextComps.day = 1
+            guard let startD = cal.date(from: startComps),
+                  let nextD  = cal.date(from: nextComps) else {
+                completion(nil); return
+            }
+
+            let wid = self.settings.clockifyWorkspaceId
+            let uid = self.settings.clockifyUserId
+            var totals: [Int: Int] = [:]
+            let pageSize = 200
+            var page = 1
+
+            var fetchPage: () -> Void = {}
+            fetchPage = {
+                let urlStr = "https://api.clockify.me/api/v1/workspaces/\(wid)/user/\(uid)/time-entries" +
+                    "?start=\(Self.utcIso(startD))&end=\(Self.utcIso(nextD))" +
+                    "&page-size=\(pageSize)&page=\(page)"
+                guard let escaped = urlStr.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+                      let url = URL(string: escaped) else {
+                    completion(nil); return
+                }
+                self.log("Month(Clockify) GET \(url.absoluteString)")
+                self.send(.get, url: url, body: nil) { code, body in
+                    if code != 200 {
+                        self.warn("month totals exit=\(code): \(body.prefix(200))")
+                        completion(nil); return
+                    }
+                    guard let data = body.data(using: .utf8),
+                          let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+                        completion(nil); return
+                    }
+                    for e in arr {
+                        guard let ti = e["timeInterval"] as? [String: Any],
+                              let startStr = ti["start"] as? String,
+                              let endStr   = ti["end"]   as? String,
+                              let s = Self.parseUtcIsoMs(startStr),
+                              let n = Self.parseUtcIsoMs(endStr),
+                              n > s else { continue }
+                        let d = Date(timeIntervalSince1970: s / 1000)
+                        let comps = cal.dateComponents([.year, .month, .day], from: d)
+                        if comps.year == year, comps.month == monthIndex + 1,
+                           let day = comps.day {
+                            totals[day, default: 0] += Int(round((n - s) / 1000))
+                        }
+                    }
+                    // Si la página vino llena, pedimos la siguiente.
+                    if arr.count >= pageSize {
+                        page += 1
+                        fetchPage()
+                    } else {
+                        self.log("Month(Clockify) \(monthIndex + 1)/\(year): \(totals.count) días con entries.")
+                        completion(totals)
+                    }
+                }
+            }
+            fetchPage()
+        }
+    }
+
     // MARK: - Create / Update / Delete
 
     func createEntry(start: Date,

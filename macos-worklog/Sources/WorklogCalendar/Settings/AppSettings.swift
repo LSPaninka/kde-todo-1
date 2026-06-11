@@ -66,8 +66,13 @@ final class AppSettings: ObservableObject {
 
     // MARK: - Sprint (experimental)
 
-    /// Habilita los anillos Sprint + Horas al pie del calendario.
+    /// Master toggle del panel inferior (anillos *o* heatmap, según
+    /// `bottomView`).  Mantenemos la kcfg key vieja
+    /// (`worklogShowSprintGauges`) para no perder la preferencia.
     @Published var showSprintGauges: Bool = true { didSet { ud.set(showSprintGauges, forKey: "worklogShowSprintGauges") } }
+    /// Qué se muestra en el panel inferior: `"rings"` (gauges Sprint+
+    /// Horas) o `"heatmap"` (mapa mensual de horas).
+    @Published var bottomView: String = "rings" { didSet { ud.set(bottomView, forKey: "worklogBottomView") } }
     /// Cómo descubrir el sprint activo.  Default
     /// `"subtask-customfield"` cubre el caso típico (usuario sólo dueño
     /// de subtareas).  `"agile-board"` necesita un boardId.
@@ -122,6 +127,8 @@ final class AppSettings: ObservableObject {
         if ud.object(forKey: "worklogShowSprintGauges") != nil {
             showSprintGauges = ud.bool(forKey: "worklogShowSprintGauges")
         }
+        if let s = ud.string(forKey: "worklogBottomView"),
+           s == "rings" || s == "heatmap" { bottomView = s }
         if let s = ud.string(forKey: "worklogSprintStrategy"), !s.isEmpty { sprintStrategy = s }
         if let s = ud.string(forKey: "worklogSprintField"),    !s.isEmpty { sprintField = s }
         if let n = ud.object(forKey: "worklogSprintBoardId") as? Int { sprintBoardId = n }

@@ -83,7 +83,7 @@ struct SettingsWindow: View {
             }
 
             Section("Sprint (experimental)") {
-                Toggle("Mostrar anillos Sprint / Horas debajo del calendario",
+                Toggle("Mostrar panel inferior (anillos o heatmap)",
                        isOn: $settings.showSprintGauges)
 
                 Picker("Estrategia para encontrar el sprint activo",
@@ -251,10 +251,32 @@ private struct ClockifyTab: View {
             }
 
             Section("Defaults para nuevas entradas") {
-                TextField("Proyecto por defecto (ID, opcional)",
-                          text: $settings.clockifyDefaultProjectId)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(.body, design: .monospaced))
+                // Si ya hay proyectos cargados (después de un Probar
+                // conexión exitoso o un fetchWeek), elegir por nombre
+                // con un Picker.  Si no, fallback al campo de texto
+                // para que se pueda pegar un ID hex manualmente.
+                if !clockify.projects.isEmpty {
+                    Picker("Proyecto por defecto",
+                           selection: $settings.clockifyDefaultProjectId) {
+                        Text("(sin proyecto)").tag("")
+                        ForEach(clockify.projects) { p in
+                            Text(p.name).tag(p.id)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    if !settings.clockifyDefaultProjectId.isEmpty &&
+                        !clockify.projects.contains(where: { $0.id == settings.clockifyDefaultProjectId }) {
+                        Text("ID guardado no está en la lista actual: \(settings.clockifyDefaultProjectId)")
+                            .font(.caption2).foregroundColor(.orange)
+                    }
+                } else {
+                    TextField("Proyecto por defecto (ID, opcional)",
+                              text: $settings.clockifyDefaultProjectId)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(.body, design: .monospaced))
+                    Text("Tocá «Probar» abajo para cargar los proyectos y elegir por nombre.")
+                        .font(.caption2).foregroundColor(.secondary)
+                }
                 Toggle("Facturable por defecto", isOn: $settings.clockifyBillableDefault)
             }
 
@@ -285,10 +307,22 @@ private struct ClockifyTab: View {
         status = ("Conectando…", false)
         testing = true
         clockify.testApiKey(settings.clockifyApiKey) { result in
-            testing = false
             switch result {
-            case .success(let label): status = ("OK — \(label)", false)
-            case .failure(let err):   status = (err.message, true)
+            case .success(let label):
+                // Validó la key — ahora cargamos el contexto
+                // (workspace + proyectos + tags) para poder ofrecer el
+                // Picker de "Proyecto por defecto" arriba.
+                clockify.ensureContext { ok in
+                    testing = false
+                    if ok {
+                        status = ("OK — \(label) · \(clockify.projects.count) proyectos cargados", false)
+                    } else {
+                        status = ("OK — \(label) (no se pudieron listar los proyectos)", false)
+                    }
+                }
+            case .failure(let err):
+                testing = false
+                status = (err.message, true)
             }
         }
     }

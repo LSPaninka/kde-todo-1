@@ -39,13 +39,21 @@ struct MainView: View {
         clockify.entries.map { CalendarBlock(clockify: $0) }
     }
 
-    /// Los gauges se muestran sólo cuando vale la pena: hay datos de
-    /// Jira (modo Jira o combinado), el calendario está en 9h y el
-    /// usuario los habilitó en preferencias.
-    private var showGauges: Bool {
-        guard settings.showSprintGauges else { return false }
-        guard settings.viewMode == .h9 else { return false }
-        return settings.source == .jira || settings.source == .jiraClockify
+    /// Panel inferior visible: el master toggle, y siempre cuando hay
+    /// algo útil que mostrar (gauges piden Jira, heatmap acepta los dos).
+    private var showBottomPanel: Bool { settings.showSprintGauges }
+
+    /// `true` cuando la vista del panel es la de los anillos.
+    private var bottomIsRings: Bool { settings.bottomView == "rings" }
+    /// `true` cuando es el heatmap mensual.
+    private var bottomIsHeatmap: Bool { settings.bottomView == "heatmap" }
+
+    /// Los rings solo aportan cuando hay datos de Jira (modo Jira o
+    /// combinado) y la vista es de 9h.  Si no, el switch al panel de
+    /// rings queda inhabilitado.
+    private var ringsAvailable: Bool {
+        settings.viewMode == .h9 &&
+            (settings.source == .jira || settings.source == .jiraClockify)
     }
 
     var body: some View {
@@ -90,9 +98,9 @@ struct MainView: View {
             )
             .frame(maxHeight: .infinity)
 
-            if showGauges {
+            if showBottomPanel {
                 Divider()
-                SprintGauges(jira: jira)
+                bottomPanel
             }
 
             footerBar
@@ -107,13 +115,13 @@ struct MainView: View {
             syncProjectId = settings.clockifyDefaultProjectId
         }
         // Cambios en Preferencias del bloque "Sprint (experimental)" →
-        // re-fetch sin esperar al ↻.
-        .onChange(of: settings.sprintStrategy)   { _ in if showGauges { jira.fetchSprintInfo { _ in } } }
-        .onChange(of: settings.sprintField)      { _ in if showGauges { jira.fetchSprintInfo { _ in } } }
-        .onChange(of: settings.sprintBoardId)    { _ in if showGauges { jira.fetchSprintInfo { _ in } } }
-        .onChange(of: settings.remainingMode)    { _ in if showGauges { jira.fetchSprintInfo { _ in } } }
-        // Si recién encienden los gauges, traigamos los datos.
-        .onChange(of: settings.showSprintGauges) { on in if on { jira.fetchSprintInfo { _ in } } }
+        // re-fetch sin esperar al ↻ (sólo si los rings están visibles).
+        .onChange(of: settings.sprintStrategy) { _ in if showBottomPanel && bottomIsRings { jira.fetchSprintInfo { _ in } } }
+        .onChange(of: settings.sprintField)    { _ in if showBottomPanel && bottomIsRings { jira.fetchSprintInfo { _ in } } }
+        .onChange(of: settings.sprintBoardId)  { _ in if showBottomPanel && bottomIsRings { jira.fetchSprintInfo { _ in } } }
+        .onChange(of: settings.remainingMode)  { _ in if showBottomPanel && bottomIsRings { jira.fetchSprintInfo { _ in } } }
+        // Si recién encienden el panel inferior, traigamos los datos.
+        .onChange(of: settings.showSprintGauges) { on in if on, bottomIsRings { jira.fetchSprintInfo { _ in } } }
         .onReceive(NotificationCenter.default.publisher(for: .worklogOpenPreferences)) { _ in
             showSettings = true
         }
@@ -246,6 +254,62 @@ struct MainView: View {
 
     // MARK: - Footer
 
+    /// Panel inferior: a la izquierda el contenido (anillos o heatmap),
+    /// a la derecha un switch vertical de dos botones-ícono para
+    /// alternar.  El switch siempre está visible — habilitarlo/no según
+    /// si los rings tienen datos.
+    private var bottomPanel: some View {
+        HStack(alignment: .center, spacing: 8) {
+            ZStack {
+                if bottomIsRings {
+                    SprintGauges(jira: jira)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                } else {
+                    MonthHeatmap(jira: jira, clockify: clockify)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .animation(.easeInOut(duration: 0.25), value: settings.bottomView)
+
+            VStack(spacing: 4) {
+                bottomViewButton(
+                    target: "rings",
+                    systemName: "circle.dashed",
+                    label: "Anillos Sprint / Horas",
+                    enabled: ringsAvailable
+                )
+                bottomViewButton(
+                    target: "heatmap",
+                    systemName: "square.grid.3x3",
+                    label: "Mapa mensual de horas",
+                    enabled: true
+                )
+            }
+        }
+    }
+
+    /// Botón-ícono individual del switch.  Marca el activo con relleno
+    /// accent, los inactivos quedan transparentes.
+    private func bottomViewButton(target: String,
+                                   systemName: String,
+                                   label: String,
+                                   enabled: Bool) -> some View {
+        let active = settings.bottomView == target
+        return Button {
+            settings.bottomView = target
+        } label: {
+            Image(systemName: systemName)
+                .font(.system(size: 13))
+                .frame(width: 22, height: 22)
+                .background(active ? Color.accentColor.opacity(0.25) : Color.clear)
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+        }
+        .buttonStyle(.borderless)
+        .disabled(!enabled)
+        .help(label)
+    }
+
     private var footerBar: some View {
         HStack(spacing: 8) {
             Text(footerTotals).font(.caption).opacity(0.7)
@@ -322,7 +386,7 @@ struct MainView: View {
     private func syncNow() {
         if settings.source == .jira || settings.source == .jiraClockify {
             jira.fetchWeek(starting: weekStart)
-            if showGauges {
+            if showBottomPanel && bottomIsRings && ringsAvailable {
                 jira.fetchSprintInfo { _ in }
             }
         }

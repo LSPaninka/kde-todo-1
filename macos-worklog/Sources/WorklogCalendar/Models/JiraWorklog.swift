@@ -22,6 +22,15 @@ struct JiraAssignableIssue: Identifiable, Hashable {
     var remainingSec: Int
 }
 
+/// Una fila del breakdown del "Disponible" del sprint — la issue y
+/// cuánto le queda.  Hover sobre la leyenda muestra estas filas.
+struct JiraSprintRemainingIssue: Identifiable, Hashable {
+    var id: String { key }
+    var key: String
+    var summary: String
+    var remainingSec: Int
+}
+
 /// Datos mínimos del sprint activo que la app necesita para pintar los
 /// anillos del pie del calendario.  `name`/`startDate`/`endDate` vienen
 /// crudos de la API; las propiedades `startMs`/`endMs` los normalizan

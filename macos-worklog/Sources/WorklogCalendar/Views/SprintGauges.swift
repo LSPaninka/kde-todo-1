@@ -73,9 +73,15 @@ struct SprintGauges: View {
                           baseColor: hoursBase,
                           useFadeLoop: true,
                           intermittent: hoursIntermittent)
-                Text(hoursLegend)
+                // Disponible y Quemadas como dos labels separados, así
+                // sólo el de Disponible es el tooltip target (con la
+                // lista de issues que componen ese total).
+                Text("Disponible: \(fmtHours(jira.sprintAvailableSec))")
                     .font(.caption2)
-                    .multilineTextAlignment(.center)
+                    .foregroundColor(.secondary)
+                    .help(availableTooltip)
+                Text("Quemadas: \(fmtHours(jira.sprintConsumedSec))")
+                    .font(.caption2)
                     .foregroundColor(.secondary)
             }
             .frame(maxWidth: 160)
@@ -97,8 +103,18 @@ struct SprintGauges: View {
         return "Inicio: \(fmtDate(s.startDate))\nFin: \(fmtDate(s.endDate))"
     }
 
-    private var hoursLegend: String {
-        "Disponible: \(fmtHours(jira.sprintAvailableSec))\nQuemadas: \(fmtHours(jira.sprintConsumedSec))"
+    /// Texto del tooltip sobre el label "Disponible": las issues que
+    /// componen el remaining, ordenadas desc, cap 20 + "…y N más".
+    private var availableTooltip: String {
+        let rows = jira.sprintAvailableBreakdown
+        if rows.isEmpty { return "Sin issues con remaining > 0." }
+        let cap = 20
+        let head = rows.prefix(cap).map { "\($0.key): \(fmtHours($0.remainingSec))" }
+        var out = head.joined(separator: "\n")
+        if rows.count > cap {
+            out += "\n…y \(rows.count - cap) más"
+        }
+        return out
     }
 
     private func fmtDate(_ iso: String) -> String {

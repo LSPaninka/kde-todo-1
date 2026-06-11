@@ -26,6 +26,10 @@ final class JiraWorklogStore: ObservableObject {
     @Published private(set) var sprintAvailableSec: Int = 0
     /// Suma de los worklogs propios dentro del rango del sprint.
     @Published private(set) var sprintConsumedSec: Int = 0
+    /// Detalle issue-por-issue del Disponible — sólo issues con
+    /// remaining > 0, ordenadas desc por remainingSec.  Para el
+    /// tooltip que aparece al hover sobre el label "Disponible".
+    @Published private(set) var sprintAvailableBreakdown: [JiraSprintRemainingIssue] = []
 
     @Published private(set) var loading: Bool = false
     @Published var lastError: String = ""
@@ -134,6 +138,86 @@ final class JiraWorklogStore: ObservableObject {
             self.assignableIssues = out
             self.log("Picker: \(out.count) issue(s).")
             completion(.success(out.count))
+        }
+    }
+
+    // MARK: - Month totals (heatmap)
+
+    /// Agrega *mis* segundos de worklog por día-del-mes para el mes
+    /// `monthIndex` (0..11) del `year`.  El callback recibe un dict
+    /// `{ día: segundos }` (1-indexed) o `nil` si falló.  No toca el
+    /// array `worklogs[]` — sirve sólo para el heatmap mensual.
+    func fetchMonthTotals(year: Int,
+                          monthIndex: Int,
+                          completion: @escaping ([Int: Int]?) -> Void) {
+        guard let creds = credentials() else { completion(nil); return }
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = .current
+        var startComps = DateComponents()
+        startComps.year = year; startComps.month = monthIndex + 1; startComps.day = 1
+        var nextComps = DateComponents()
+        nextComps.year = year; nextComps.month = monthIndex + 2; nextComps.day = 1
+        guard let startD = cal.date(from: startComps),
+              let nextD  = cal.date(from: nextComps) else {
+            completion(nil); return
+        }
+        let endD = cal.date(byAdding: .day, value: -1, to: nextD) ?? nextD
+        let startMs = startD.timeIntervalSince1970 * 1000
+        let endMs   = nextD.timeIntervalSince1970 * 1000
+
+        let go: () -> Void = { [weak self] in
+            guard let self else { return }
+            let jql = "worklogAuthor = currentUser() AND worklogDate >= \"\(Self.jqlDate(startD))\" AND worklogDate <= \"\(Self.jqlDate(endD))\""
+            guard let url = self.jqlSearchURL(creds: creds, jql: jql,
+                                              maxResults: 200, fields: "worklog") else {
+                completion(nil); return
+            }
+            self.log("Month(Jira) GET \(url.absoluteString)")
+            self.send(.get, url: url, body: nil, creds: creds) { code, body in
+                if code != 200 {
+                    self.warn("month totals exit=\(code): \(body.prefix(200))")
+                    completion(nil); return
+                }
+                guard let data = body.data(using: .utf8),
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let issues = json["issues"] as? [[String: Any]] else {
+                    completion(nil); return
+                }
+                var totals: [Int: Int] = [:]
+                for iss in issues {
+                    let f = (iss["fields"] as? [String: Any]) ?? [:]
+                    let wlContainer = (f["worklog"] as? [String: Any]) ?? [:]
+                    let wls = (wlContainer["worklogs"] as? [[String: Any]]) ?? []
+                    for w in wls {
+                        guard let startStr = w["started"] as? String,
+                              let ms = Self.parseJiraDateMs(startStr),
+                              ms >= startMs, ms < endMs else { continue }
+                        if !self.myAccountId.isEmpty,
+                           let author = w["author"] as? [String: Any],
+                           let aid = author["accountId"] as? String,
+                           aid != self.myAccountId { continue }
+                        let day = cal.component(.day, from: Date(timeIntervalSince1970: ms / 1000))
+                        totals[day, default: 0] += (w["timeSpentSeconds"] as? Int) ?? 0
+                    }
+                }
+                self.log("Month(Jira) \(monthIndex + 1)/\(year): \(totals.count) días con worklogs.")
+                completion(totals)
+            }
+        }
+
+        if myAccountId.isEmpty {
+            let url = URL(string: creds.site + "/rest/api/3/myself")!
+            send(.get, url: url, body: nil, creds: creds) { [weak self] code, body in
+                if code == 200,
+                   let data = body.data(using: .utf8),
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let id = json["accountId"] as? String {
+                    self?.myAccountId = id
+                }
+                go()
+            }
+        } else {
+            go()
         }
     }
 
@@ -723,6 +807,7 @@ final class JiraWorklogStore: ObservableObject {
         currentSprint = nil
         sprintAvailableSec = 0
         sprintConsumedSec = 0
+        sprintAvailableBreakdown = []
     }
 
     /// "Disponible" = lo que falta por hacer.  Subtareas ya consumidas
@@ -735,6 +820,7 @@ final class JiraWorklogStore: ObservableObject {
         let sEnd   = active.endMs
         var available = 0
         var consumed = 0
+        var breakdown: [JiraSprintRemainingIssue] = []
         for iss in issues {
             let f = (iss["fields"] as? [String: Any]) ?? [:]
             if let fld = field {
@@ -747,7 +833,13 @@ final class JiraWorklogStore: ObservableObject {
                 let hit = arr.contains { ($0["id"] as? Int) == active.id }
                 if !hit { continue }
             }
-            available += remainingSec(fields: f)
+            let rem = remainingSec(fields: f)
+            available += rem
+            if rem > 0 {
+                let key = (iss["key"] as? String) ?? ""
+                let summary = (f["summary"] as? String) ?? ""
+                breakdown.append(.init(key: key, summary: summary, remainingSec: rem))
+            }
 
             let wlContainer = (f["worklog"] as? [String: Any]) ?? [:]
             let wls = (wlContainer["worklogs"] as? [[String: Any]]) ?? []
@@ -764,7 +856,8 @@ final class JiraWorklogStore: ObservableObject {
         }
         sprintAvailableSec = available
         sprintConsumedSec = consumed
-        log("Sprint '\(active.name)': remaining=\(available)s, consumed=\(consumed)s.")
+        sprintAvailableBreakdown = breakdown.sorted { $0.remainingSec > $1.remainingSec }
+        log("Sprint '\(active.name)': remaining=\(available)s, consumed=\(consumed)s, breakdown=\(breakdown.count) issue(s).")
     }
 
     /// Calcula el "remaining" de una issue según el modo configurado.
