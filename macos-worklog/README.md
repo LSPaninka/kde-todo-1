@@ -2,8 +2,16 @@
 
 Port a **Swift / SwiftUI** del plasmoide `worklog-plasmoid` (KDE Plasma 5),
 pero rearmado como **aplicación independiente para macOS** (Dock icon,
-NSWindow, ventana principal redimensionable).  **No** es un widget de la
-barra de menús: se abre como cualquier app desde Launchpad / Finder.
+NSWindow, ventana principal redimensionable).  Se abre como cualquier app
+desde Launchpad / Finder.
+
+Además, deja un **ícono de reloj blanco en la barra de menús superior**:
+al clickearlo aparece un **popover de 1000×700** con la misma vista de
+worklog (planilla + anillos + heatmap + sync) para interactuar rápido sin
+abrir la ventana grande.  El popover trae un botón **"abrir aplicación"**
+(ícono `macwindow`) por si querés la ventana completa — por ejemplo para
+cambiar de modo.  La app sigue viva en la barra de menús aunque cierres la
+ventana.
 
 Muestra una **vista semanal Domingo→Sábado** con los **worklogs** del
 usuario y soporta tres fuentes intercambiables:

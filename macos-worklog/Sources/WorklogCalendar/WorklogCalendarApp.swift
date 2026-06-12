@@ -20,12 +20,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var settings: AppSettings!
     var jira: JiraWorklogStore!
     var clockify: ClockifyStore!
+    var statusBar: StatusBarController!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         settings = AppSettings()
         jira = JiraWorklogStore(settings: settings)
         clockify = ClockifyStore(settings: settings)
 
+        // Los mismos stores alimentan tanto la ventana como el popover de
+        // la barra de menús, así no se duplica el estado ni los fetch.
         let rootView = MainView(settings: settings, jira: jira, clockify: clockify)
 
         let initialSize = NSSize(width: CGFloat(settings.windowWidth),
@@ -44,12 +47,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.delegate = self
         window.makeKeyAndOrderFront(nil)
 
+        // Ícono de reloj blanco en la barra de menús con el popover
+        // compacto (Jira / Clockify).  El botón "abrir app" del popover
+        // vuelve a traer esta ventana al frente.
+        statusBar = StatusBarController(
+            settings: settings,
+            jira: jira,
+            clockify: clockify,
+            onOpenApp: { [weak self] in self?.showMainWindow() }
+        )
+
         buildMainMenu()
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    /// Trae la ventana principal al frente (la usa el botón "abrir app"
+    /// del popover, y por si el usuario cerró la ventana y la reabre
+    /// desde la barra de menús).
+    func showMainWindow() {
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ app: NSApplication) -> Bool {
-        true
+        // No cerramos la app al cerrar la ventana: el popover de la barra
+        // de menús sigue disponible.
+        false
+    }
+
+    /// Reabrir desde el Dock cuando no hay ventanas visibles.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag { showMainWindow() }
+        return true
     }
 
     private func buildMainMenu() {

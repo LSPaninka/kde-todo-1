@@ -8,6 +8,11 @@ struct MainView: View {
     @ObservedObject var jira: JiraWorklogStore
     @ObservedObject var clockify: ClockifyStore
 
+    /// Si está seteado, estamos dentro del popover de la barra de menús:
+    /// mostramos un botón "abrir aplicación" en el header.  En la
+    /// ventana normal queda `nil` y el botón no aparece.
+    var onOpenApp: (() -> Void)? = nil
+
     @State private var weekStart: Date = sundayOf(Date())
 
     // Sheets.
@@ -216,6 +221,13 @@ struct MainView: View {
 
             Button(action: { showSettings = true }) {
                 Image(systemName: "gearshape")
+            }
+
+            if let onOpenApp {
+                Button(action: onOpenApp) {
+                    Image(systemName: "macwindow")
+                }
+                .help("Abrir la aplicación completa (todos los modos)")
             }
         }
     }
