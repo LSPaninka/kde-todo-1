@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 using Windows.Foundation;
+using Windows.System;
 using Windows.UI;
 using WorklogCalendar.Models;
 using WorklogCalendar.Services;
@@ -521,10 +522,10 @@ public sealed partial class WeekCalendarControl : UserControl
         {
             if (child is not Border b || b.Tag is not BlockTag t) continue;
             if (t.IsDragging) continue;   // don't yank a block out from under the cursor
-            int slotsTop = SlotOfMs(t.StartedMs, day);
-            int slotsLen = Math.Max(1, (int)Math.Round(t.DurationSec / 1800.0));
-            double y = slotsTop * RowHeight;
-            double h = slotsLen * RowHeight - 2;
+            // Minute-precise positioning so 10-min blocks render at their
+            // real size (1 row = 30 min = RowHeight).
+            double y = YForMs(t.StartedMs, day);
+            double h = Math.Max(RowHeight / 3.0, t.DurationSec / 1800.0 * RowHeight) - 2;
             double left, w;
             if (IsCombined)
             {
@@ -580,17 +581,17 @@ public sealed partial class WeekCalendarControl : UserControl
         double dx = pos.X - tag.PressInParent.X;
         double dy = pos.Y - tag.PressInParent.Y;
 
+        // Shift → snap to 10-min steps (RowHeight/3 px) instead of 30 (RowHeight).
+        bool fine = IsShiftDown();
+        double stepPx = fine ? RowHeight / 3.0 : RowHeight;
+
         if (tag.Mode == 1)
         {
             if (!tag.Dragged && Math.Abs(dx) < 4 && Math.Abs(dy) < 4) return;
             tag.Dragged = true;
-            // Snap to whole cells (rowHeight rows × columnWidth columns).
             double colW = canvas.ActualWidth;
             double snappedDx = colW > 0 ? Math.Round(dx / colW) * colW : 0;
-            double snappedDy = Math.Round(dy / RowHeight) * RowHeight;
-            // Vertical clamp: keep the block inside the visible hours, so
-            // a drag in 9h mode can't visually spill past 18:00. EmitChange
-            // also clamps on release; this is for visual feedback.
+            double snappedDy = Math.Round(dy / stepPx) * stepPx;
             double newY = tag.OrigTop + snappedDy;
             double maxY = Math.Max(0, canvas.ActualHeight - card.ActualHeight);
             newY = Math.Max(0, Math.Min(maxY, newY));
@@ -600,21 +601,22 @@ public sealed partial class WeekCalendarControl : UserControl
         else if (tag.Mode == 2)
         {
             if (Math.Abs(dy) > 2) tag.Dragged = true;
-            double stepY = Math.Round(dy / RowHeight) * RowHeight;
+            double stepY = Math.Round(dy / stepPx) * stepPx;
+            double minH = stepPx;
             double newY = tag.OrigTop + stepY;
             double newH = tag.OrigHeight - stepY;
             if (newY < 0) { newH += newY; newY = 0; }
-            if (newH < RowHeight) { newH = RowHeight; newY = tag.OrigTop + tag.OrigHeight - RowHeight; }
+            if (newH < minH) { newH = minH; newY = tag.OrigTop + tag.OrigHeight - minH; }
             Canvas.SetTop(card, newY);
             card.Height = newH;
         }
         else if (tag.Mode == 3)
         {
             if (Math.Abs(dy) > 2) tag.Dragged = true;
-            double stepDH = Math.Round(dy / RowHeight) * RowHeight;
+            double stepDH = Math.Round(dy / stepPx) * stepPx;
             double newH = tag.OrigHeight + stepDH;
-            if (newH < RowHeight) newH = RowHeight;
-            double maxH = Math.Max(RowHeight, canvas.ActualHeight - Canvas.GetTop(card));
+            if (newH < stepPx) newH = stepPx;
+            double maxH = Math.Max(stepPx, canvas.ActualHeight - Canvas.GetTop(card));
             if (newH > maxH) newH = maxH;
             card.Height = newH;
         }
@@ -643,29 +645,45 @@ public sealed partial class WeekCalendarControl : UserControl
         double dy = Canvas.GetTop(card) - tag.OrigTop;
         double dh = card.ActualHeight - tag.OrigHeight;
         double colW = canvas.ActualWidth;
+        bool fine = IsShiftDown();
         if (mode == 1)
         {
             int days = colW > 0 ? (int)Math.Round(dx / colW) : 0;
-            int slots = (int)Math.Round(dy / RowHeight);
-            if (days == 0 && slots == 0) { Refresh(); return; }
-            long newStart = tag.StartedMs + days * 86400000L + slots * 30 * 60_000L;
+            int stepMin = PxToSnappedMin(dy, fine);
+            if (days == 0 && stepMin == 0) { Refresh(); return; }
+            long newStart = tag.StartedMs + days * 86400000L + stepMin * 60_000L;
             EmitChange(tag, newStart, tag.DurationSec);
         }
         else if (mode == 2)
         {
-            int slots = (int)Math.Round(dy / RowHeight);
-            if (slots == 0) { Refresh(); return; }
-            long newStart = tag.StartedMs + slots * 30 * 60_000L;
-            int newDur = tag.DurationSec - slots * 1800;
+            int stepMin = PxToSnappedMin(dy, fine);
+            if (stepMin == 0) { Refresh(); return; }
+            long newStart = tag.StartedMs + stepMin * 60_000L;
+            int newDur = tag.DurationSec - stepMin * 60;
             EmitChange(tag, newStart, newDur);
         }
         else if (mode == 3)
         {
-            int slots = (int)Math.Round(dh / RowHeight);
-            if (slots == 0) { Refresh(); return; }
-            int newDur = tag.DurationSec + slots * 1800;
+            int stepMin = PxToSnappedMin(dh, fine);
+            if (stepMin == 0) { Refresh(); return; }
+            int newDur = tag.DurationSec + stepMin * 60;
             EmitChange(tag, tag.StartedMs, newDur);
         }
+    }
+
+    /// <summary>True if either Shift key is currently held (10-min fine snap).</summary>
+    private static bool IsShiftDown()
+    {
+        var state = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift);
+        return (state & Windows.UI.Core.CoreVirtualKeyStates.Down) != 0;
+    }
+
+    /// <summary>Pixel delta → snapped minutes. Shift snaps to 10, else 30.</summary>
+    private int PxToSnappedMin(double px, bool fine)
+    {
+        int g = fine ? 10 : 30;
+        double rawMin = px / RowHeight * 30.0;
+        return (int)(Math.Round(rawMin / g) * g);
     }
 
     private void ResetBlock(Border card, BlockTag tag)
@@ -688,7 +706,7 @@ public sealed partial class WeekCalendarControl : UserControl
         long durMs = newDurationSec * 1000L;
         if (newStartMs < wsMs) newStartMs = wsMs;
         if (newStartMs + durMs > weMs) newStartMs = weMs - durMs;
-        if (newDurationSec < 1800) newDurationSec = 1800;
+        if (newDurationSec < 600) newDurationSec = 600;   // 10-min floor
         if (newStartMs == tag.StartedMs && newDurationSec == tag.DurationSec) { Refresh(); return; }
         if (tag.IsJira) MoveJiraRequested?.Invoke((JiraWorklog)tag.Entry, newStartMs, newDurationSec);
         else MoveClockifyRequested?.Invoke((ClockifyEntry)tag.Entry, newStartMs, newDurationSec);
@@ -729,12 +747,12 @@ public sealed partial class WeekCalendarControl : UserControl
         _drag.Remove(canvas);
         HideDragOverlay(canvas);
 
-        int topSlot = SnapSlot(Math.Min(st.PressY, pt.Position.Y));
-        int botSlot = SnapSlot(Math.Max(st.PressY, pt.Position.Y)) + 1;
+        bool fine = IsShiftDown();
         var dayDate = WeekStart.AddDays(day);
-        var startMs = ToMsAtSlot(dayDate, topSlot);
-        var endMs = ToMsAtSlot(dayDate, botSlot);
-        if (endMs <= startMs) endMs = startMs + 30 * 60_000;
+        var startMs = MsAtSnappedPx(dayDate, Math.Min(st.PressY, pt.Position.Y), fine);
+        var endMs = MsAtSnappedPx(dayDate, Math.Max(st.PressY, pt.Position.Y), fine);
+        int floorMin = fine ? 10 : 30;
+        if (endMs <= startMs) endMs = startMs + floorMin * 60_000;
         long dayMs = ToMs(dayDate);
 
         if (IsCombined)
@@ -754,37 +772,45 @@ public sealed partial class WeekCalendarControl : UserControl
     private void UpdateDragOverlay(Canvas canvas, double curY)
     {
         if (!_drag.TryGetValue(canvas, out var st)) return;
+        bool fine = IsShiftDown();
+        double stepPx = fine ? RowHeight / 3.0 : RowHeight;
         var overlay = _dragOverlays[canvas];
-        double top = SnapSlot(Math.Min(st.PressY, curY)) * RowHeight;
-        double bot = (SnapSlot(Math.Max(st.PressY, curY)) + 1) * RowHeight;
+        double top = SnapPx(Math.Min(st.PressY, curY), stepPx);
+        double bot = SnapPx(Math.Max(st.PressY, curY), stepPx) + stepPx;
         double left = IsCombined ? (st.PressLeft ? 0 : canvas.ActualWidth / 2) : 0;
         double w = IsCombined ? canvas.ActualWidth / 2 : canvas.ActualWidth;
         Canvas.SetTop(overlay, top);
         Canvas.SetLeft(overlay, left);
         overlay.Width = w;
-        overlay.Height = Math.Max(RowHeight, bot - top);
+        overlay.Height = Math.Max(stepPx, bot - top);
     }
 
-    private int SnapSlot(double y)
+    private double SnapPx(double y, double stepPx)
     {
-        int s = (int)Math.Round(y / RowHeight);
-        return Math.Clamp(s, 0, SlotsPerDay);
+        double maxPx = SlotsPerDay * RowHeight;
+        double s = Math.Round(y / stepPx) * stepPx;
+        return Math.Clamp(s, 0, maxPx);
     }
 
     // ---- Helpers ----------------------------------------------------------
 
-    private long ToMsAtSlot(DateTime day, int slot)
+    /// <summary>Convert a snapped pixel Y in a day column to an absolute unix-ms.</summary>
+    private long MsAtSnappedPx(DateTime day, double y, bool fine)
     {
-        var dt = day.Date.AddHours(StartHour).AddMinutes(slot * 30);
+        double stepPx = fine ? RowHeight / 3.0 : RowHeight;
+        double snapped = SnapPx(y, stepPx);
+        int minFromViewStart = (int)Math.Round(snapped / RowHeight * 30.0);
+        var dt = day.Date.AddHours(StartHour).AddMinutes(minFromViewStart);
         return new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Local)).ToUnixTimeMilliseconds();
     }
 
-    private int SlotOfMs(long ms, int day)
+    /// <summary>Minute-precise Y (px) of a worklog's start within its day column.</summary>
+    private double YForMs(long ms, int day)
     {
         var local = DateTimeOffset.FromUnixTimeMilliseconds(ms).LocalDateTime;
         var dayStart = WeekStart.AddDays(day).Date;
-        var minutes = (int)Math.Floor((local - dayStart).TotalMinutes);
-        return minutes / 30 - StartHour * 2;
+        double minFromViewStart = (local - dayStart).TotalMinutes - StartHour * 60;
+        return minFromViewStart / 30.0 * RowHeight;
     }
 
     private static long ToMs(DateTime d) =>

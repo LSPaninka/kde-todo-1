@@ -197,6 +197,56 @@ public sealed class ClockifyStore : INotifyPropertyChanged
         }
     }
 
+    /// <summary>
+    /// Sum the user's Clockify time entries per day-of-month for the
+    /// monthly heatmap. Paginated. Returns { day(1..31) =&gt; seconds }.
+    /// </summary>
+    public async Task<Dictionary<int, int>> FetchMonthTotalsAsync(int year, int monthIndex)
+    {
+        var totals = new Dictionary<int, int>();
+        if (!await EnsureContextAsync()) return totals;
+
+        var startD = new DateTime(year, monthIndex + 1, 1, 0, 0, 0, DateTimeKind.Local);
+        var endD = startD.AddMonths(1);
+        const int pageSize = 200;
+        int page = 1;
+        while (true)
+        {
+            var url = $"{BaseUrl}/workspaces/{WorkspaceId}/user/{UserId}/time-entries" +
+                      $"?start={Uri.EscapeDataString(ToUtcIso(startD))}" +
+                      $"&end={Uri.EscapeDataString(ToUtcIso(endD))}" +
+                      $"&page-size={pageSize}&page={page}";
+            Log("Month(Clockify) GET " + url);
+            var (code, body) = await SendAsync("GET", url, null);
+            if (code != 200) { Warn($"month totals exit={code}: {Trim(body, 200)}"); break; }
+            int count;
+            try
+            {
+                using var doc = JsonDocument.Parse(body);
+                count = doc.RootElement.GetArrayLength();
+                foreach (var e in doc.RootElement.EnumerateArray())
+                {
+                    if (!e.TryGetProperty("timeInterval", out var ti)) continue;
+                    var startS = ti.TryGetProperty("start", out var sE) ? sE.GetString() : null;
+                    var endS = ti.TryGetProperty("end", out var eE) && eE.ValueKind == JsonValueKind.String ? eE.GetString() : null;
+                    if (string.IsNullOrEmpty(startS) || string.IsNullOrEmpty(endS)) continue;
+                    if (!DateTimeOffset.TryParse(startS, out var sd) || !DateTimeOffset.TryParse(endS, out var ed)) continue;
+                    if (ed <= sd) continue;
+                    var local = sd.ToLocalTime();
+                    if (local.Year != year || local.Month != monthIndex + 1) continue;
+                    int day = local.Day;
+                    int sec = (int)Math.Round((ed - sd).TotalSeconds);
+                    totals[day] = (totals.TryGetValue(day, out var cur) ? cur : 0) + sec;
+                }
+            }
+            catch (Exception ex) { Warn("month parse: " + ex); break; }
+            if (count >= pageSize) { page++; continue; }
+            Log($"Month(Clockify) {monthIndex + 1}/{year}: {totals.Count} day(s) with entries.");
+            break;
+        }
+        return totals;
+    }
+
     private bool ProcessEntries(string body)
     {
         try

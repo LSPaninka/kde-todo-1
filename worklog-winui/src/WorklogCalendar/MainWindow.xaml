@@ -63,9 +63,34 @@
         <!-- ============ Calendar ============ -->
         <controls:WeekCalendarControl x:Name="Calendar" Grid.Row="2" Margin="6,4,6,4" />
 
-        <!-- ============ Sprint gauges (Jira / Jira-Clockify, 9h only) ====== -->
-        <controls:SprintGaugesControl x:Name="Gauges" Grid.Row="3" Height="190"
-                                       Visibility="Collapsed" Margin="6,4,6,4" />
+        <!-- ============ Bottom panel: rings <-> monthly heatmap ====== -->
+        <Grid x:Name="BottomPanel" Grid.Row="3" Margin="6,4,6,4" Visibility="Collapsed">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <!-- Content area: both views stacked, only the active one visible. -->
+            <Grid x:Name="BottomContent" Grid.Column="0" Height="200">
+                <Grid.RenderTransform>
+                    <TranslateTransform x:Name="BottomSlide" />
+                </Grid.RenderTransform>
+                <controls:SprintGaugesControl x:Name="Gauges" VerticalAlignment="Center" />
+                <controls:MonthHeatmapControl x:Name="Heatmap" VerticalAlignment="Center"
+                                               Visibility="Collapsed" />
+            </Grid>
+            <!-- Vertical switch -->
+            <StackPanel Grid.Column="1" Orientation="Vertical" Spacing="2"
+                        VerticalAlignment="Center" Margin="4,0,0,0">
+                <ToggleButton x:Name="RingsSwitchBtn" Width="32" Height="30"
+                              ToolTipService.ToolTip="Ver anillos (Sprint / Horas)">
+                    <FontIcon Glyph="&#xE786;" FontSize="14" />
+                </ToggleButton>
+                <ToggleButton x:Name="HeatmapSwitchBtn" Width="32" Height="30"
+                              ToolTipService.ToolTip="Ver heatmap mensual">
+                    <FontIcon Glyph="&#xE787;" FontSize="14" />
+                </ToggleButton>
+            </StackPanel>
+        </Grid>
 
         <!-- ============ Footer ============ -->
         <Grid Grid.Row="4" Padding="12,8" ColumnSpacing="8">

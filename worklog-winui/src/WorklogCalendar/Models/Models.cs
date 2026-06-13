@@ -53,6 +53,14 @@ public sealed class JiraSprint
     public string EndDate { get; set; } = "";
 }
 
+/// <summary>One issue's contribution to the sprint's "Disponible" hours.</summary>
+public sealed class SprintAvailableItem
+{
+    public string Key { get; set; } = "";
+    public string Summary { get; set; } = "";
+    public int RemainingSec { get; set; }
+}
+
 /// <summary>One Clockify time entry as rendered on the calendar.</summary>
 public sealed class ClockifyEntry
 {

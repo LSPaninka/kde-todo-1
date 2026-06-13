@@ -39,6 +39,8 @@ public sealed class JiraWorklogStore : INotifyPropertyChanged
     public JiraSprint? CurrentSprint { get; private set; }
     public int SprintAvailableSec { get; private set; }
     public int SprintConsumedSec { get; private set; }
+    /// <summary>Per-issue breakdown of the available hours (remaining &gt; 0), sorted desc.</summary>
+    public IReadOnlyList<SprintAvailableItem> SprintAvailableBreakdown { get; private set; } = Array.Empty<SprintAvailableItem>();
 
     private bool _loading;
     public bool Loading { get => _loading; private set { _loading = value; Raise(); } }
@@ -432,9 +434,73 @@ public sealed class JiraWorklogStore : INotifyPropertyChanged
         CurrentSprint = null;
         SprintAvailableSec = 0;
         SprintConsumedSec = 0;
+        SprintAvailableBreakdown = Array.Empty<SprintAvailableItem>();
         Raise(nameof(CurrentSprint));
         Raise(nameof(SprintAvailableSec));
         Raise(nameof(SprintConsumedSec));
+        Raise(nameof(SprintAvailableBreakdown));
+    }
+
+    /// <summary>
+    /// Sum the current user's Jira worklogs per day-of-month for the
+    /// monthly heatmap. Returns { day(1..31) =&gt; seconds }.
+    /// </summary>
+    public async Task<Dictionary<int, int>> FetchMonthTotalsAsync(int year, int monthIndex)
+    {
+        var totals = new Dictionary<int, int>();
+        if (!HasCredentials(out var creds)) return totals;
+
+        var startD = new DateTime(year, monthIndex + 1, 1);
+        var endD = startD.AddMonths(1).AddDays(-1);                 // last day of month
+        long startMs = ToUnixMs(startD);
+        long endMs = ToUnixMs(startD.AddMonths(1));                 // first of next
+
+        if (string.IsNullOrEmpty(MyAccountId))
+        {
+            var (mc, mb) = await SendAsync("GET", $"{creds.Site}/rest/api/3/myself", null);
+            if (mc == 200)
+            {
+                try { using var d = JsonDocument.Parse(mb); MyAccountId = d.RootElement.TryGetProperty("accountId", out var a) ? a.GetString() ?? "" : ""; }
+                catch { /* swallow */ }
+            }
+        }
+
+        var jql = $"worklogAuthor = currentUser() AND worklogDate >= \"{FormatJqlDate(startD)}\" AND worklogDate <= \"{FormatJqlDate(endD)}\"";
+        var url = $"{creds.Site}/rest/api/3/search/jql?jql={Uri.EscapeDataString(jql)}&maxResults=200&fields=worklog";
+        Log("Month(Jira) GET " + url);
+        var (code, body) = await SendAsync("GET", url, null);
+        if (code != 200) { Warn($"month totals exit={code}: {Trim(body, 200)}"); return totals; }
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("issues", out var issues) && issues.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var iss in issues.EnumerateArray())
+                {
+                    if (!iss.TryGetProperty("fields", out var f)) continue;
+                    if (!f.TryGetProperty("worklog", out var wlC) ||
+                        !wlC.TryGetProperty("worklogs", out var wls) || wls.ValueKind != JsonValueKind.Array) continue;
+                    foreach (var w in wls.EnumerateArray())
+                    {
+                        var startedStr = w.TryGetProperty("started", out var stE) ? stE.GetString() ?? "" : "";
+                        if (!DateTimeOffset.TryParse(startedStr, out var dto)) continue;
+                        long ms = dto.ToUnixTimeMilliseconds();
+                        if (ms < startMs || ms >= endMs) continue;
+                        if (!string.IsNullOrEmpty(MyAccountId) && w.TryGetProperty("author", out var au))
+                        {
+                            var aid = au.TryGetProperty("accountId", out var aidE) ? aidE.GetString() ?? "" : "";
+                            if (!string.IsNullOrEmpty(aid) && aid != MyAccountId) continue;
+                        }
+                        int day = dto.ToLocalTime().Day;
+                        int sec = w.TryGetProperty("timeSpentSeconds", out var dE) && dE.ValueKind == JsonValueKind.Number ? dE.GetInt32() : 0;
+                        totals[day] = (totals.TryGetValue(day, out var cur) ? cur : 0) + sec;
+                    }
+                }
+            }
+            Log($"Month(Jira) {monthIndex + 1}/{year}: {totals.Count} day(s) with worklogs.");
+        }
+        catch (Exception ex) { Warn("month parse: " + ex); }
+        return totals;
     }
 
     /// <summary>
@@ -475,6 +541,7 @@ public sealed class JiraWorklogStore : INotifyPropertyChanged
         long sStart = DateTimeOffset.TryParse(active.StartDate, out var sd) ? sd.ToUnixTimeMilliseconds() : 0;
         long sEnd = DateTimeOffset.TryParse(active.EndDate, out var ed) ? ed.ToUnixTimeMilliseconds() : long.MaxValue;
         int available = 0, consumed = 0;
+        var breakdown = new List<SprintAvailableItem>();
         foreach (var iss in issues.EnumerateArray())
         {
             if (!iss.TryGetProperty("fields", out var f)) continue;
@@ -496,7 +563,17 @@ public sealed class JiraWorklogStore : INotifyPropertyChanged
                 }
                 if (!hit) continue;
             }
-            available += RemainingSec(f);
+            int rem = RemainingSec(f);
+            available += rem;
+            if (rem > 0)
+            {
+                breakdown.Add(new SprintAvailableItem
+                {
+                    Key = iss.TryGetProperty("key", out var kE) ? kE.GetString() ?? "" : "",
+                    Summary = f.TryGetProperty("summary", out var sE) ? sE.GetString() ?? "" : "",
+                    RemainingSec = rem
+                });
+            }
 
             if (f.TryGetProperty("worklog", out var wlC) &&
                 wlC.TryGetProperty("worklogs", out var wls) && wls.ValueKind == JsonValueKind.Array)
@@ -517,11 +594,14 @@ public sealed class JiraWorklogStore : INotifyPropertyChanged
                 }
             }
         }
+        breakdown.Sort((a, b) => b.RemainingSec.CompareTo(a.RemainingSec));
         SprintAvailableSec = available;
         SprintConsumedSec = consumed;
+        SprintAvailableBreakdown = breakdown;
         Raise(nameof(SprintAvailableSec));
         Raise(nameof(SprintConsumedSec));
-        Log($"Sprint '{active.Name}': remaining={available}s, consumed={consumed}s.");
+        Raise(nameof(SprintAvailableBreakdown));
+        Log($"Sprint '{active.Name}': remaining={available}s, consumed={consumed}s, breakdown={breakdown.Count} issue(s).");
     }
 
     public async Task<(bool ok, string err)> CreateWorklogAsync(string issueKey, DateTime started, int durationSec, string comment)

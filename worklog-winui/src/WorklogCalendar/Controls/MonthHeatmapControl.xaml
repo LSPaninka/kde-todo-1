@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="WorklogCalendar.Controls.MonthHeatmapControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Header: title + month label + prev/next -->
+        <Grid Grid.Row="0" Margin="0,0,0,4" ColumnSpacing="6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="Horas del mes" FontWeight="SemiBold"
+                       VerticalAlignment="Center" />
+            <Button x:Name="PrevMonthBtn" Grid.Column="2" Content="◀"
+                    ToolTipService.ToolTip="Mes anterior" />
+            <TextBlock x:Name="MonthLabel" Grid.Column="3" FontWeight="SemiBold"
+                       MinWidth="130" TextAlignment="Center" VerticalAlignment="Center" />
+            <Button x:Name="NextMonthBtn" Grid.Column="4" Content="▶"
+                    ToolTipService.ToolTip="Mes actual" />
+        </Grid>
+
+        <!-- Grid built in code-behind -->
+        <Grid x:Name="HeatGrid" Grid.Row="1" />
+    </Grid>
+</UserControl>

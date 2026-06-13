@@ -61,6 +61,10 @@ public sealed class AppSettings : INotifyPropertyChanged
     /// <summary>"api" (Jira's remainingEstimate) or "calculated" (original - spent).</summary>
     public string RemainingMode { get; set; } = "api";
 
+    // -------- Bottom panel --------
+    /// <summary>Which bottom-panel view shows: "rings" (sprint gauges) or "heatmap" (monthly).</summary>
+    public string BottomView { get; set; } = "rings";
+
     // Events aren't serialized by System.Text.Json — no [JsonIgnore] needed
     // (and [JsonIgnore] would fail to compile on an event anyway).
     public event PropertyChangedEventHandler? PropertyChanged;

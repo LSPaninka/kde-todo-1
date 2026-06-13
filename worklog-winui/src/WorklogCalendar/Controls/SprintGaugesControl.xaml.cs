@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using Microsoft.UI;
 using Microsoft.UI.Xaml.Controls;
@@ -45,7 +46,8 @@ public sealed partial class SprintGaugesControl : UserControl
     {
         if (e.PropertyName is nameof(JiraWorklogStore.CurrentSprint)
             or nameof(JiraWorklogStore.SprintAvailableSec)
-            or nameof(JiraWorklogStore.SprintConsumedSec))
+            or nameof(JiraWorklogStore.SprintConsumedSec)
+            or nameof(JiraWorklogStore.SprintAvailableBreakdown))
         {
             // We were probably called from the UI thread; if not, the
             // SetValue calls below will still work because UI properties
@@ -69,9 +71,28 @@ public sealed partial class SprintGaugesControl : UserControl
         HoursRing.Value = hoursPct;
         HoursRing.BaseColor = HoursBase(hoursPct);
         HoursRing.Intermittent = sprintPct >= 85 && hoursPct < 99;
-        HoursLegend.Text = _store != null
-            ? $"Disponible: {FormatHours(_store.SprintAvailableSec)}\nQuemadas: {FormatHours(_store.SprintConsumedSec)}"
-            : "";
+        DisponibleLegend.Text = _store != null ? $"Disponible: {FormatHours(_store.SprintAvailableSec)}" : "";
+        QuemadasLegend.Text = _store != null ? $"Quemadas: {FormatHours(_store.SprintConsumedSec)}" : "";
+
+        // Per-issue breakdown tooltip on the "Disponible" line. Cleared if
+        // there's nothing to show.
+        var breakdown = _store?.SprintAvailableBreakdown;
+        if (breakdown != null && breakdown.Count > 0)
+        {
+            var lines = new List<string>();
+            int max = Math.Min(breakdown.Count, 20);
+            for (int i = 0; i < max; i++)
+                lines.Add($"{breakdown[i].Key}: {FormatHours(breakdown[i].RemainingSec)}");
+            if (breakdown.Count > max) lines.Add($"…y {breakdown.Count - max} más");
+            ToolTipService.SetToolTip(DisponibleLegend, new ToolTip
+            {
+                Content = new TextBlock { Text = string.Join("\n", lines), FontSize = 11 }
+            });
+        }
+        else
+        {
+            ToolTipService.SetToolTip(DisponibleLegend, null);
+        }
     }
 
     private static double ComputeSprintPct(Models.JiraSprint? s)

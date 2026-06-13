@@ -33,7 +33,10 @@
             <TextBlock Text="Horas" FontWeight="Bold" FontSize="14" HorizontalAlignment="Center" />
             <local:RingGauge x:Name="HoursRing" Diameter="110" Thickness="12" HorizontalAlignment="Center"
                              UseFadeLoop="True" />
-            <TextBlock x:Name="HoursLegend" TextAlignment="Center" Opacity="0.75" FontSize="11" />
+            <!-- "Disponible" is the hover target for the per-issue breakdown
+                 tooltip; ToolTipService.ToolTip is set from code-behind. -->
+            <TextBlock x:Name="DisponibleLegend" TextAlignment="Center" Opacity="0.75" FontSize="11" />
+            <TextBlock x:Name="QuemadasLegend" TextAlignment="Center" Opacity="0.75" FontSize="11" />
         </StackPanel>
 
         <!-- Right decorative line -->

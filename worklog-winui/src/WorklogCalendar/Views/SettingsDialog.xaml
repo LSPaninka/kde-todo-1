@@ -71,7 +71,7 @@
                                    SpinButtonPlacementMode="Inline" Grid.Column="1" />
                     </Grid>
 
-                    <CheckBox x:Name="ShowGauges" Content="Mostrar gauges Sprint + Horas (solo modo 9h, fuente Jira o Jira/Clockify)"
+                    <CheckBox x:Name="ShowGauges" Content="Mostrar panel inferior (anillos Sprint/Horas ↔ heatmap mensual, conmutable con el switch)"
                               Margin="0,8,0,0" />
 
                     <!-- Sprint (experimental) -->

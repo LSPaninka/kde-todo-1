@@ -42,6 +42,23 @@ public sealed partial class MainWindow : Window
         Calendar.JiraStore = _jira;
         Calendar.ClockifyStore = _clockify;
         Gauges.Store = _jira;
+        Heatmap.JiraStore = _jira;
+        Heatmap.ClockifyStore = _clockify;
+        Heatmap.DaySelected += async date =>
+        {
+            _weekStart = WeekStartOf(date);
+            await RefreshAsync();
+        };
+        // Vertical switch between rings and heatmap.
+        RingsSwitchBtn.Click += (s, e) => SetBottomView("rings");
+        HeatmapSwitchBtn.Click += (s, e) => SetBottomView("heatmap");
+        // Mouse wheel over the bottom panel flips the view (down=heatmap, up=rings).
+        BottomPanel.PointerWheelChanged += (s, e) =>
+        {
+            var d = e.GetCurrentPoint(BottomPanel).Properties.MouseWheelDelta;
+            if (d == 0) return;
+            SetBottomView(d < 0 ? "heatmap" : "rings");
+        };
 
         Title = "Worklog Calendar";
         ApplyWindowGeometry();
@@ -220,17 +237,76 @@ public sealed partial class MainWindow : Window
         var tasks = new List<Task>();
         if (Calendar.ShowJira) tasks.Add(_jira.FetchWeekAsync(_weekStart));
         if (Calendar.ShowClockify) tasks.Add(_clockify.FetchWeekAsync(_weekStart));
-        if (ShowGauges) tasks.Add(_jira.FetchSprintInfoAsync());
+        // Rings need the sprint info; heatmap fetches its own month data.
+        if (ShowBottomPanel && BottomIsRings) tasks.Add(_jira.FetchSprintInfoAsync());
         try { await Task.WhenAll(tasks); }
         catch (Exception ex) { System.Diagnostics.Debug.WriteLine("Refresh error: " + ex); }
-        if (ShowGauges) Gauges.StartFillAnimation();
+        if (ShowBottomPanel && BottomIsRings) Gauges.StartFillAnimation();
+        if (ShowBottomPanel && BottomIsHeatmap) _ = Heatmap.Refresh();
     }
 
-    /// <summary>Gauges only when source is Jira-ish AND view mode is 9h AND toggle is on.</summary>
-    private bool ShowGauges =>
-        _settings.ShowSprintGauges
-        && _settings.ViewMode == "9h"
-        && (_settings.Source == "jira" || _settings.Source == "jira-clockify");
+    /// <summary>The bottom panel shows whenever the master toggle is on (every mode).</summary>
+    private bool ShowBottomPanel => _settings.ShowSprintGauges;
+    private bool BottomIsRings => _settings.BottomView != "heatmap";
+    private bool BottomIsHeatmap => _settings.BottomView == "heatmap";
+
+    private void SetBottomView(string view)
+    {
+        if (_settings.BottomView == view) return;
+        _settings.BottomView = view;
+        SettingsService.Save(_settings);
+        UpdateBottomPanel();
+        AnimateBottomSwitch(view == "heatmap");
+        if (view == "rings") { _ = _jira.FetchSprintInfoAsync(); Gauges.StartFillAnimation(); }
+        else _ = Heatmap.Refresh();
+    }
+
+    private void UpdateBottomPanel()
+    {
+        BottomPanel.Visibility = ShowBottomPanel ? Visibility.Visible : Visibility.Collapsed;
+        Gauges.Visibility = BottomIsRings ? Visibility.Visible : Visibility.Collapsed;
+        Heatmap.Visibility = BottomIsHeatmap ? Visibility.Visible : Visibility.Collapsed;
+        RingsSwitchBtn.IsChecked = BottomIsRings;
+        HeatmapSwitchBtn.IsChecked = BottomIsHeatmap;
+    }
+
+    /// <summary>Fade + slide the bottom content when switching views.</summary>
+    private void AnimateBottomSwitch(bool toHeatmap)
+    {
+        int dir = toHeatmap ? 1 : -1;
+        var sb = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
+
+        var fadeOut = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation
+        { To = 0, Duration = TimeSpan.FromMilliseconds(130) };
+        Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(fadeOut, BottomContent);
+        Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(fadeOut, "Opacity");
+        sb.Children.Add(fadeOut);
+
+        var slideOut = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation
+        { To = dir * 26, Duration = TimeSpan.FromMilliseconds(130) };
+        Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(slideOut, BottomSlide);
+        Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(slideOut, "Y");
+        sb.Children.Add(slideOut);
+
+        sb.Completed += (s, e) =>
+        {
+            UpdateBottomPanel();
+            BottomSlide.Y = -dir * 26;
+            var inb = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
+            var fadeIn = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation
+            { To = 1, Duration = TimeSpan.FromMilliseconds(160) };
+            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(fadeIn, BottomContent);
+            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(fadeIn, "Opacity");
+            inb.Children.Add(fadeIn);
+            var slideIn = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation
+            { To = 0, Duration = TimeSpan.FromMilliseconds(160) };
+            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(slideIn, BottomSlide);
+            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(slideIn, "Y");
+            inb.Children.Add(slideIn);
+            inb.Begin();
+        };
+        sb.Begin();
+    }
 
     private void UpdateHeaderLabels()
     {
@@ -248,7 +324,7 @@ public sealed partial class MainWindow : Window
         SyncProjectCombo.Visibility = combined ? Visibility.Visible : Visibility.Collapsed;
         SyncProjectSwatch.Visibility = combined ? Visibility.Visible : Visibility.Collapsed;
         SyncJiraToClockifyBtn.Visibility = combined ? Visibility.Visible : Visibility.Collapsed;
-        Gauges.Visibility = ShowGauges ? Visibility.Visible : Visibility.Collapsed;
+        UpdateBottomPanel();
     }
 
     // The status label always renders a non-breaking space so its height
