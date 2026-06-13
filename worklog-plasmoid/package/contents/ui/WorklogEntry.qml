@@ -43,13 +43,12 @@ Rectangle {
 
     signal clicked()
     // Emitted on drag release with the pixel delta from the original
-    // x/y. WorklogCalendar maps to (day, slot) deltas and triggers an
-    // API update.
-    signal moveRequested(real deltaX, real deltaY)
+    // x/y. `fine` = Shift was held → snap to 10-min instead of 30-min.
+    signal moveRequested(real deltaX, real deltaY, bool fine)
     // Edge-resize signals: deltaY is the difference between the block's
     // current y/height and the value it had at press time.
-    signal resizeTopRequested(real deltaY)
-    signal resizeBottomRequested(real deltaH)
+    signal resizeTopRequested(real deltaY, bool fine)
+    signal resizeBottomRequested(real deltaH, bool fine)
     // Duplicate button in the top-right corner.
     signal duplicateRequested()
 
@@ -216,6 +215,12 @@ Rectangle {
         property real _pressParentX: 0
         property real _pressParentY: 0
         property bool _dragged: false
+        property bool _fine: false      // Shift held → 10-min granularity
+
+        // Vertical snap step in px: a full row (30 min) normally, a third
+        // of a row (10 min) when Shift is held.
+        function _stepPx() { return _fine ? block.rowHeight / 3 : block.rowHeight; }
+        function _snapMinH() { return _fine ? block.rowHeight / 3 : block.rowHeight; }
 
         cursorShape: {
             if (pressed) {
@@ -230,6 +235,7 @@ Rectangle {
 
         onPressed: function(mouse) {
             _dragged    = false;
+            _fine       = (mouse.modifiers & Qt.ShiftModifier) !== 0;
             _origBlockX = block.x;
             _origBlockY = block.y;
             _origH      = block.height;
@@ -259,18 +265,20 @@ Rectangle {
             var p  = ma.mapToItem(block.parent, mouse.x, mouse.y);
             var dx = p.x - _pressParentX;
             var dy = p.y - _pressParentY;
+            var stepPx = _stepPx();      // 30-min row, or 10-min third with Shift
+            var minH   = _snapMinH();    // smallest block height (10 or 30 min)
 
             if (_mode === 1) {
                 // Manual drag with cell-snapping. The block hops between
-                // grid cells; there's no smooth follow. Y is clamped to
-                // [0, columnHeight - height] so the block can't escape
-                // the visible hour range (9:00–18:00 in 9h mode, etc.).
+                // grid steps (full rows, or 10-min thirds with Shift). Y is
+                // clamped to [0, columnHeight - height] so the block can't
+                // escape the visible hour range (9:00–18:00 in 9h mode).
                 if (!_dragged && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
                 _dragged = true;
                 var snappedDx = block.columnWidth > 0
                               ? Math.round(dx / block.columnWidth) * block.columnWidth
                               : 0;
-                var snappedDy = Math.round(dy / block.rowHeight) * block.rowHeight;
+                var snappedDy = Math.round(dy / stepPx) * stepPx;
                 var newY = _origBlockY + snappedDy;
                 if (block.columnHeight > 0) {
                     var maxY = Math.max(0, block.columnHeight - block.height);
@@ -280,31 +288,28 @@ Rectangle {
                 block.x = _origBlockX + snappedDx;
                 block.y = newY;
             } else if (_mode === 2) {
-                // Top resize — snap delta to whole rows so the top edge
-                // always lands on a slot boundary, clamped to row 0
-                // (= the view's startHour).
+                // Top resize — snap to the current step so the top edge
+                // lands on a 30- or 10-min boundary, clamped to row 0.
                 if (Math.abs(dy) > 2) _dragged = true;
-                var stepY = Math.round(dy / block.rowHeight) * block.rowHeight;
+                var stepY = Math.round(dy / stepPx) * stepPx;
                 var newY2 = _origBlockY + stepY;
                 var newH  = _origH - stepY;
                 if (newY2 < 0) { newH += newY2; newY2 = 0; }
-                if (newH < block.rowHeight) {
-                    newH = block.rowHeight;
-                    newY2 = _origBlockY + _origH - block.rowHeight;
+                if (newH < minH) {
+                    newH = minH;
+                    newY2 = _origBlockY + _origH - minH;
                 }
                 block.y = newY2;
                 block.height = newH;
             } else if (_mode === 3) {
-                // Bottom resize — snap height delta to whole rows. Clamp
-                // so the bottom edge stays inside columnHeight (= the
-                // view's endHour), preventing the block from spilling
-                // past 18:00 in 9h mode.
+                // Bottom resize — snap height delta to the current step.
+                // Clamp so the bottom edge stays inside columnHeight.
                 if (Math.abs(dy) > 2) _dragged = true;
-                var stepDH = Math.round(dy / block.rowHeight) * block.rowHeight;
+                var stepDH = Math.round(dy / stepPx) * stepPx;
                 var newHb  = _origH + stepDH;
-                if (newHb < block.rowHeight) newHb = block.rowHeight;
+                if (newHb < minH) newHb = minH;
                 if (block.columnHeight > 0) {
-                    var maxH = Math.max(block.rowHeight, block.columnHeight - block.y);
+                    var maxH = Math.max(minH, block.columnHeight - block.y);
                     if (newHb > maxH) newHb = maxH;
                 }
                 block.height = newHb;
@@ -319,11 +324,11 @@ Rectangle {
             _mode = 0;
             if (!_dragged) return;   // tap → handled by onClicked
             if (m === 1) {
-                block.moveRequested(block.x - _origBlockX, block.y - _origBlockY);
+                block.moveRequested(block.x - _origBlockX, block.y - _origBlockY, _fine);
             } else if (m === 2) {
-                block.resizeTopRequested(block.y - _origBlockY);
+                block.resizeTopRequested(block.y - _origBlockY, _fine);
             } else if (m === 3) {
-                block.resizeBottomRequested(block.height - _origH);
+                block.resizeBottomRequested(block.height - _origH, _fine);
             }
         }
 

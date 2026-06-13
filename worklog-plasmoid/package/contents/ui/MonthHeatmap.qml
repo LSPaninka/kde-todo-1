@@ -30,6 +30,10 @@ Item {
     property var jiraStore
     property int monthOffset: 0   // 0 = current month, -1 = last month
 
+    // Emitted when a day cell is clicked — carries that day's Date so the
+    // calendar can jump to its week.
+    signal daySelected(var date)
+
     implicitHeight: col.implicitHeight
 
     // Fixed row heights so the left icon column lines up with the grid.
@@ -61,6 +65,18 @@ Item {
 
     function _curKey() { return year + "-" + month; }
 
+    // Reference date computed straight from monthOffset (NOT via the `year`
+    // / `month` bindings, which can still read the OLD value when this runs
+    // inside onMonthOffsetChanged — that was why a freshly-changed month
+    // showed empty until a manual refresh).
+    function _refDate() {
+        var d = new Date();
+        d.setDate(1);
+        d.setMonth(d.getMonth() + monthOffset);
+        d.setHours(0, 0, 0, 0);
+        return d;
+    }
+
     function refresh() {
         // Wipe immediately AND invalidate the keys so nothing from the old
         // month can render while the new fetch is in flight.
@@ -68,7 +84,8 @@ Item {
         clockifyKey = ""; jiraKey = "";
         _v++;
         var req = ++_reqId;
-        var y = year, m = month;
+        var rd = _refDate();
+        var y = rd.getFullYear(), m = rd.getMonth();
         var key = y + "-" + m;
         if (clockifyStore && clockifyStore.fetchMonthTotals) {
             clockifyStore.fetchMonthTotals(y, m, function(ok, t) {
@@ -130,6 +147,7 @@ Item {
 
     component HoursCell: Rectangle {
         property real hours: 0
+        property int day: 0
         Layout.fillWidth: true
         Layout.preferredHeight: heat.cellRowH
         radius: 2
@@ -155,6 +173,8 @@ Item {
             id: cellMA
             anchors.fill: parent
             hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: heat.daySelected(new Date(heat.year, heat.month, parent.day))
         }
     }
 
@@ -273,8 +293,8 @@ Item {
                         font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
                         font.bold: !weekend
                     }
-                    HoursCell { hours: (heat._v, heat._clkHours(day)) }
-                    HoursCell { hours: (heat._v, heat._jiraHours(day)) }
+                    HoursCell { day: parent.day; hours: (heat._v, heat._clkHours(parent.day)) }
+                    HoursCell { day: parent.day; hours: (heat._v, heat._jiraHours(parent.day)) }
                 }
             }
         }

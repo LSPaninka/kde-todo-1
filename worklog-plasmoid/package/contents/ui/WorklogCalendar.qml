@@ -50,31 +50,38 @@ Item {
         var durMs = newDurationSec * 1000;
         if (newStartMs < wsMs)         newStartMs = wsMs;
         if (newStartMs + durMs > weMs) newStartMs = weMs - durMs;
-        if (newDurationSec < 1800)     newDurationSec = 1800;   // 30-min floor
+        if (newDurationSec < 600)      newDurationSec = 600;   // 10-min floor
         if (newStartMs === entry.started && newDurationSec === entry.durationSec) return;
         if (isJira) moveJiraRequested(entry, newStartMs, newDurationSec);
         else        moveClockifyRequested(entry, newStartMs, newDurationSec);
     }
 
-    function _handleMove(entry, deltaX, deltaY, currentDayWidth, isJira) {
-        var slots  = Math.round(deltaY / cal.rowHeight);
-        var days   = currentDayWidth > 0 ? Math.round(deltaX / currentDayWidth) : 0;
-        if (slots === 0 && days === 0) return;
-        var newStart = entry.started + days * 86400000 + slots * 30 * 60 * 1000;
+    // px → snapped minutes. `fine` (Shift) snaps to 10 min, else 30.
+    function _pxToSnappedMin(px, fine) {
+        var g = fine ? 10 : 30;
+        var rawMin = (px / cal.rowHeight) * 30;
+        return Math.round(rawMin / g) * g;
+    }
+
+    function _handleMove(entry, deltaX, deltaY, currentDayWidth, isJira, fine) {
+        var stepMin = _pxToSnappedMin(deltaY, fine);
+        var days    = currentDayWidth > 0 ? Math.round(deltaX / currentDayWidth) : 0;
+        if (stepMin === 0 && days === 0) return;
+        var newStart = entry.started + days * 86400000 + stepMin * 60000;
         _emitChange(entry, newStart, entry.durationSec, isJira);
     }
-    function _handleResizeTop(entry, deltaY, isJira) {
-        var slots = Math.round(deltaY / cal.rowHeight);
-        if (slots === 0) return;
+    function _handleResizeTop(entry, deltaY, isJira, fine) {
+        var stepMin = _pxToSnappedMin(deltaY, fine);
+        if (stepMin === 0) return;
         // deltaY positive → started later, duration shrinks by same.
-        var newStart = entry.started + slots * 30 * 60 * 1000;
-        var newDur   = entry.durationSec - slots * 1800;
+        var newStart = entry.started + stepMin * 60000;
+        var newDur   = entry.durationSec - stepMin * 60;
         _emitChange(entry, newStart, newDur, isJira);
     }
-    function _handleResizeBottom(entry, deltaH, isJira) {
-        var slots = Math.round(deltaH / cal.rowHeight);
-        if (slots === 0) return;
-        var newDur = entry.durationSec + slots * 1800;
+    function _handleResizeBottom(entry, deltaH, isJira, fine) {
+        var stepMin = _pxToSnappedMin(deltaH, fine);
+        if (stepMin === 0) return;
+        var newDur = entry.durationSec + stepMin * 60;
         _emitChange(entry, entry.started, newDur, isJira);
     }
 
@@ -174,10 +181,16 @@ Item {
         var slotsFromMidnight = Math.floor(localMs / (30 * 60 * 1000));
         return slotsFromMidnight - startHour * 2;
     }
-    function _yForEntry(entry, dayIdx) { return _slotOfMs(entry.started, dayIdx) * rowHeight; }
+    // Minute-precise positioning so 10-min blocks render at their real
+    // size (1 row = 30 min = rowHeight).
+    function _yForEntry(entry, dayIdx) {
+        var dayStart = _dayMs(dayIdx);
+        var minFromViewStart = (entry.started - dayStart) / 60000 - startHour * 60;
+        return (minFromViewStart / 30) * rowHeight;
+    }
     function _heightForEntry(entry) {
-        var slots = Math.max(1, Math.round(entry.durationSec / 1800));
-        return slots * rowHeight;
+        var h = (entry.durationSec / 1800) * rowHeight;   // 1800s = 30min = rowHeight
+        return Math.max(rowHeight / 3, h);                 // floor ≈ 10-min visual
     }
 
     QQC2.ScrollView {
@@ -361,14 +374,19 @@ Item {
                         preventStealing: true
                         property bool isDragging: false
                         property bool _pressLeft: true   // for combined: which half started the drag
+                        property bool _fine: false       // Shift held → 10-min granularity
                         property real _pressY: 0
                         property real _curY: 0
                         property real _snappedTop: 0
                         property real _snappedBottom: 0
 
+                        // Snap a pixel offset to a 30-min row or, with Shift,
+                        // a 10-min third of a row — returned in pixels.
+                        function _stepPx() { return _fine ? cal.rowHeight / 3 : cal.rowHeight; }
                         function _snap(y) {
-                            var s = Math.max(0, Math.min(cal.slotsPerDay, Math.round(y / cal.rowHeight)));
-                            return s * cal.rowHeight;
+                            var step = _stepPx();
+                            var maxPx = cal.slotsPerDay * cal.rowHeight;
+                            return Math.max(0, Math.min(maxPx, Math.round(y / step) * step));
                         }
                         function _snapX() {
                             if (!cal._isCombined) return 0;
@@ -377,13 +395,19 @@ Item {
                         function _snapWidth() {
                             return cal._isCombined ? dayCol.width / 2 : dayCol.width;
                         }
+                        // Pixel offset within the day → absolute ms.
+                        function _pxToMs(px) {
+                            var minFromStart = (px / cal.rowHeight) * 30;
+                            return cal._dayMs(dayCol.dayIndex) + (cal.startHour * 60 + minFromStart) * 60000;
+                        }
 
                         onPressed: function(mouse) {
                             _pressLeft = cal._isCombined ? (mouse.x < dayCol.width / 2) : true;
+                            _fine = (mouse.modifiers & Qt.ShiftModifier) !== 0;
                             _pressY = mouse.y;
                             _curY = mouse.y;
                             _snappedTop    = _snap(Math.min(_pressY, _curY));
-                            _snappedBottom = _snap(Math.max(_pressY, _curY)) + cal.rowHeight;
+                            _snappedBottom = _snap(Math.max(_pressY, _curY)) + _stepPx();
                             isDragging = true;
                         }
                         onPositionChanged: function(mouse) {
@@ -392,16 +416,14 @@ Item {
                             var lo = Math.min(_pressY, _curY);
                             var hi = Math.max(_pressY, _curY);
                             _snappedTop    = _snap(lo);
-                            _snappedBottom = Math.max(_snappedTop + cal.rowHeight, _snap(hi) + cal.rowHeight);
+                            _snappedBottom = Math.max(_snappedTop + _stepPx(), _snap(hi) + _stepPx());
                         }
                         onReleased: function(mouse) {
                             if (!isDragging) return;
                             isDragging = false;
-                            var topSlot = Math.round(_snappedTop / cal.rowHeight);
-                            var botSlot = Math.round(_snappedBottom / cal.rowHeight);
-                            var startMs = cal._msAtSlot(dayCol.dayIndex, topSlot);
-                            var endMs   = cal._msAtSlot(dayCol.dayIndex, botSlot);
-                            if (endMs <= startMs) endMs = startMs + 30 * 60 * 1000;
+                            var startMs = _pxToMs(_snappedTop);
+                            var endMs   = _pxToMs(_snappedBottom);
+                            if (endMs <= startMs) endMs = startMs + (_fine ? 10 : 30) * 60 * 1000;
 
                             if (cal._isCombined) {
                                 if (_pressLeft) cal.createJiraRequested(cal._dayMs(dayCol.dayIndex), startMs, endMs);
@@ -429,11 +451,11 @@ Item {
                             columnWidth: dayCol.width
                             rowHeight: cal.rowHeight
                             onClicked: cal.editJiraRequested(entry)
-                            onMoveRequested: function(dx, dy) {
-                                cal._handleMove(entry, dx, dy, dayCol.width, true);
+                            onMoveRequested: function(dx, dy, fine) {
+                                cal._handleMove(entry, dx, dy, dayCol.width, true, fine);
                             }
-                            onResizeTopRequested:    function(dy) { cal._handleResizeTop(entry, dy, true); }
-                            onResizeBottomRequested: function(dh) { cal._handleResizeBottom(entry, dh, true); }
+                            onResizeTopRequested:    function(dy, fine) { cal._handleResizeTop(entry, dy, true, fine); }
+                            onResizeBottomRequested: function(dh, fine) { cal._handleResizeBottom(entry, dh, true, fine); }
                             onDuplicateRequested:    function() { cal.duplicateJiraRequested(entry); }
                         }
                     }
@@ -455,11 +477,11 @@ Item {
                             columnWidth: dayCol.width
                             rowHeight: cal.rowHeight
                             onClicked: cal.editClockifyRequested(entry)
-                            onMoveRequested: function(dx, dy) {
-                                cal._handleMove(entry, dx, dy, dayCol.width, false);
+                            onMoveRequested: function(dx, dy, fine) {
+                                cal._handleMove(entry, dx, dy, dayCol.width, false, fine);
                             }
-                            onResizeTopRequested:    function(dy) { cal._handleResizeTop(entry, dy, false); }
-                            onResizeBottomRequested: function(dh) { cal._handleResizeBottom(entry, dh, false); }
+                            onResizeTopRequested:    function(dy, fine) { cal._handleResizeTop(entry, dy, false, fine); }
+                            onResizeBottomRequested: function(dh, fine) { cal._handleResizeBottom(entry, dh, false, fine); }
                             onDuplicateRequested:    function() { cal.duplicateClockifyRequested(entry); }
                         }
                     }

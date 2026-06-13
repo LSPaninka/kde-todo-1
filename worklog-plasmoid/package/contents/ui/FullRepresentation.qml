@@ -397,6 +397,23 @@ Item {
                     visible: full._displayBottomView === "heatmap"
                     clockifyStore: full.clockifyStore
                     jiraStore: full.jiraStore
+                    // Clicking a day cell jumps the calendar to that day's week.
+                    onDaySelected: function(date) {
+                        full.currentWeekStart = full._sundayOf(date);
+                        full.syncNow();
+                    }
+                }
+
+                // Wheel over the bottom panel switches the view: down →
+                // heatmap, up → rings. WheelHandler doesn't consume clicks,
+                // so heatmap cell clicks / ring interaction still work.
+                WheelHandler {
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                    onWheel: function(event) {
+                        if (event.angleDelta.y === 0) return;
+                        plasmoid.configuration.worklogBottomView =
+                            (event.angleDelta.y < 0) ? "heatmap" : "rings";
+                    }
                 }
             }
 
@@ -406,15 +423,13 @@ Item {
                 Layout.alignment: Qt.AlignVCenter
                 spacing: 2
 
+                // Buttons only set the config; the onWorklogBottomViewChanged
+                // Connections handles the animation + refresh of the new view.
                 PlasmaComponents3.ToolButton {
                     icon.name: "office-chart-ring"
                     checkable: true
                     checked: full._bottomIsRings
-                    onClicked: {
-                        plasmoid.configuration.worklogBottomView = "rings";
-                        if (jiraStore) jiraStore.fetchSprintInfo();
-                        sprintGauges.startFillAnimation();
-                    }
+                    onClicked: plasmoid.configuration.worklogBottomView = "rings"
                     PlasmaComponents3.ToolTip.text: i18n("Ver anillos (Sprint / Horas)")
                     PlasmaComponents3.ToolTip.visible: hovered
                     PlasmaComponents3.ToolTip.delay: 500
@@ -423,10 +438,7 @@ Item {
                     icon.name: "view-calendar-month"
                     checkable: true
                     checked: full._bottomIsHeatmap
-                    onClicked: {
-                        plasmoid.configuration.worklogBottomView = "heatmap";
-                        monthHeatmap.refresh();
-                    }
+                    onClicked: plasmoid.configuration.worklogBottomView = "heatmap"
                     PlasmaComponents3.ToolTip.text: i18n("Ver heatmap mensual")
                     PlasmaComponents3.ToolTip.visible: hovered
                     PlasmaComponents3.ToolTip.delay: 500
@@ -710,10 +722,20 @@ Item {
     }
 
     // Animate the bottom-panel switch whenever the view changes (from the
-    // vertical switch buttons or the config dialog).
+    // vertical switch buttons, the mouse wheel, or the config dialog) and
+    // refresh the newly-shown view.
     Connections {
         target: plasmoid.configuration
-        function onWorklogBottomViewChanged() { full._animateBottomSwitch(); }
+        function onWorklogBottomViewChanged() {
+            full._animateBottomSwitch();
+            if (!full._showBottomPanel) return;
+            if (full._bottomIsRings) {
+                if (jiraStore) jiraStore.fetchSprintInfo();
+                sprintGauges.startFillAnimation();
+            } else {
+                monthHeatmap.refresh();
+            }
+        }
     }
 
     // Re-trigger the fill animation every time the popup re-opens (Plasma

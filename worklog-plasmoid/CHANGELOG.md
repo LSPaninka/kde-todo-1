@@ -1,5 +1,31 @@
 # Changelog — Jira / Clockify Worklog Calendar
 
+## 0.7.0 — Heatmap nav fix + click-to-jump + wheel switch + Shift 10-min snap
+
+- **Heatmap empty-on-month-change fixed.** `refresh()` now computes the
+  target month straight from `monthOffset` instead of reading the
+  `year`/`month` bindings, which could still return the OLD month when
+  the refresh ran inside `onMonthOffsetChanged` — that stale key made
+  the just-changed month render empty until a manual refresh.
+- **Click a heatmap cell to jump to that day.** Day cells are now
+  clickable; clicking one navigates the calendar to that day's week
+  (and re-syncs). New `daySelected(date)` signal on `MonthHeatmap`.
+- **Mouse wheel switches the bottom view.** Scrolling down over the
+  bottom panel switches to the heatmap, scrolling up to the rings
+  (`WheelHandler`, doesn't consume clicks). The switch buttons now just
+  set the config; a single `onWorklogBottomViewChanged` handler drives
+  the animation and refresh for buttons, wheel and config dialog alike.
+- **Shift = 10-minute granularity.** Holding Shift while drag-creating a
+  block snaps to 10-minute steps instead of 30 (so 10/20/40-min blocks
+  are possible); the same applies to moving and edge-resizing existing
+  blocks. Without Shift it stays at 30 min as before. The grid rows are
+  unchanged — only the block gets shorter/positioned precisely. Blocks
+  now render at minute precision (`_yForEntry` / `_heightForEntry`), the
+  duration floor dropped from 30 to 10 min, and the Shift state flows
+  through the move/resize signals as a `fine` flag.
+
+Bumped metadata 0.6.1 → 0.7.0.
+
 ## 0.6.1 — Heatmap layout, fixed switch, robust month update, switch fade
 
 - **Icon column is now a normal column.** The left row-icon column
