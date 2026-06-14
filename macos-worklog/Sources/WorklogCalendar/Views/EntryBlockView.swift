@@ -93,12 +93,14 @@ struct EntryBlockView: View {
     /// distinguirlo visualmente del lila de Jira.
     let useProjectColor: Bool
     let onTap: () -> Void
-    /// Move: el padre snappea Y a slots y X al ancho de columna.
-    let onMove: (_ dx: CGFloat, _ dy: CGFloat) -> Void
+    /// Move: el padre snappea Y a slots y X al ancho de columna.  El
+    /// flag `fine` es `true` si Shift estaba apretado al iniciar el
+    /// drag → granularidad de 10 min en vez de 30.
+    let onMove: (_ dx: CGFloat, _ dy: CGFloat, _ fine: Bool) -> Void
     /// Resize del borde superior: el padre cambia `started + duration`.
-    let onResizeTop: (CGFloat) -> Void
+    let onResizeTop: (_ dy: CGFloat, _ fine: Bool) -> Void
     /// Resize del borde inferior: el padre cambia sólo `duration`.
-    let onResizeBottom: (CGFloat) -> Void
+    let onResizeBottom: (_ dh: CGFloat, _ fine: Bool) -> Void
     /// Botón duplicar (esquina superior derecha).
     let onDuplicate: () -> Void
     /// Altura de cada fila de 30 min (necesaria para snappear el offset
@@ -125,6 +127,9 @@ struct EntryBlockView: View {
     @State private var resizeTopDy: CGFloat = 0
     @State private var resizeHeightDelta: CGFloat = 0
     @State private var hovered: Bool = false
+    /// Captura del estado de Shift al iniciar el drag — congelamos para
+    /// que cambiar el modificador en medio no toggleée la granularidad.
+    @State private var dragFine: Bool = false
 
     enum DragMode { case none, move, resizeTop, resizeBottom }
 
@@ -200,21 +205,28 @@ struct EntryBlockView: View {
                                 if y < edgePx                       { dragMode = .resizeTop }
                                 else if y > baseHeight - edgePx     { dragMode = .resizeBottom }
                                 else                                 { dragMode = .move }
+                                // Capturamos Shift una sola vez al
+                                // iniciar el drag (el plasmoide hace lo
+                                // mismo).  Cambiar el modificador en
+                                // medio del drag no toggleea.
+                                dragFine = NSEvent.modifierFlags.contains(.shift)
                             }
                             apply(translation: value.translation, baseHeight: baseHeight)
                         }
                         .onEnded { value in
                             // dragOffset*/resize* ya quedaron snappeados
                             // del último `apply()`.  Sólo emitimos hacia
-                            // el padre con la translation cruda — su
-                            // propio `Int(round(deltaY / rowHeight))` lo
-                            // resnapeará idénticamente.
+                            // el padre con la translation cruda + el
+                            // `fine` capturado — su propio handler
+                            // re-snappea con el mismo step.
                             let mode = dragMode
+                            let fine = dragFine
                             dragMode = .none
+                            dragFine = false
                             switch mode {
-                            case .move:           onMove(value.translation.width, value.translation.height)
-                            case .resizeTop:      onResizeTop(value.translation.height)
-                            case .resizeBottom:   onResizeBottom(value.translation.height)
+                            case .move:           onMove(value.translation.width, value.translation.height, fine)
+                            case .resizeTop:      onResizeTop(value.translation.height, fine)
+                            case .resizeBottom:   onResizeBottom(value.translation.height, fine)
                             case .none: break
                             }
                         }
@@ -242,12 +254,17 @@ struct EntryBlockView: View {
     /// (`[0, columnHeight]`) para que el bloque no se escape por
     /// debajo de las 18:00 en modo 9h.
     private func apply(translation: CGSize, baseHeight: CGFloat) {
+        // Paso vertical en px del snap actual: una fila completa
+        // (30 min) o un tercio (10 min) con Shift.  `minH` es lo más
+        // chico que puede medir el bloque visualmente.
+        let stepPx: CGFloat = dragFine ? rowHeight / 3 : rowHeight
+        let minH: CGFloat = stepPx
         switch dragMode {
         case .move:
             let snappedX = columnWidth > 0
                 ? (translation.width / columnWidth).rounded() * columnWidth
                 : 0
-            var snappedY = (translation.height / rowHeight).rounded() * rowHeight
+            var snappedY = (translation.height / stepPx).rounded() * stepPx
             if columnHeight > 0 {
                 // newY (= blockYInColumn + snappedY) ∈ [0, columnHeight − height]
                 let maxOffset = Swift.max(0, columnHeight - blockYInColumn - baseHeight)
@@ -258,21 +275,20 @@ struct EntryBlockView: View {
             dragOffsetX = snappedX
             dragOffsetY = snappedY
         case .resizeTop:
-            // El delta se snappea a múltiplos de fila para que el borde
-            // top siempre caiga sobre un boundary de slot.  Clampamos
-            // contra el límite superior (= row 0 = startHour) y el
-            // mínimo de una fila de altura.
-            var dy = (translation.height / rowHeight).rounded() * rowHeight
-            if baseHeight - dy < rowHeight { dy = baseHeight - rowHeight }
+            // El delta se snappea al step actual para que el borde top
+            // caiga sobre un boundary de 30 / 10 min.  Clampamos contra
+            // el límite superior y el mínimo de altura.
+            var dy = (translation.height / stepPx).rounded() * stepPx
+            if baseHeight - dy < minH      { dy = baseHeight - minH }
             if blockYInColumn + dy < 0     { dy = -blockYInColumn }
             resizeTopDy = dy
             resizeHeightDelta = -dy
         case .resizeBottom:
-            var dh = (translation.height / rowHeight).rounded() * rowHeight
-            if baseHeight + dh < rowHeight { dh = rowHeight - baseHeight }
+            var dh = (translation.height / stepPx).rounded() * stepPx
+            if baseHeight + dh < minH { dh = minH - baseHeight }
             if columnHeight > 0 {
                 // newH = baseHeight + dh ≤ columnHeight - blockYInColumn
-                let maxDh = Swift.max(rowHeight - baseHeight,
+                let maxDh = Swift.max(minH - baseHeight,
                                       columnHeight - blockYInColumn - baseHeight)
                 if dh > maxDh { dh = maxDh }
             }

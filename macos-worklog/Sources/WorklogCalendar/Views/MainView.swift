@@ -127,6 +127,14 @@ struct MainView: View {
         .onChange(of: settings.remainingMode)  { _ in if showBottomPanel && bottomIsRings { jira.fetchSprintInfo { _ in } } }
         // Si recién encienden el panel inferior, traigamos los datos.
         .onChange(of: settings.showSprintGauges) { on in if on, bottomIsRings { jira.fetchSprintInfo { _ in } } }
+        // Cambio de vista del panel inferior (botones del switch, wheel
+        // o config) → refrescar la nueva vista.  El heatmap se refresca
+        // sólo via `.onAppear`; los rings sí necesitan re-fetch.
+        .onChange(of: settings.bottomView) { _ in
+            if showBottomPanel && bottomIsRings && ringsAvailable {
+                jira.fetchSprintInfo { _ in }
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .worklogOpenPreferences)) { _ in
             showSettings = true
         }
@@ -268,8 +276,8 @@ struct MainView: View {
 
     /// Panel inferior: a la izquierda el contenido (anillos o heatmap),
     /// a la derecha un switch vertical de dos botones-ícono para
-    /// alternar.  El switch siempre está visible — habilitarlo/no según
-    /// si los rings tienen datos.
+    /// alternar.  Scrollear con la rueda / trackpad sobre el panel
+    /// también alterna (down → heatmap, up → rings).
     private var bottomPanel: some View {
         HStack(alignment: .center, spacing: 8) {
             ZStack {
@@ -277,8 +285,15 @@ struct MainView: View {
                     SprintGauges(jira: jira)
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 } else {
-                    MonthHeatmap(jira: jira, clockify: clockify)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    MonthHeatmap(
+                        jira: jira,
+                        clockify: clockify,
+                        onDaySelected: { date in
+                            weekStart = MainView.sundayOf(date)
+                            syncNow()
+                        }
+                    )
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
             }
             .frame(maxWidth: .infinity)
@@ -298,6 +313,25 @@ struct MainView: View {
                     enabled: true
                 )
             }
+        }
+        .background(WheelCatcher { dy in handleBottomPanelWheel(dy) })
+    }
+
+    /// Acumulador para evitar que un swipe largo de trackpad dispare
+    /// múltiples toggles.  Reseteamos en cuanto cruzamos el umbral.
+    @State private var wheelAccum: CGFloat = 0
+    private func handleBottomPanelWheel(_ dy: CGFloat) {
+        // El trackpad manda muchos eventos chiquitos con el mismo signo:
+        // acumulamos hasta cruzar un umbral, después clasificamos según
+        // signo y reseteamos.
+        wheelAccum += dy
+        let threshold: CGFloat = 8
+        if wheelAccum >= threshold {
+            settings.bottomView = "rings"     // scroll up
+            wheelAccum = 0
+        } else if wheelAccum <= -threshold {
+            settings.bottomView = "heatmap"   // scroll down
+            wheelAccum = 0
         }
     }
 

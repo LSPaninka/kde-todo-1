@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Heatmap mensual con una columna por día y 4 filas:
@@ -15,6 +16,10 @@ import SwiftUI
 struct MonthHeatmap: View {
     @ObservedObject var jira: JiraWorklogStore
     @ObservedObject var clockify: ClockifyStore
+
+    /// Click sobre una celda de día → el padre salta el calendario a
+    /// esa semana.  Si es `nil`, las celdas no son clickeables.
+    var onDaySelected: ((Date) -> Void)? = nil
 
     /// 0 = mes actual, -1 = mes anterior.
     @State private var monthOffset: Int = 0
@@ -171,8 +176,24 @@ struct MonthHeatmap: View {
                 .font(.system(size: 10, weight: weekend ? .regular : .bold))
                 .foregroundColor(textColor)
                 .frame(height: numberRowH)
-            HoursCell(hours: clkHours(day), height: cellRowH)
-            HoursCell(hours: jiraHours(day), height: cellRowH)
+            HoursCell(hours: clkHours(day), height: cellRowH,
+                      onClick: clickHandler(forDay: day))
+            HoursCell(hours: jiraHours(day), height: cellRowH,
+                      onClick: clickHandler(forDay: day))
+        }
+    }
+
+    /// Devuelve el handler que la `HoursCell` ejecuta al click — `nil`
+    /// si el padre no quiere recibir clicks (la celda queda no
+    /// interactiva).
+    private func clickHandler(forDay day: Int) -> (() -> Void)? {
+        guard let onDaySelected else { return nil }
+        return {
+            var comps = DateComponents()
+            comps.year = year; comps.month = monthIndex + 1; comps.day = day
+            if let d = Calendar(identifier: .gregorian).date(from: comps) {
+                onDaySelected(d)
+            }
         }
     }
 
@@ -181,6 +202,9 @@ struct MonthHeatmap: View {
     struct HoursCell: View {
         let hours: Double
         let height: CGFloat
+        /// `nil` = sin click handler → la celda no es interactiva (la
+        /// versión read-only del heatmap).
+        let onClick: (() -> Void)?
         @State private var hovered: Bool = false
 
         var body: some View {
@@ -199,7 +223,15 @@ struct MonthHeatmap: View {
             }
             .frame(maxWidth: .infinity)
             .frame(height: height)
-            .onHover { hovered = $0 }
+            .contentShape(Rectangle())
+            .onHover { isHovering in
+                hovered = isHovering
+                if onClick != nil {
+                    if isHovering { NSCursor.pointingHand.set() }
+                    else          { NSCursor.arrow.set() }
+                }
+            }
+            .onTapGesture { onClick?() }
         }
     }
 
@@ -225,14 +257,23 @@ struct MonthHeatmap: View {
     }
 
     /// Limpia los totales del mes anterior, bumpea reqId y dispara los
-    /// dos fetchs en paralelo.
+    /// dos fetchs en paralelo.  Calcula el mes target a partir de
+    /// `monthOffset` localmente (no de las computed-props `year` /
+    /// `monthIndex`) para evitar el riesgo de stale state si `refresh`
+    /// se llama desde dentro de un `.onChange(of: monthOffset)`.
     func refresh() {
         clockifyTotals = [:]; jiraTotals = [:]
         clockifyKey = "";     jiraKey = ""
         reqId += 1
         let myReq = reqId
-        let y = year
-        let m = monthIndex
+
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = .current
+        var comps = cal.dateComponents([.year, .month], from: Date())
+        comps.day = 1
+        let first = cal.date(from: comps) ?? Date()
+        let target = cal.date(byAdding: .month, value: monthOffset, to: first) ?? first
+        let y = cal.component(.year, from: target)
+        let m = cal.component(.month, from: target) - 1
         let key = "\(y)-\(m)"
 
         clockify.fetchMonthTotals(year: y, monthIndex: m) { totals in
