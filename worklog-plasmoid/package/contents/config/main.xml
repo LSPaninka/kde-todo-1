@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE kcfg SYSTEM "http://www.kde.org/standards/kcfg/1.0/kcfg.dtd">
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0
+                          http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+
+    <!-- Intentionally shared with the Categorized ToDo plasmoid: both apps
+         declare the same Jira* kcfg entries against the same file, so the
+         credentials live in one place and editing them in either widget's
+         config dialog updates both. -->
+    <kcfgfile name="categorizedtodorc"/>
+
+    <group name="General">
+        <!-- Shared with the ToDo plasmoid -->
+        <entry name="jiraSite" type="String">
+            <label>Jira Cloud site, e.g. https://your-company.atlassian.net</label>
+            <default></default>
+        </entry>
+        <entry name="jiraEmail" type="String">
+            <label>Jira account email</label>
+            <default></default>
+        </entry>
+        <entry name="jiraToken" type="String">
+            <label>Jira API token (NOT password)</label>
+            <default></default>
+        </entry>
+
+        <!-- Worklog-specific config -->
+        <entry name="worklogViewMode" type="String">
+            <label>"9h" (09:00-18:00) or "24h" (00:00-24:00)</label>
+            <default>9h</default>
+        </entry>
+        <entry name="worklogPopupWidth" type="Int">
+            <label>Popup width in pixels</label>
+            <default>1100</default>
+            <min>600</min>
+            <max>2200</max>
+        </entry>
+        <entry name="worklogPopupHeight" type="Int">
+            <label>Popup height in pixels</label>
+            <default>750</default>
+            <min>400</min>
+            <max>1500</max>
+        </entry>
+        <entry name="worklogModalWidth" type="Int">
+            <label>Default width of the new/edit worklog modal, in pixels.</label>
+            <default>720</default>
+            <min>420</min>
+            <max>1600</max>
+        </entry>
+        <entry name="worklogModalHeight" type="Int">
+            <label>Default height of the new/edit worklog modal, in pixels.</label>
+            <default>520</default>
+            <min>360</min>
+            <max>1200</max>
+        </entry>
+        <entry name="worklogShowSprintGauges" type="Bool">
+            <label>Show the bottom panel (Sprint/Horas rings or the monthly heatmap) below the calendar, in every mode. The view is chosen by the vertical switch / worklogBottomView.</label>
+            <default>true</default>
+        </entry>
+        <entry name="worklogBottomView" type="String">
+            <label>Which bottom-panel view to show: "rings" (Sprint + Horas gauges), "subtasks" (subtask table) or "heatmap" (monthly hours table). Toggled by the vertical switch / mouse wheel on the right of the panel.</label>
+            <default>rings</default>
+        </entry>
+        <entry name="worklogShowSubtaskTable" type="Bool">
+            <label>Show the third bottom-panel section: a table of subtasks filtered by worklogSubtaskJql.</label>
+            <default>true</default>
+        </entry>
+        <entry name="worklogSubtaskJql" type="String">
+            <label>JQL that drives the subtask table. Default: my open subtasks.</label>
+            <default>issuetype in subTaskIssueTypes() AND assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC</default>
+        </entry>
+        <entry name="worklogSubtaskShowParent" type="Bool">
+            <label>Show the parent-issue column (with tooltip showing the parent's summary) in the subtask table.</label>
+            <default>true</default>
+        </entry>
+        <entry name="worklogSprintStrategy" type="String">
+            <label>How to discover the active sprint. One of:
+            "subtask-customfield" (default) — scan subtasks assigned to the user and pick the entry with state="active" in their sprint custom field. Works when only subtasks are assigned to the user.
+            "agile-board" — query /rest/agile/1.0/board/{id}/sprint?state=active with worklogSprintBoardId. Requires the board id.
+            "assignee-jql" — original 0.4.0 behavior using "sprint in openSprints() AND assignee = currentUser()". Use as a fallback.</label>
+            <default>subtask-customfield</default>
+        </entry>
+        <entry name="worklogSprintField" type="String">
+            <label>Name of the Jira issue field that holds the sprint array. Defaults to customfield_10020 which is the standard on most Jira Cloud instances; older / customised instances may use a different customfield_NNNNN id, or simply "sprint" if the field is exposed top-level.</label>
+            <default>customfield_10020</default>
+        </entry>
+        <entry name="worklogSprintBoardId" type="Int">
+            <label>Board id used by the agile-board strategy. Visible at /jira/software/c/projects/.../boards/&lt;id&gt; in the URL.</label>
+            <default>0</default>
+            <min>0</min>
+            <max>9999999</max>
+        </entry>
+        <entry name="worklogRemainingMode" type="String">
+            <label>How to compute the remaining hours used by the "Horas" ring (Disponible) and by the right column of the issue picker. "api" uses Jira's remainingEstimateSeconds (the value shown in the issue's Remaining field). "calculated" uses originalEstimateSeconds - timeSpentSeconds (clamped at 0), useful when remainingEstimate isn't kept in sync as you log time.</label>
+            <default>api</default>
+        </entry>
+        <entry name="worklogDailyTargetHours" type="Double">
+            <label>Daily target hours (used for the per-day diff in the totals row)</label>
+            <default>8</default>
+            <min>0</min>
+            <max>24</max>
+        </entry>
+        <entry name="worklogIssueJql" type="String">
+            <label>JQL used to populate the issue picker in the new-worklog modal</label>
+            <default>assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC</default>
+        </entry>
+        <entry name="worklogIssueMax" type="Int">
+            <label>Max issues to show in the picker</label>
+            <default>50</default>
+            <min>10</min>
+            <max>200</max>
+        </entry>
+        <entry name="worklogShowIssueSummary" type="Bool">
+            <label>Append the issue summary (title) after the key on each worklog block. The key is always shown.</label>
+            <default>false</default>
+        </entry>
+        <entry name="worklogSource" type="String">
+            <label>Which calendar data source to render: "jira", "clockify" or "jira-clockify" (split).</label>
+            <default>jira</default>
+        </entry>
+        <entry name="worklogPinned" type="Bool">
+            <label>If true the popup stays open after focus loss (toggled by the pin button).</label>
+            <default>false</default>
+        </entry>
+        <entry name="worklogDebug" type="Bool">
+            <label>Log every Jira request to plasmashell stdout</label>
+            <default>true</default>
+        </entry>
+
+        <!-- Clockify integration. Auth: X-Api-Key header (generated under
+             your Clockify account → Profile settings → API). The workspace
+             and user ids are resolved automatically on first connection
+             and cached here so subsequent fetches skip the lookup. -->
+        <entry name="clockifyApiKey" type="String">
+            <label>Clockify API key (Profile → Settings → API)</label>
+            <default></default>
+        </entry>
+        <entry name="clockifyWorkspaceId" type="String">
+            <label>Resolved workspace id (auto-filled after the first sync). Leave empty to use the user's default workspace.</label>
+            <default></default>
+        </entry>
+        <entry name="clockifyUserId" type="String">
+            <label>Resolved Clockify user id (auto-filled).</label>
+            <default></default>
+        </entry>
+        <entry name="clockifyDefaultProjectId" type="String">
+            <label>Optional project id to preselect in the new-entry modal and used by the Jira→Clockify sync.</label>
+            <default></default>
+        </entry>
+        <entry name="clockifyBillableDefault" type="Bool">
+            <label>Default value of the "billable" toggle when creating a new Clockify entry.</label>
+            <default>true</default>
+        </entry>
+        <entry name="clockifyDebug" type="Bool">
+            <label>Log every Clockify request to plasmashell stdout.</label>
+            <default>true</default>
+        </entry>
+    </group>
+</kcfg>
