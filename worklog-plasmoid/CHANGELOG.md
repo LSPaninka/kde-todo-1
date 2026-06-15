@@ -1,5 +1,42 @@
 # Changelog — Jira / Clockify Worklog Calendar
 
+## 0.8.0 — Subtask table (third bottom-panel section)
+
+- **Subtask table.** New third bottom-panel view — the vertical switch
+  now cycles through **Anillos → Tabla → Heatmap** (and the mouse wheel
+  walks the same order, clamping at the ends). Columns: code + title,
+  status badge (colored by Jira's `statusCategory.colorName`), available
+  hours (using the configured `worklogRemainingMode`), and an optional
+  parent column with the parent key + tooltip showing its summary.
+- **Left-click → detail modal.** Opens a read-only `SubtaskDetailDialog`
+  with status, parent, original / spent / available hours, description,
+  assignee and create/update stamps. "Abrir en Jira" button drives
+  `Qt.openUrlExternally` against `{site}/browse/{key}`.
+- **Right-click → context menu.** "Cambiar estado" submenu lists the
+  available Jira transitions (fetched lazily via
+  `/rest/api/3/issue/{key}/transitions`; rendered through an
+  `Instantiator` so the QML Menu picks up the dynamic items). Picking
+  one POSTs the transition and refetches the table. "Ver en Jira"
+  opens the issue page in the browser.
+- **Three new kcfg entries**, all in the General group:
+  `worklogShowSubtaskTable` (Bool, default `true`),
+  `worklogSubtaskJql` (default `issuetype in subTaskIssueTypes() AND
+  assignee = currentUser() AND statusCategory != Done ORDER BY updated
+  DESC`) and `worklogSubtaskShowParent` (Bool, default `true`). All
+  three are editable from Configurar → General. `worklogBottomView` now
+  accepts the value `"subtasks"` and falls back to `"rings"` if the
+  saved view is no longer available.
+- **Bottom-panel switch is index-driven.** The slide direction is
+  computed from the position of source/target inside `_bottomViews`
+  (rings=0, subtasks=1, heatmap=2) so animations stay correct whether
+  or not the subtask view is enabled.
+- **Store additions** on `JiraWorklogStore`: `subtasks` array,
+  `fetchSubtasks(cb)`, `fetchTransitions(key, cb)`,
+  `transitionIssue(key, transitionId, cb)`,
+  `fetchIssueDetail(key, cb)` and `issueWebUrl(key)`.
+
+Bumped metadata 0.7.0 → 0.8.0.
+
 ## 0.7.0 — Heatmap nav fix + click-to-jump + wheel switch + Shift 10-min snap
 
 - **Heatmap empty-on-month-change fixed.** `refresh()` now computes the

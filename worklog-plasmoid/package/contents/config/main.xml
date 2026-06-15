@@ -60,8 +60,20 @@
             <default>true</default>
         </entry>
         <entry name="worklogBottomView" type="String">
-            <label>Which bottom-panel view to show: "rings" (Sprint + Horas gauges) or "heatmap" (monthly hours table). Toggled by the vertical switch on the right of the panel.</label>
+            <label>Which bottom-panel view to show: "rings" (Sprint + Horas gauges), "subtasks" (subtask table) or "heatmap" (monthly hours table). Toggled by the vertical switch / mouse wheel on the right of the panel.</label>
             <default>rings</default>
+        </entry>
+        <entry name="worklogShowSubtaskTable" type="Bool">
+            <label>Show the third bottom-panel section: a table of subtasks filtered by worklogSubtaskJql.</label>
+            <default>true</default>
+        </entry>
+        <entry name="worklogSubtaskJql" type="String">
+            <label>JQL that drives the subtask table. Default: my open subtasks.</label>
+            <default>issuetype in subTaskIssueTypes() AND assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC</default>
+        </entry>
+        <entry name="worklogSubtaskShowParent" type="Bool">
+            <label>Show the parent-issue column (with tooltip showing the parent's summary) in the subtask table.</label>
+            <default>true</default>
         </entry>
         <entry name="worklogSprintStrategy" type="String">
             <label>How to discover the active sprint. One of:

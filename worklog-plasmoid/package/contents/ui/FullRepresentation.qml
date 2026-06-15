@@ -84,15 +84,35 @@ Item {
     }
 
     // The bottom panel (below the calendar) is available in EVERY mode and
-    // can show either the Sprint/Horas rings or the monthly heatmap. A
-    // vertical switch on its right flips between the two views. The whole
-    // panel can be hidden via worklogShowSprintGauges (master toggle).
+    // can show one of three views: Sprint/Horas rings, subtask table, or
+    // monthly heatmap. A vertical switch on its right cycles between them
+    // (order: rings → subtasks → heatmap). The whole panel can be hidden
+    // via worklogShowSprintGauges (master toggle). The middle view is
+    // gated by worklogShowSubtaskTable so users who don't want it get the
+    // old two-way behaviour.
     readonly property bool _showBottomPanel:
         plasmoid.configuration.worklogShowSprintGauges !== false
-    readonly property string _bottomView:
+    readonly property bool _showSubtaskTable:
+        plasmoid.configuration.worklogShowSubtaskTable !== false
+
+    // Available views, in switch order. "subtasks" only appears when the
+    // master toggle is on.
+    readonly property var _bottomViews: {
+        var arr = ["rings"];
+        if (_showSubtaskTable) arr.push("subtasks");
+        arr.push("heatmap");
+        return arr;
+    }
+
+    // Effective view. Fall back to "rings" if the saved value is no
+    // longer available (e.g. user disabled the subtask table).
+    readonly property string _rawBottomView:
         plasmoid.configuration.worklogBottomView || "rings"
-    readonly property bool _bottomIsRings:   _bottomView !== "heatmap"
-    readonly property bool _bottomIsHeatmap: _bottomView === "heatmap"
+    readonly property string _bottomView:
+        _bottomViews.indexOf(_rawBottomView) >= 0 ? _rawBottomView : "rings"
+    readonly property bool _bottomIsRings:    _bottomView === "rings"
+    readonly property bool _bottomIsSubtasks: _bottomView === "subtasks"
+    readonly property bool _bottomIsHeatmap:  _bottomView === "heatmap"
 
     // The view actually rendered — swapped at the midpoint of the switch
     // animation (see bottomSwitchAnim). Settable (not a binding).
@@ -100,16 +120,41 @@ Item {
 
     function _animateBottomSwitch() {
         if (_bottomView === _displayBottomView) return;
+        var oldIdx = _bottomViews.indexOf(_displayBottomView);
+        var newIdx = _bottomViews.indexOf(_bottomView);
+        if (oldIdx < 0) oldIdx = 0;
+        if (newIdx < 0) newIdx = 0;
         bottomSwitchAnim.stop();
-        bottomSwitchAnim.toHeatmap = (_bottomView === "heatmap");
+        bottomSwitchAnim.dir = (newIdx > oldIdx) ? 1 : -1;
         bottomSwitchAnim.start();
+    }
+
+    // Wheel cycles through _bottomViews. Clamps at the ends — no wrap.
+    function _cycleBottomView(delta) {
+        var idx = _bottomViews.indexOf(_bottomView);
+        if (idx < 0) idx = 0;
+        var next = idx + (delta > 0 ? 1 : -1);
+        if (next < 0) next = 0;
+        if (next >= _bottomViews.length) next = _bottomViews.length - 1;
+        if (next !== idx) plasmoid.configuration.worklogBottomView = _bottomViews[next];
+    }
+
+    function _refreshCurrentBottomView() {
+        if (!_showBottomPanel) return;
+        if (_bottomIsRings) {
+            if (jiraStore) jiraStore.fetchSprintInfo();
+            sprintGauges.startFillAnimation();
+        } else if (_bottomIsSubtasks) {
+            subtaskTable.refresh();
+        } else if (_bottomIsHeatmap) {
+            monthHeatmap.refresh();
+        }
     }
 
     function syncNow() {
         if (_showJira     && jiraStore)     jiraStore.fetchWeek(currentWeekStart);
         if (_showClockify && clockifyStore) clockifyStore.fetchWeek(currentWeekStart);
-        if (_showBottomPanel && _bottomIsRings   && jiraStore) jiraStore.fetchSprintInfo();
-        if (_showBottomPanel && _bottomIsHeatmap)              monthHeatmap.refresh();
+        _refreshCurrentBottomView();
     }
 
     function syncJiraIntoClockify() {
@@ -387,8 +432,35 @@ Item {
                     id: sprintGauges
                     anchors.centerIn: parent
                     width: parent.width
-                    visible: full._displayBottomView !== "heatmap"
+                    visible: full._displayBottomView === "rings"
                     jiraStore: full.jiraStore
+                }
+                SubtaskTable {
+                    id: subtaskTable
+                    anchors.fill: parent
+                    visible: full._displayBottomView === "subtasks"
+                    jiraStore: full.jiraStore
+                    onSubtaskActivated: function(subtask) {
+                        subtaskDetailDialog.openFor(subtask);
+                    }
+                    onOpenInJiraRequested: function(issueKey) {
+                        if (jiraStore) {
+                            var url = jiraStore.issueWebUrl(issueKey);
+                            if (url.length > 0) Qt.openUrlExternally(url);
+                        }
+                    }
+                    onTransitionRequested: function(subtask, transitionId) {
+                        if (!jiraStore) return;
+                        full._setStatus(i18n("Cambiando estado de %1…", subtask.key), false);
+                        jiraStore.transitionIssue(subtask.key, transitionId, function(ok, err) {
+                            if (ok) {
+                                full._setStatus(i18n("Estado de %1 actualizado.", subtask.key), false);
+                                subtaskTable.refresh();
+                            } else {
+                                full._setStatus(i18n("No se pudo cambiar el estado: %1", err), true);
+                            }
+                        });
+                    }
                 }
                 MonthHeatmap {
                     id: monthHeatmap
@@ -404,21 +476,23 @@ Item {
                     }
                 }
 
-                // Wheel over the bottom panel switches the view: down →
-                // heatmap, up → rings. WheelHandler doesn't consume clicks,
-                // so heatmap cell clicks / ring interaction still work.
+                // Wheel over the bottom panel cycles the view: down moves
+                // toward the heatmap end, up toward the rings end. Clamps
+                // at the ends. WheelHandler doesn't consume clicks, so
+                // heatmap cell clicks / ring / table interaction still
+                // work.
                 WheelHandler {
                     acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                     onWheel: function(event) {
                         if (event.angleDelta.y === 0) return;
-                        plasmoid.configuration.worklogBottomView =
-                            (event.angleDelta.y < 0) ? "heatmap" : "rings";
+                        full._cycleBottomView(event.angleDelta.y < 0 ? +1 : -1);
                     }
                 }
             }
 
-            // Vertical switch: two stacked icon buttons (rings / heatmap),
-            // pinned to the vertical center of the fixed-height panel.
+            // Vertical switch: up to three stacked icon buttons (rings /
+            // subtasks / heatmap), pinned to the vertical center of the
+            // fixed-height panel.
             ColumnLayout {
                 Layout.alignment: Qt.AlignVCenter
                 spacing: 2
@@ -435,6 +509,16 @@ Item {
                     PlasmaComponents3.ToolTip.delay: 500
                 }
                 PlasmaComponents3.ToolButton {
+                    icon.name: "view-list-details"
+                    checkable: true
+                    checked: full._bottomIsSubtasks
+                    visible: full._showSubtaskTable
+                    onClicked: plasmoid.configuration.worklogBottomView = "subtasks"
+                    PlasmaComponents3.ToolTip.text: i18n("Ver tabla de subtareas")
+                    PlasmaComponents3.ToolTip.visible: hovered
+                    PlasmaComponents3.ToolTip.delay: 500
+                }
+                PlasmaComponents3.ToolButton {
                     icon.name: "view-calendar-month"
                     checkable: true
                     checked: full._bottomIsHeatmap
@@ -447,13 +531,15 @@ Item {
         }
 
         // Switch transition: phase 1 fades the current view out in the
-        // direction of travel (down → heatmap, up → rings), swaps the
-        // displayed view at opacity 0, then fades the new one in from the
-        // opposite side.
+        // direction of travel (positive dir → down, negative → up), swaps
+        // the displayed view at opacity 0, then fades the new one in from
+        // the opposite side. `dir` is set by _animateBottomSwitch() based
+        // on the relative position of the source / target in _bottomViews,
+        // so cycling rings → subtasks slides down and subtasks → rings
+        // slides up, regardless of how many views are enabled.
         SequentialAnimation {
             id: bottomSwitchAnim
-            property bool toHeatmap: true
-            property real dir: toHeatmap ? 1 : -1
+            property real dir: 1
             ParallelAnimation {
                 NumberAnimation { target: bottomContent; property: "opacity"; to: 0; duration: 130; easing.type: Easing.InQuad }
                 NumberAnimation { target: bottomSlide; property: "y"; to: bottomSwitchAnim.dir * 26; duration: 130; easing.type: Easing.InQuad }
@@ -632,6 +718,11 @@ Item {
         store: full.clockifyStore
         anchors.fill: parent
     }
+    SubtaskDetailDialog {
+        id: subtaskDetailDialog
+        store: full.jiraStore
+        anchors.fill: parent
+    }
 
     // -------- Debug overlay --------
     Item {
@@ -714,11 +805,7 @@ Item {
         _displayBottomView = _bottomView;
         if (jiraStore && jiraStore.lastFetchedAt === 0 && _showJira) jiraStore.fetchWeek(currentWeekStart);
         if (clockifyStore && clockifyStore.lastFetchedAt === 0 && _showClockify) clockifyStore.fetchWeek(currentWeekStart);
-        if (_showBottomPanel && _bottomIsRings && jiraStore) {
-            jiraStore.fetchSprintInfo();
-            sprintGauges.startFillAnimation();
-        }
-        if (_showBottomPanel && _bottomIsHeatmap) monthHeatmap.refresh();
+        full._refreshCurrentBottomView();
     }
 
     // Animate the bottom-panel switch whenever the view changes (from the
@@ -728,13 +815,21 @@ Item {
         target: plasmoid.configuration
         function onWorklogBottomViewChanged() {
             full._animateBottomSwitch();
-            if (!full._showBottomPanel) return;
-            if (full._bottomIsRings) {
-                if (jiraStore) jiraStore.fetchSprintInfo();
-                sprintGauges.startFillAnimation();
-            } else {
-                monthHeatmap.refresh();
+            full._refreshCurrentBottomView();
+        }
+        function onWorklogShowSubtaskTableChanged() {
+            // If the user disables the subtask table while it's the
+            // visible view, fall back to rings.
+            if (!full._showSubtaskTable && full._rawBottomView === "subtasks") {
+                plasmoid.configuration.worklogBottomView = "rings";
             }
+        }
+        function onWorklogSubtaskJqlChanged() {
+            if (full._showBottomPanel && full._bottomIsSubtasks)
+                subtaskTable.refresh();
+        }
+        function onWorklogSubtaskShowParentChanged() {
+            // Pure layout change; the table re-binds via the property.
         }
     }
 
@@ -745,13 +840,7 @@ Item {
         target: plasmoid
         function onExpandedChanged() {
             if (!plasmoid.expanded) return;
-            if (!full._showBottomPanel) return;
-            if (full._bottomIsRings) {
-                sprintGauges.startFillAnimation();
-                if (jiraStore) jiraStore.fetchSprintInfo();
-            } else {
-                monthHeatmap.refresh();
-            }
+            full._refreshCurrentBottomView();
         }
     }
 

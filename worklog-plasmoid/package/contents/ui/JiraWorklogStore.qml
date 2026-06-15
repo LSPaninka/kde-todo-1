@@ -23,6 +23,8 @@ QtObject {
 
     property var worklogs: []         // {id, issueKey, issueSummary, started (ms), durationSec, comment}
     property var assignableIssues: [] // {key, summary, issuetype, status, remainingSec}
+    property var subtasks: []         // {key, summary, status, statusCategory, statusColor,
+                                      //  remainingSec, parentKey, parentSummary}
     property string myAccountId: ""
 
     // Active sprint of the user (or null). Filled by fetchSprintInfo().
@@ -602,6 +604,188 @@ QtObject {
         store._bump();
         _log("Sprint '" + active.name + "': remaining=" + available + "s, consumed=" + consumed +
              "s, breakdown=" + breakdown.length + " issue(s).");
+    }
+
+    // ------------------------------------------------------------------
+    // Subtask table (third bottom-panel view)
+    // ------------------------------------------------------------------
+    // Populates store.subtasks from worklogSubtaskJql. The row shape
+    // mirrors what SubtaskTable.qml expects: code, summary, status info,
+    // remaining (using the configured remaining strategy) and optional
+    // parent key/summary.
+
+    function fetchSubtasks(callback) {
+        if (!callback) callback = function() {};
+        var creds = _creds();
+        if (!creds) { callback(false); return; }
+
+        var pc = plasmoidApi.configuration;
+        var jql = (pc.worklogSubtaskJql ||
+                   "issuetype in subTaskIssueTypes() AND assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC").trim();
+
+        var url = creds.site + "/rest/api/3/search/jql?jql=" +
+                  encodeURIComponent(jql) +
+                  "&maxResults=100" +
+                  "&fields=summary,status,parent,timeoriginalestimate,timeestimate,timetracking";
+
+        _log("Subtasks GET " + url);
+        _jiraGet(url, creds, function(code, body) {
+            if (code !== 200) {
+                _warn("Subtasks exit=" + code + ": " + body.substring(0, 240));
+                callback(false);
+                return;
+            }
+            try {
+                var data = JSON.parse(body);
+                var raw = data.issues || [];
+                var out = [];
+                for (var i = 0; i < raw.length; i++) {
+                    var r = raw[i];
+                    var f = r.fields || {};
+                    var st = f.status || {};
+                    var sc = (st.statusCategory || {});
+                    var parent = f.parent || null;
+                    out.push({
+                        key: r.key || "",
+                        summary: f.summary || "",
+                        status: st.name || "",
+                        statusCategory: sc.key || "",       // new, indeterminate, done
+                        statusColor: sc.colorName || "",    // blue-gray, yellow, green, …
+                        remainingSec: _remainingSec(f),
+                        parentKey: parent ? (parent.key || "") : "",
+                        parentSummary: parent ? ((parent.fields && parent.fields.summary) || "") : ""
+                    });
+                }
+                store.subtasks = out;
+                store._bump();
+                _log("Subtasks: " + out.length + " row(s).");
+                callback(true);
+            } catch (e) {
+                _warn("Subtasks parse: " + e);
+                callback(false);
+            }
+        });
+    }
+
+    // GET /rest/api/3/issue/{key}/transitions → array of {id, name, toStatus}
+    function fetchTransitions(issueKey, callback) {
+        if (!callback) callback = function() {};
+        var creds = _creds();
+        if (!creds) { callback(false, []); return; }
+        var url = creds.site + "/rest/api/3/issue/" + encodeURIComponent(issueKey) + "/transitions";
+        _log("Transitions GET " + url);
+        _jiraGet(url, creds, function(code, body) {
+            if (code !== 200) {
+                _warn("Transitions exit=" + code + ": " + body.substring(0, 200));
+                callback(false, []);
+                return;
+            }
+            try {
+                var data = JSON.parse(body);
+                var arr = data.transitions || [];
+                var out = [];
+                for (var i = 0; i < arr.length; i++) {
+                    var t = arr[i];
+                    var to = t.to || {};
+                    out.push({
+                        id: "" + (t.id || ""),
+                        name: t.name || "",
+                        toStatus: to.name || "",
+                        toStatusCategory: (to.statusCategory || {}).key || "",
+                        toStatusColor: (to.statusCategory || {}).colorName || ""
+                    });
+                }
+                callback(true, out);
+            } catch (e) {
+                _warn("Transitions parse: " + e);
+                callback(false, []);
+            }
+        });
+    }
+
+    // POST /rest/api/3/issue/{key}/transitions with {transition:{id}}. 204 OK.
+    function transitionIssue(issueKey, transitionId, callback) {
+        if (!callback) callback = function() {};
+        var creds = _creds();
+        if (!creds) { callback(false, "no-creds"); return; }
+        var url = creds.site + "/rest/api/3/issue/" + encodeURIComponent(issueKey) + "/transitions";
+        var body = JSON.stringify({ transition: { id: "" + transitionId } });
+        _log("POST " + url + " body=" + body);
+        _jiraSend("POST", url, creds, body, function(code, resp) {
+            if (code === 204 || code === 200) {
+                _log("transition OK.");
+                callback(true, "");
+            } else {
+                var msg = _extractErrorMessage(resp);
+                _warn("transition exit=" + code + ": " + msg);
+                callback(false, "HTTP " + code + ": " + msg);
+            }
+        });
+    }
+
+    // GET /rest/api/3/issue/{key} → full issue for the detail modal.
+    // Returns a normalised object (already plain text for description).
+    function fetchIssueDetail(issueKey, callback) {
+        if (!callback) callback = function() {};
+        var creds = _creds();
+        if (!creds) { callback(false, null); return; }
+        var url = creds.site + "/rest/api/3/issue/" + encodeURIComponent(issueKey) +
+                  "?fields=summary,status,description,parent,issuetype,priority,assignee," +
+                  "reporter,timeoriginalestimate,timeestimate,timetracking,timespent,created,updated";
+        _log("IssueDetail GET " + url);
+        _jiraGet(url, creds, function(code, body) {
+            if (code !== 200) {
+                _warn("IssueDetail exit=" + code + ": " + body.substring(0, 200));
+                callback(false, null);
+                return;
+            }
+            try {
+                var d = JSON.parse(body);
+                var f = d.fields || {};
+                var st = f.status || {};
+                var sc = st.statusCategory || {};
+                var parent = f.parent || null;
+                var spent = (f.timetracking && typeof f.timetracking.timeSpentSeconds === "number")
+                            ? f.timetracking.timeSpentSeconds
+                            : (typeof f.timespent === "number" ? f.timespent : 0);
+                var orig = (typeof f.timeoriginalestimate === "number")
+                           ? f.timeoriginalestimate
+                           : (f.timetracking && typeof f.timetracking.originalEstimateSeconds === "number")
+                               ? f.timetracking.originalEstimateSeconds
+                               : 0;
+                var out = {
+                    key: d.key || "",
+                    summary: f.summary || "",
+                    status: st.name || "",
+                    statusCategory: sc.key || "",
+                    statusColor: sc.colorName || "",
+                    description: _extractAdfText(f.description),
+                    issuetype: (f.issuetype && f.issuetype.name) || "",
+                    priority: (f.priority && f.priority.name) || "",
+                    assignee: (f.assignee && f.assignee.displayName) || "",
+                    reporter: (f.reporter && f.reporter.displayName) || "",
+                    parentKey: parent ? (parent.key || "") : "",
+                    parentSummary: parent ? ((parent.fields && parent.fields.summary) || "") : "",
+                    originalEstimateSec: orig,
+                    remainingSec: _remainingSec(f),
+                    spentSec: spent,
+                    created: f.created || "",
+                    updated: f.updated || ""
+                };
+                callback(true, out);
+            } catch (e) {
+                _warn("IssueDetail parse: " + e);
+                callback(false, null);
+            }
+        });
+    }
+
+    // Returns the public Jira URL for a given issue key (used by the
+    // detail modal "Abrir en Jira" button + right-click "Ver en Jira").
+    function issueWebUrl(issueKey) {
+        var creds = _creds();
+        if (!creds || !issueKey) return "";
+        return creds.site + "/browse/" + encodeURIComponent(issueKey);
     }
 
     // ------------------------------------------------------------------

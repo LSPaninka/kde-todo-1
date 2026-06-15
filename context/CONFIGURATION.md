@@ -100,8 +100,11 @@ value after a Plasma reload.
 | `worklogIssueJql`      | String | "(default JQL)"  | JQL for the new-worklog issue picker |
 | `worklogIssueMax`      | Int    | `50`             | Max picker rows |
 | `worklogShowIssueSummary` | Bool | `false`          | Append issue title after the key on each block |
-| `worklogShowSprintGauges` | Bool | `true`           | Master toggle for the bottom panel (rings or heatmap), all modes |
-| `worklogBottomView`    | String | `rings`          | Bottom-panel view: `rings` or `heatmap` (vertical switch) |
+| `worklogShowSprintGauges` | Bool | `true`           | Master toggle for the bottom panel (rings / subtasks / heatmap), all modes |
+| `worklogBottomView`    | String | `rings`          | Bottom-panel view: `rings` \| `subtasks` \| `heatmap` (vertical switch / wheel) |
+| `worklogShowSubtaskTable` | Bool | `true`           | Enable the third bottom-panel view (subtask table) |
+| `worklogSubtaskJql`    | String | "(my open subtasks)" | JQL that populates the subtask table |
+| `worklogSubtaskShowParent` | Bool | `true`         | Show the parent-issue column (with tooltip) in the subtask table |
 | `worklogModalWidth`    | Int    | `720`            | New/edit worklog modal width (px) |
 | `worklogModalHeight`   | Int    | `520`            | New/edit worklog modal height (px) |
 | `worklogPinned`        | Bool   | `false`          | Pin button state |

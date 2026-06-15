@@ -21,6 +21,9 @@ Kirigami.FormLayout {
     property alias  cfg_worklogIssueMax:          maxSpin.value
     property alias  cfg_worklogShowIssueSummary:  showSummaryCheck.checked
     property alias  cfg_worklogShowSprintGauges:  sprintGaugesCheck.checked
+    property alias  cfg_worklogShowSubtaskTable:  subtaskTableCheck.checked
+    property alias  cfg_worklogSubtaskJql:        subtaskJqlField.text
+    property alias  cfg_worklogSubtaskShowParent: subtaskShowParentCheck.checked
     property string cfg_worklogSprintStrategy:    "subtask-customfield"
     property alias  cfg_worklogSprintField:       sprintFieldField.text
     property alias  cfg_worklogSprintBoardId:     sprintBoardIdSpin.value
@@ -113,8 +116,30 @@ Kirigami.FormLayout {
     CheckBox {
         id: sprintGaugesCheck
         Kirigami.FormData.label: i18n("Panel inferior:")
-        text: i18n("Mostrar el panel debajo del calendario (anillos Sprint/Horas o heatmap " +
-                   "mensual; se alternan con el switch vertical a la derecha del panel)")
+        text: i18n("Mostrar el panel debajo del calendario (anillos Sprint/Horas, tabla de " +
+                   "subtareas o heatmap mensual; se alternan con el switch vertical a la " +
+                   "derecha del panel)")
+    }
+
+    CheckBox {
+        id: subtaskTableCheck
+        Kirigami.FormData.label: i18n("Tabla de subtareas:")
+        text: i18n("Habilitar la tercera sección del panel inferior (tabla de subtareas)")
+    }
+
+    TextField {
+        id: subtaskJqlField
+        Kirigami.FormData.label: i18n("JQL de subtareas:")
+        Layout.fillWidth: true
+        placeholderText: "issuetype in subTaskIssueTypes() AND assignee = currentUser() AND statusCategory != Done"
+        enabled: subtaskTableCheck.checked
+    }
+
+    CheckBox {
+        id: subtaskShowParentCheck
+        Kirigami.FormData.label: i18n("Columna padre:")
+        text: i18n("Mostrar la issue madre de cada subtarea (con tooltip del título)")
+        enabled: subtaskTableCheck.checked
     }
 
     CheckBox {
