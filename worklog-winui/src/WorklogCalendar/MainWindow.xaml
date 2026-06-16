@@ -69,12 +69,13 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <!-- Content area: both views stacked, only the active one visible. -->
+            <!-- Content area: all three views stacked, only the active one visible. -->
             <Grid x:Name="BottomContent" Grid.Column="0" Height="200">
                 <Grid.RenderTransform>
                     <TranslateTransform x:Name="BottomSlide" />
                 </Grid.RenderTransform>
                 <controls:SprintGaugesControl x:Name="Gauges" VerticalAlignment="Center" />
+                <controls:SubtaskTableControl x:Name="Subtasks" Visibility="Collapsed" />
                 <controls:MonthHeatmapControl x:Name="Heatmap" VerticalAlignment="Center"
                                                Visibility="Collapsed" />
             </Grid>
@@ -84,6 +85,10 @@
                 <ToggleButton x:Name="RingsSwitchBtn" Width="32" Height="30"
                               ToolTipService.ToolTip="Ver anillos (Sprint / Horas)">
                     <FontIcon Glyph="&#xE786;" FontSize="14" />
+                </ToggleButton>
+                <ToggleButton x:Name="SubtasksSwitchBtn" Width="32" Height="30"
+                              ToolTipService.ToolTip="Ver tabla de subtareas">
+                    <FontIcon Glyph="&#xE762;" FontSize="14" />
                 </ToggleButton>
                 <ToggleButton x:Name="HeatmapSwitchBtn" Width="32" Height="30"
                               ToolTipService.ToolTip="Ver heatmap mensual">

@@ -61,6 +61,52 @@ public sealed class SprintAvailableItem
     public int RemainingSec { get; set; }
 }
 
+/// <summary>One row of the subtask table (third bottom-panel view).</summary>
+public sealed class JiraSubtask
+{
+    public string Key { get; set; } = "";
+    public string Summary { get; set; } = "";
+    public string Status { get; set; } = "";
+    /// <summary>statusCategory.key — "new", "indeterminate" or "done".</summary>
+    public string StatusCategory { get; set; } = "";
+    /// <summary>statusCategory.colorName — CSS-ish color name from Jira (green / yellow / blue-gray / warm-red / medium-gray).</summary>
+    public string StatusColor { get; set; } = "";
+    public int RemainingSec { get; set; }
+    public string ParentKey { get; set; } = "";
+    public string ParentSummary { get; set; } = "";
+}
+
+/// <summary>One workflow transition for a Jira issue (right-click → Cambiar estado).</summary>
+public sealed class JiraTransition
+{
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string ToStatus { get; set; } = "";
+    public string ToStatusColor { get; set; } = "";
+}
+
+/// <summary>Full issue data shown by the subtask detail dialog.</summary>
+public sealed class JiraIssueDetail
+{
+    public string Key { get; set; } = "";
+    public string Summary { get; set; } = "";
+    public string Status { get; set; } = "";
+    public string StatusCategory { get; set; } = "";
+    public string StatusColor { get; set; } = "";
+    public string Description { get; set; } = "";
+    public string IssueType { get; set; } = "";
+    public string Priority { get; set; } = "";
+    public string Assignee { get; set; } = "";
+    public string Reporter { get; set; } = "";
+    public string ParentKey { get; set; } = "";
+    public string ParentSummary { get; set; } = "";
+    public int OriginalEstimateSec { get; set; }
+    public int RemainingSec { get; set; }
+    public int SpentSec { get; set; }
+    public string Created { get; set; } = "";
+    public string Updated { get; set; } = "";
+}
+
 /// <summary>One Clockify time entry as rendered on the calendar.</summary>
 public sealed class ClockifyEntry
 {

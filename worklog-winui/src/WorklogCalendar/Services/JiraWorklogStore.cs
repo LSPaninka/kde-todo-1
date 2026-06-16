@@ -33,6 +33,8 @@ public sealed class JiraWorklogStore : INotifyPropertyChanged
 
     public IReadOnlyList<JiraWorklog> Worklogs { get; private set; } = Array.Empty<JiraWorklog>();
     public IReadOnlyList<JiraIssue> AssignableIssues { get; private set; } = Array.Empty<JiraIssue>();
+    /// <summary>Subtasks for the bottom-panel table, filled by FetchSubtasksAsync.</summary>
+    public IReadOnlyList<JiraSubtask> Subtasks { get; private set; } = Array.Empty<JiraSubtask>();
     public string MyAccountId { get; private set; } = "";
 
     // ----- Sprint (powers the SprintGauges control) -----
@@ -640,6 +642,184 @@ public sealed class JiraWorklogStore : INotifyPropertyChanged
         var msg = ExtractError(resp);
         Warn($"delete exit={code}: {msg}");
         return (false, $"HTTP {code}: {msg}");
+    }
+
+    // -----------------------------------------------------------------------
+    // Subtask table (third bottom-panel view)
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Populate <see cref="Subtasks"/> with the issues returned by the
+    /// configured JQL. Each row carries the fields needed by the table
+    /// (key/summary/status/badge color/remaining hours/parent).
+    /// </summary>
+    public async Task<bool> FetchSubtasksAsync()
+    {
+        if (!HasCredentials(out var creds)) return false;
+        var jql = string.IsNullOrWhiteSpace(_settings.SubtaskJql)
+            ? "issuetype in subTaskIssueTypes() AND assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC"
+            : _settings.SubtaskJql.Trim();
+        var url = $"{creds.Site}/rest/api/3/search/jql?jql={Uri.EscapeDataString(jql)}" +
+                  "&maxResults=100&fields=summary,status,parent,timeoriginalestimate,timeestimate,timetracking";
+        Log("Subtasks GET " + url);
+        var (code, body) = await SendAsync("GET", url, null);
+        if (code != 200) { Warn($"Subtasks exit={code}: {Trim(body, 240)}"); return false; }
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            var list = new List<JiraSubtask>();
+            if (doc.RootElement.TryGetProperty("issues", out var arr) && arr.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var r in arr.EnumerateArray())
+                {
+                    var it = new JiraSubtask
+                    {
+                        Key = r.TryGetProperty("key", out var kE) ? kE.GetString() ?? "" : ""
+                    };
+                    if (r.TryGetProperty("fields", out var f))
+                    {
+                        it.Summary = f.TryGetProperty("summary", out var sE) ? sE.GetString() ?? "" : "";
+                        if (f.TryGetProperty("status", out var stE))
+                        {
+                            it.Status = stE.TryGetProperty("name", out var snE) ? snE.GetString() ?? "" : "";
+                            if (stE.TryGetProperty("statusCategory", out var scE))
+                            {
+                                it.StatusCategory = scE.TryGetProperty("key", out var sckE) ? sckE.GetString() ?? "" : "";
+                                it.StatusColor = scE.TryGetProperty("colorName", out var scnE) ? scnE.GetString() ?? "" : "";
+                            }
+                        }
+                        it.RemainingSec = RemainingSec(f);
+                        if (f.TryGetProperty("parent", out var pE) && pE.ValueKind == JsonValueKind.Object)
+                        {
+                            it.ParentKey = pE.TryGetProperty("key", out var pkE) ? pkE.GetString() ?? "" : "";
+                            if (pE.TryGetProperty("fields", out var pfE) &&
+                                pfE.TryGetProperty("summary", out var psE))
+                                it.ParentSummary = psE.GetString() ?? "";
+                        }
+                    }
+                    list.Add(it);
+                }
+            }
+            Subtasks = list;
+            Raise(nameof(Subtasks));
+            Log($"Subtasks: {list.Count} row(s).");
+            return true;
+        }
+        catch (Exception ex) { Warn("Subtasks parse: " + ex); return false; }
+    }
+
+    /// <summary>GET /rest/api/3/issue/{key}/transitions for the right-click menu.</summary>
+    public async Task<List<JiraTransition>> FetchTransitionsAsync(string issueKey)
+    {
+        var result = new List<JiraTransition>();
+        if (!HasCredentials(out var creds)) return result;
+        var url = $"{creds.Site}/rest/api/3/issue/{Uri.EscapeDataString(issueKey)}/transitions";
+        Log("Transitions GET " + url);
+        var (code, body) = await SendAsync("GET", url, null);
+        if (code != 200) { Warn($"Transitions exit={code}: {Trim(body, 200)}"); return result; }
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("transitions", out var arr) && arr.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var t in arr.EnumerateArray())
+                {
+                    var tr = new JiraTransition
+                    {
+                        Id = t.TryGetProperty("id", out var idE) ? (idE.ValueKind == JsonValueKind.Number ? idE.GetInt64().ToString() : idE.GetString() ?? "") : "",
+                        Name = t.TryGetProperty("name", out var nE) ? nE.GetString() ?? "" : ""
+                    };
+                    if (t.TryGetProperty("to", out var to))
+                    {
+                        tr.ToStatus = to.TryGetProperty("name", out var tnE) ? tnE.GetString() ?? "" : "";
+                        if (to.TryGetProperty("statusCategory", out var tscE))
+                            tr.ToStatusColor = tscE.TryGetProperty("colorName", out var tcnE) ? tcnE.GetString() ?? "" : "";
+                    }
+                    result.Add(tr);
+                }
+            }
+            return result;
+        }
+        catch (Exception ex) { Warn("Transitions parse: " + ex); return result; }
+    }
+
+    /// <summary>POST /rest/api/3/issue/{key}/transitions with {transition:{id}}. 204 OK.</summary>
+    public async Task<(bool ok, string err)> TransitionIssueAsync(string issueKey, string transitionId)
+    {
+        if (!HasCredentials(out var creds)) return (false, "Faltan credenciales.");
+        var url = $"{creds.Site}/rest/api/3/issue/{Uri.EscapeDataString(issueKey)}/transitions";
+        var body = JsonSerializer.Serialize(new { transition = new { id = transitionId } });
+        Log("POST " + url + " body=" + body);
+        var (code, resp) = await SendAsync("POST", url, body);
+        if (code is 200 or 204) { Log("transition OK."); return (true, ""); }
+        var msg = ExtractError(resp);
+        Warn($"transition exit={code}: {msg}");
+        return (false, $"HTTP {code}: {msg}");
+    }
+
+    /// <summary>Full issue payload for the subtask detail dialog.</summary>
+    public async Task<JiraIssueDetail?> FetchIssueDetailAsync(string issueKey)
+    {
+        if (!HasCredentials(out var creds)) return null;
+        var url = $"{creds.Site}/rest/api/3/issue/{Uri.EscapeDataString(issueKey)}" +
+                  "?fields=summary,status,description,parent,issuetype,priority,assignee,reporter," +
+                  "timeoriginalestimate,timeestimate,timetracking,timespent,created,updated";
+        Log("IssueDetail GET " + url);
+        var (code, body) = await SendAsync("GET", url, null);
+        if (code != 200) { Warn($"IssueDetail exit={code}: {Trim(body, 200)}"); return null; }
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            var d = new JiraIssueDetail
+            {
+                Key = root.TryGetProperty("key", out var kE) ? kE.GetString() ?? "" : ""
+            };
+            if (!root.TryGetProperty("fields", out var f)) return d;
+            d.Summary = f.TryGetProperty("summary", out var sE) ? sE.GetString() ?? "" : "";
+            if (f.TryGetProperty("status", out var stE))
+            {
+                d.Status = stE.TryGetProperty("name", out var snE) ? snE.GetString() ?? "" : "";
+                if (stE.TryGetProperty("statusCategory", out var scE))
+                {
+                    d.StatusCategory = scE.TryGetProperty("key", out var sckE) ? sckE.GetString() ?? "" : "";
+                    d.StatusColor = scE.TryGetProperty("colorName", out var scnE) ? scnE.GetString() ?? "" : "";
+                }
+            }
+            if (f.TryGetProperty("description", out var dE)) d.Description = ExtractAdfText(dE);
+            if (f.TryGetProperty("issuetype", out var itE) && itE.TryGetProperty("name", out var itnE)) d.IssueType = itnE.GetString() ?? "";
+            if (f.TryGetProperty("priority", out var prE) && prE.TryGetProperty("name", out var prnE)) d.Priority = prnE.GetString() ?? "";
+            if (f.TryGetProperty("assignee", out var asE) && asE.ValueKind == JsonValueKind.Object && asE.TryGetProperty("displayName", out var asnE)) d.Assignee = asnE.GetString() ?? "";
+            if (f.TryGetProperty("reporter", out var rE) && rE.ValueKind == JsonValueKind.Object && rE.TryGetProperty("displayName", out var rnE)) d.Reporter = rnE.GetString() ?? "";
+            if (f.TryGetProperty("parent", out var pE) && pE.ValueKind == JsonValueKind.Object)
+            {
+                d.ParentKey = pE.TryGetProperty("key", out var pkE) ? pkE.GetString() ?? "" : "";
+                if (pE.TryGetProperty("fields", out var pfE) && pfE.TryGetProperty("summary", out var psE)) d.ParentSummary = psE.GetString() ?? "";
+            }
+            // Time tracking: prefer top-level numbers, fall back to timetracking sub-object.
+            int orig = 0, spent = 0;
+            if (f.TryGetProperty("timeoriginalestimate", out var oE) && oE.ValueKind == JsonValueKind.Number) orig = oE.GetInt32();
+            if (f.TryGetProperty("timespent", out var tsE) && tsE.ValueKind == JsonValueKind.Number) spent = tsE.GetInt32();
+            if (f.TryGetProperty("timetracking", out var tt))
+            {
+                if (orig == 0 && tt.TryGetProperty("originalEstimateSeconds", out var oo) && oo.ValueKind == JsonValueKind.Number) orig = oo.GetInt32();
+                if (spent == 0 && tt.TryGetProperty("timeSpentSeconds", out var ss) && ss.ValueKind == JsonValueKind.Number) spent = ss.GetInt32();
+            }
+            d.OriginalEstimateSec = orig;
+            d.SpentSec = spent;
+            d.RemainingSec = RemainingSec(f);
+            if (f.TryGetProperty("created", out var cE)) d.Created = cE.GetString() ?? "";
+            if (f.TryGetProperty("updated", out var uE)) d.Updated = uE.GetString() ?? "";
+            return d;
+        }
+        catch (Exception ex) { Warn("IssueDetail parse: " + ex); return null; }
+    }
+
+    /// <summary>Public Jira URL for {site}/browse/{key}.</summary>
+    public string IssueWebUrl(string issueKey)
+    {
+        if (!HasCredentials(out var creds) || string.IsNullOrEmpty(issueKey)) return "";
+        return $"{creds.Site}/browse/{Uri.EscapeDataString(issueKey)}";
     }
 
     // ----- Helpers ---------------------------------------------------------

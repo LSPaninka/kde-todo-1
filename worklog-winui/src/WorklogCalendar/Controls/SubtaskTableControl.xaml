@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="WorklogCalendar.Controls.SubtaskTableControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />  <!-- Title + filter + refresh -->
+            <RowDefinition Height="Auto" />  <!-- Column headers -->
+            <RowDefinition Height="1" />     <!-- Divider -->
+            <RowDefinition Height="*" />     <!-- Rows -->
+        </Grid.RowDefinitions>
+
+        <!-- Title bar -->
+        <Grid Grid.Row="0" ColumnSpacing="6" Margin="0,0,0,4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Grid.Column="0" Text="Subtareas" FontWeight="SemiBold"
+                       VerticalAlignment="Center" />
+            <TextBlock x:Name="CountLabel" Grid.Column="1" Opacity="0.6" FontSize="11"
+                       VerticalAlignment="Center" Margin="6,0,0,0" />
+
+            <!-- Inline filter (only when the lupa is toggled on) -->
+            <TextBox x:Name="SearchBox" Grid.Column="2" PlaceholderText="Filtrar subtareas…"
+                     Visibility="Collapsed" HorizontalAlignment="Stretch" />
+
+            <ToggleButton x:Name="SearchBtn" Grid.Column="3"
+                          ToolTipService.ToolTip="Buscar en la lista">
+                <FontIcon Glyph="&#xE721;" FontFamily="Segoe MDL2 Assets" FontSize="13" />
+            </ToggleButton>
+            <Button x:Name="RefreshBtn" Grid.Column="4"
+                    ToolTipService.ToolTip="Recargar subtareas">
+                <FontIcon Glyph="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="13" />
+            </Button>
+        </Grid>
+
+        <!-- Sortable column headers -->
+        <Grid Grid.Row="1" x:Name="HeaderRow" ColumnSpacing="6" Margin="4,0,4,2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="110" />
+                <ColumnDefinition Width="70" />
+                <ColumnDefinition Width="16" />
+                <ColumnDefinition Width="90" />
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="HSubtarea" Grid.Column="0" Text="Subtarea"
+                       FontSize="11" FontWeight="Bold" Opacity="0.6" />
+            <TextBlock x:Name="HEstado"   Grid.Column="1" Text="Estado"
+                       FontSize="11" FontWeight="Bold" Opacity="0.6" />
+            <TextBlock x:Name="HDisp"     Grid.Column="2" Text="Disp."
+                       FontSize="11" FontWeight="Bold" Opacity="0.6"
+                       TextAlignment="Right" />
+            <TextBlock x:Name="HPadre"    Grid.Column="4" Text="Padre"
+                       FontSize="11" FontWeight="Bold" Opacity="0.6" />
+        </Grid>
+
+        <Rectangle Grid.Row="2" Fill="#26FFFFFF" />
+
+        <ScrollViewer Grid.Row="3"
+                      HorizontalScrollMode="Disabled"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+            <ItemsControl x:Name="RowsHost" Margin="0,2,0,0" />
+        </ScrollViewer>
+
+        <TextBlock x:Name="EmptyLabel" Grid.Row="3" Opacity="0.55"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   Text="Sin subtareas. Ajustá el JQL en Configurar."
+                   Visibility="Collapsed" />
+    </Grid>
+</UserControl>

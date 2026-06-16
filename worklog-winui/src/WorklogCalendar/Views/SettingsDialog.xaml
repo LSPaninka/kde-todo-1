@@ -71,8 +71,18 @@
                                    SpinButtonPlacementMode="Inline" Grid.Column="1" />
                     </Grid>
 
-                    <CheckBox x:Name="ShowGauges" Content="Mostrar panel inferior (anillos Sprint/Horas ↔ heatmap mensual, conmutable con el switch)"
+                    <CheckBox x:Name="ShowGauges" Content="Mostrar panel inferior (anillos Sprint/Horas ↔ tabla subtareas ↔ heatmap mensual)"
                               Margin="0,8,0,0" />
+
+                    <!-- Subtask table -->
+                    <TextBlock Text="Tabla de subtareas" FontWeight="SemiBold"
+                               Margin="0,12,0,4" Opacity="0.85" />
+                    <CheckBox x:Name="ShowSubtaskTable"
+                              Content="Mostrar la tabla de subtareas como vista intermedia del panel inferior" />
+                    <CheckBox x:Name="SubtaskShowParent"
+                              Content="Mostrar columna 'Padre' (issue padre + tooltip con título)" />
+                    <TextBox x:Name="SubtaskJql" Header="JQL para la tabla de subtareas"
+                             AcceptsReturn="True" TextWrapping="Wrap" />
 
                     <!-- Sprint (experimental) -->
                     <TextBlock Text="Sprint (experimental)" FontWeight="SemiBold"

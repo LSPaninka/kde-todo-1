@@ -62,8 +62,15 @@ public sealed class AppSettings : INotifyPropertyChanged
     public string RemainingMode { get; set; } = "api";
 
     // -------- Bottom panel --------
-    /// <summary>Which bottom-panel view shows: "rings" (sprint gauges) or "heatmap" (monthly).</summary>
+    /// <summary>Which bottom-panel view shows: "rings", "subtasks" or "heatmap".</summary>
     public string BottomView { get; set; } = "rings";
+    /// <summary>Gate the third (subtask table) view on/off.</summary>
+    public bool ShowSubtaskTable { get; set; } = true;
+    /// <summary>JQL that drives the subtask table.</summary>
+    public string SubtaskJql { get; set; } =
+        "issuetype in subTaskIssueTypes() AND assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC";
+    /// <summary>Show the optional "Padre" column with parent-issue key.</summary>
+    public bool SubtaskShowParent { get; set; } = true;
 
     // Events aren't serialized by System.Text.Json — no [JsonIgnore] needed
     // (and [JsonIgnore] would fail to compile on an event anyway).

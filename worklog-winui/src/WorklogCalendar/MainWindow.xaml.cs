@@ -49,15 +49,31 @@ public sealed partial class MainWindow : Window
             _weekStart = WeekStartOf(date);
             await RefreshAsync();
         };
-        // Vertical switch between rings and heatmap.
-        RingsSwitchBtn.Click += (s, e) => SetBottomView("rings");
-        HeatmapSwitchBtn.Click += (s, e) => SetBottomView("heatmap");
-        // Mouse wheel over the bottom panel flips the view (down=heatmap, up=rings).
+        Subtasks.Store = _jira;
+        Subtasks.Settings = _settings;
+        Subtasks.SubtaskActivated += sub => _ = OpenSubtaskDetailAsync(sub);
+        Subtasks.OpenInJiraRequested += key =>
+        {
+            var url = _jira.IssueWebUrl(key);
+            if (!string.IsNullOrEmpty(url)) _ = Windows.System.Launcher.LaunchUriAsync(new Uri(url));
+        };
+        Subtasks.TransitionRequested += async (sub, transitionId) =>
+        {
+            SetStatus($"Cambiando estado de {sub.Key}…", false);
+            var (ok, err) = await _jira.TransitionIssueAsync(sub.Key, transitionId);
+            if (!ok) SetStatus($"Jira: no se pudo cambiar estado — {err}", true);
+            else await Subtasks.Refresh();
+        };
+        // Vertical switch (rings → subtasks → heatmap).
+        RingsSwitchBtn.Click    += (s, e) => SetBottomView("rings");
+        SubtasksSwitchBtn.Click += (s, e) => SetBottomView("subtasks");
+        HeatmapSwitchBtn.Click  += (s, e) => SetBottomView("heatmap");
+        // Mouse wheel cycles through the available views, clamping at the ends.
         BottomPanel.PointerWheelChanged += (s, e) =>
         {
             var d = e.GetCurrentPoint(BottomPanel).Properties.MouseWheelDelta;
             if (d == 0) return;
-            SetBottomView(d < 0 ? "heatmap" : "rings");
+            CycleBottomView(d < 0 ? +1 : -1);
         };
 
         Title = "Worklog Calendar";
@@ -237,43 +253,91 @@ public sealed partial class MainWindow : Window
         var tasks = new List<Task>();
         if (Calendar.ShowJira) tasks.Add(_jira.FetchWeekAsync(_weekStart));
         if (Calendar.ShowClockify) tasks.Add(_clockify.FetchWeekAsync(_weekStart));
-        // Rings need the sprint info; heatmap fetches its own month data.
+        // Only the rings need a synchronous sprint-info fetch; the
+        // subtask table + heatmap fetch their own data on view switch.
         if (ShowBottomPanel && BottomIsRings) tasks.Add(_jira.FetchSprintInfoAsync());
         try { await Task.WhenAll(tasks); }
         catch (Exception ex) { System.Diagnostics.Debug.WriteLine("Refresh error: " + ex); }
         if (ShowBottomPanel && BottomIsRings) Gauges.StartFillAnimation();
+        if (ShowBottomPanel && BottomIsSubtasks) _ = Subtasks.Refresh();
         if (ShowBottomPanel && BottomIsHeatmap) _ = Heatmap.Refresh();
     }
 
     /// <summary>The bottom panel shows whenever the master toggle is on (every mode).</summary>
     private bool ShowBottomPanel => _settings.ShowSprintGauges;
-    private bool BottomIsRings => _settings.BottomView != "heatmap";
-    private bool BottomIsHeatmap => _settings.BottomView == "heatmap";
+    private bool BottomIsRings    => CurrentBottomView == "rings";
+    private bool BottomIsSubtasks => CurrentBottomView == "subtasks";
+    private bool BottomIsHeatmap  => CurrentBottomView == "heatmap";
+
+    /// <summary>Views in switch order. "subtasks" only when the user opted in.</summary>
+    private List<string> AvailableBottomViews()
+    {
+        var v = new List<string> { "rings" };
+        if (_settings.ShowSubtaskTable) v.Add("subtasks");
+        v.Add("heatmap");
+        return v;
+    }
+
+    /// <summary>Saved view, falling back to "rings" if the user disabled the
+    /// active one (e.g. switched off the subtask table while subtasks was selected).</summary>
+    private string CurrentBottomView
+    {
+        get
+        {
+            var v = _settings.BottomView ?? "rings";
+            return AvailableBottomViews().Contains(v) ? v : "rings";
+        }
+    }
+
+    /// <summary>Mouse-wheel cycle handler — clamps at the ends, doesn't wrap.</summary>
+    private void CycleBottomView(int delta)
+    {
+        var views = AvailableBottomViews();
+        int idx = views.IndexOf(CurrentBottomView);
+        if (idx < 0) idx = 0;
+        int next = idx + (delta > 0 ? 1 : -1);
+        if (next < 0) next = 0;
+        if (next >= views.Count) next = views.Count - 1;
+        if (next != idx) SetBottomView(views[next]);
+    }
 
     private void SetBottomView(string view)
     {
-        if (_settings.BottomView == view) return;
+        if (CurrentBottomView == view) return;
+        // Pick animation direction from the relative index, so the slide
+        // stays consistent regardless of which view we're going to.
+        var views = AvailableBottomViews();
+        int oldIdx = views.IndexOf(CurrentBottomView);
+        int newIdx = views.IndexOf(view);
+        if (oldIdx < 0) oldIdx = 0;
+        if (newIdx < 0) newIdx = 0;
+        bool forward = newIdx > oldIdx;
+
         _settings.BottomView = view;
         SettingsService.Save(_settings);
-        UpdateBottomPanel();
-        AnimateBottomSwitch(view == "heatmap");
+        AnimateBottomSwitch(forward);
+
         if (view == "rings") { _ = _jira.FetchSprintInfoAsync(); Gauges.StartFillAnimation(); }
+        else if (view == "subtasks") _ = Subtasks.Refresh();
         else _ = Heatmap.Refresh();
     }
 
     private void UpdateBottomPanel()
     {
         BottomPanel.Visibility = ShowBottomPanel ? Visibility.Visible : Visibility.Collapsed;
-        Gauges.Visibility = BottomIsRings ? Visibility.Visible : Visibility.Collapsed;
-        Heatmap.Visibility = BottomIsHeatmap ? Visibility.Visible : Visibility.Collapsed;
-        RingsSwitchBtn.IsChecked = BottomIsRings;
-        HeatmapSwitchBtn.IsChecked = BottomIsHeatmap;
+        Gauges.Visibility   = BottomIsRings    ? Visibility.Visible : Visibility.Collapsed;
+        Subtasks.Visibility = BottomIsSubtasks ? Visibility.Visible : Visibility.Collapsed;
+        Heatmap.Visibility  = BottomIsHeatmap  ? Visibility.Visible : Visibility.Collapsed;
+        RingsSwitchBtn.IsChecked    = BottomIsRings;
+        SubtasksSwitchBtn.IsChecked = BottomIsSubtasks;
+        HeatmapSwitchBtn.IsChecked  = BottomIsHeatmap;
+        SubtasksSwitchBtn.Visibility = _settings.ShowSubtaskTable ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>Fade + slide the bottom content when switching views.</summary>
-    private void AnimateBottomSwitch(bool toHeatmap)
+    private void AnimateBottomSwitch(bool forward)
     {
-        int dir = toHeatmap ? 1 : -1;
+        int dir = forward ? 1 : -1;
         var sb = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
 
         var fadeOut = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation
@@ -425,6 +489,12 @@ public sealed partial class MainWindow : Window
         var dlg = new ClockifyEditDialog(_clockify, _settings, s, en, existing) { XamlRoot = Content.XamlRoot };
         await dlg.ShowAsync();
         if (dlg.Mutated) await RefreshAsync();
+    }
+
+    private async Task OpenSubtaskDetailAsync(JiraSubtask sub)
+    {
+        var dlg = new SubtaskDetailDialog(_jira, _settings, sub) { XamlRoot = Content.XamlRoot };
+        await dlg.ShowAsync();
     }
 
     private async Task OpenSettingsAsync()
