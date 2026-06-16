@@ -13,6 +13,9 @@ struct CalendarBlock: Identifiable, Equatable {
     let durationSec: Int
     let topText: String
     let bottomText: String
+    /// Tercera línea opcional (sólo Clockify la usa, para mostrar
+    /// proyecto arriba y descripción debajo).  `""` = no se renderiza.
+    let extraText: String
     let compactText: String
     let projectHex: String   // solo Clockify; "" si no aplica
 
@@ -34,6 +37,7 @@ extension CalendarBlock {
             : w.issueKey
         self.topText = top
         self.bottomText = bottom
+        self.extraText = ""
         self.compactText = "\(Self.fmtTime(w.startedMs))  \(w.issueKey)"
         self.projectHex = ""
     }
@@ -45,11 +49,20 @@ extension CalendarBlock {
         self.durationSec = e.durationSec
         let top = Self.fmtRange(startMs: e.startedMs, durationSec: e.durationSec)
         let desc = e.description.isEmpty ? "(sin descripción)" : e.description
-        let bottom = e.projectName.isEmpty ? desc : "[\(e.projectName)] \(desc)"
+        // En multi-línea queremos el nombre del proyecto solo en su
+        // propia línea (matchea el plasmoide de KDE).  Si no hay
+        // proyecto, la descripción ocupa la línea principal y `extra`
+        // queda vacía.
+        if e.projectName.isEmpty {
+            self.bottomText = desc
+            self.extraText = ""
+        } else {
+            self.bottomText = e.projectName
+            self.extraText = desc
+        }
         let compactLabel = !e.description.isEmpty ? e.description
             : (!e.projectName.isEmpty ? e.projectName : "(sin descripción)")
         self.topText = top
-        self.bottomText = bottom
         self.compactText = "\(Self.fmtTime(e.startedMs))  \(compactLabel)"
         self.projectHex = e.projectColor
     }
@@ -145,7 +158,13 @@ struct EntryBlockView: View {
     private let edgePx: CGFloat = 5
 
     private var isShort: Bool { block.durationSec <= 30 * 60 }
-    private var single: Bool { compactLayout || isShort }
+    /// Sólo los bloques cortos (≤30 min) caben en una sola línea.  El
+    /// modo combinado *no* fuerza single-line: encogemos el font pero
+    /// dejamos que un bloque alto muestre rango + título.
+    private var single: Bool { isShort }
+    /// Tamaño base del texto: 8 en modo combinado (columnas a mitad),
+    /// 9 en modo lleno.
+    private var blockFontSize: CGFloat { compactLayout ? 8 : 9 }
 
     private var fillColor: Color {
         if block.kind == .jira {
@@ -344,29 +363,41 @@ struct EntryBlockView: View {
                 )
 
             if single {
-                // Bloque de 30 min (o modo combinado): sólo cabe una
-                // línea, así que truncamos al final.
+                // Bloque ≤30 min: sólo cabe una línea — truncamos al
+                // final para que se vea al menos la hora + key.
                 Text(block.compactText)
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: blockFontSize, weight: .semibold))
                     .foregroundColor(.white)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .padding(.horizontal, 4)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                // Bloque >= 60 min: la hora arriba en bold (una línea)
-                // y el título abajo con soft-wrap hasta 2-3 líneas
-                // según el alto disponible.
+                // Bloque >30 min: rango en bold arriba, después la línea
+                // principal con soft-wrap, y si es Clockify y tiene
+                // proyecto, una tercera línea con la descripción.  El
+                // modo combinado mantiene este layout (sólo cambia el
+                // tamaño del font), matcheando el plasmoide KDE.
                 VStack(alignment: .leading, spacing: 1) {
                     Text(block.topText)
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(.system(size: blockFontSize, weight: .semibold))
                         .lineLimit(1)
                         .truncationMode(.tail)
                     Text(block.bottomText)
-                        .font(.system(size: 9, weight: .regular))
-                        .lineLimit(3)
+                        .font(.system(size: blockFontSize, weight: .regular))
+                        .lineLimit(block.extraText.isEmpty ? 3 : 1)
+                        .truncationMode(.tail)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
+                    if !block.extraText.isEmpty {
+                        Text(block.extraText)
+                            .font(.system(size: blockFontSize, weight: .regular))
+                            .lineLimit(2)
+                            .truncationMode(.tail)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .opacity(0.85)
+                    }
                     Spacer(minLength: 0)
                 }
                 .foregroundColor(.white)

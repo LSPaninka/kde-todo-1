@@ -21,6 +21,11 @@ struct MonthHeatmap: View {
     /// esa semana.  Si es `nil`, las celdas no son clickeables.
     var onDaySelected: ((Date) -> Void)? = nil
 
+    /// Trigger externo de refresh:  el padre lo incrementa cuando aprieta
+    /// el botón global ↻ y observamos el cambio con `.onChange` para
+    /// recargar los totales del mes.
+    var refreshTrigger: Int = 0
+
     /// 0 = mes actual, -1 = mes anterior.
     @State private var monthOffset: Int = 0
 
@@ -114,7 +119,8 @@ struct MonthHeatmap: View {
             grid
         }
         .onAppear  { refresh() }
-        .onChange(of: monthOffset) { refresh() }
+        .onChange(of: monthOffset)   { refresh() }
+        .onChange(of: refreshTrigger) { refresh() }
     }
 
     private var header: some View {

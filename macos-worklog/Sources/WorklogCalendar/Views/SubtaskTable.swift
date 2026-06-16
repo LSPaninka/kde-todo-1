@@ -107,15 +107,13 @@ struct SubtaskTable: View {
     }
 
     var body: some View {
-        // `maxHeight: .infinity` + alignment topLeading: ocupamos todo el
-        // alto del panel inferior y arrancamos desde arriba, así no
-        // queda el bloque centrado verticalmente con un hueco entre el
-        // header y las filas.
+        // Cada banda fija su alto exacto, sin spacing implícito, así no
+        // queda el famoso "espacio muerto" entre el título y la primera
+        // fila.  El ScrollView se queda con TODO el alto restante.
         VStack(alignment: .leading, spacing: 0) {
-            header
-            columnHeader
-                .padding(.top, 2)
-            Divider().padding(.top, 1)
+            header.frame(height: 22)
+            columnHeader.frame(height: 14)
+            Divider()
             if displayRows.isEmpty {
                 Spacer(minLength: 0)
                 Text(jira.subtasks.isEmpty
@@ -131,9 +129,9 @@ struct SubtaskTable: View {
                             rowView(row)
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, alignment: .top)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -141,13 +139,14 @@ struct SubtaskTable: View {
 
     private var header: some View {
         HStack(spacing: 6) {
-            Text("Subtareas").font(.headline)
+            Text("Subtareas").font(.subheadline).bold()
 
             // Cuando el filtro está abierto, el TextField ocupa el lugar
             // del contador + spacer.  Esc lo cierra y limpia.
             if searchOpen {
                 TextField("Filtrar subtareas…", text: $searchText)
                     .textFieldStyle(.roundedBorder)
+                    .controlSize(.small)
                     .focused($searchFocused)
                     .onKeyPress(.escape) {
                         searchOpen = false
@@ -168,6 +167,7 @@ struct SubtaskTable: View {
                 if !searchOpen { searchText = "" }
             } label: {
                 Image(systemName: "magnifyingglass")
+                    .font(.system(size: 12))
                     .foregroundColor(searchOpen ? .accentColor : .primary)
             }
             .buttonStyle(.borderless)
@@ -175,6 +175,7 @@ struct SubtaskTable: View {
 
             Button { jira.fetchSubtasks() } label: {
                 Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 12))
             }
             .buttonStyle(.borderless)
             .help("Recargar subtareas")

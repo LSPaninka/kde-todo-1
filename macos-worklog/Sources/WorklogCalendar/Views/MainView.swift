@@ -331,7 +331,8 @@ struct MainView: View {
                         onDaySelected: { date in
                             weekStart = MainView.sundayOf(date)
                             syncNow()
-                        }
+                        },
+                        refreshTrigger: heatmapRefreshTrigger
                     )
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
                 default:
@@ -379,6 +380,9 @@ struct MainView: View {
     /// por swipe largo.
     @State private var wheelAccum: CGFloat = 0
     @State private var wheelLastFire: Date = .distantPast
+    /// Bump cada vez que el usuario aprieta el botón global ↻ para que
+    /// `MonthHeatmap` recargue sus totales del mes.
+    @State private var heatmapRefreshTrigger: Int = 0
     private func handleBottomPanelWheel(_ dy: CGFloat) {
         // En la vista de Subtareas el wheel tiene que scrollear la lista
         // de filas, no cambiar de sección.  Para los demás (rings,
@@ -522,8 +526,13 @@ struct MainView: View {
             jira.fetchSprintInfo { _ in }
         } else if bottomIsSubtasks {
             jira.fetchSubtasks()
+        } else if bottomIsHeatmap {
+            // El heatmap se autoriza con `.onAppear`, pero cuando el
+            // usuario toca el ↻ con el heatmap ya montado tenemos que
+            // empujarle un trigger para que vuelva a pedir los totales
+            // del mes.
+            heatmapRefreshTrigger += 1
         }
-        // El heatmap recarga solo vía su `.onAppear`.
     }
 
     // MARK: - Subtareas
