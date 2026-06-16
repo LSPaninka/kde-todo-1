@@ -39,6 +39,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             backing: .buffered,
             defer: false
         )
+        // **Crítico**: por default `NSWindow` se libera al cerrar la
+        // ventana (legacy retain count automático).  Como queremos que
+        // cerrar con la X la oculte y deje la app viva en la barra de
+        // menús para reabrirla después, le decimos a AppKit que NO
+        // libere el objeto.  Sin esto, `applicationShouldHandleReopen`
+        // dispara `makeKeyAndOrderFront(_:)` sobre memoria liberada y
+        // crashea con `EXC_BAD_ACCESS` en `objc_msgSend`.
+        window.isReleasedWhenClosed = false
         window.title = "Worklog Calendar"
         window.center()
         window.contentView = NSHostingView(rootView: rootView)
