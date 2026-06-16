@@ -154,11 +154,9 @@ Item {
                 }
             }
 
-            // Meta row: status badge + issuetype + priority + parent
-            Flow {
+            // Status badge
+            RowLayout {
                 Layout.fillWidth: true
-                spacing: PlasmaCore.Units.smallSpacing
-
                 Rectangle {
                     visible: dlg.detail && (dlg.detail.status || "").length > 0
                     width: badgeLabel.implicitWidth + 16
@@ -174,26 +172,59 @@ Item {
                         font.bold: true
                     }
                 }
+                Item { Layout.fillWidth: true }
+            }
+
+            // Labeled fields: activity type, priority, parent (code + title),
+            // assignee. Two columns (label / value).
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+                columnSpacing: PlasmaCore.Units.largeSpacing
+                rowSpacing: 3
+
                 PlasmaComponents3.Label {
-                    text: dlg.detail && dlg.detail.issuetype
-                          ? i18n("Tipo: %1", dlg.detail.issuetype) : ""
-                    visible: text.length > 0
-                    opacity: 0.7
+                    text: i18n("Tipo de actividad:")
+                    opacity: 0.6
                 }
                 PlasmaComponents3.Label {
-                    text: dlg.detail && dlg.detail.priority
-                          ? i18n("Prioridad: %1", dlg.detail.priority) : ""
-                    visible: text.length > 0
-                    opacity: 0.7
+                    Layout.fillWidth: true
+                    text: dlg.detail ? (dlg.detail.issuetype || "—") : "—"
+                    font.bold: true
+                }
+
+                PlasmaComponents3.Label {
+                    text: i18n("Prioridad:")
+                    opacity: 0.6
                 }
                 PlasmaComponents3.Label {
+                    Layout.fillWidth: true
+                    text: dlg.detail ? (dlg.detail.priority || "—") : "—"
+                }
+
+                PlasmaComponents3.Label {
+                    text: i18n("Padre:")
+                    opacity: 0.6
+                    visible: dlg.detail && dlg.detail.parentKey
+                }
+                PlasmaComponents3.Label {
+                    Layout.fillWidth: true
+                    visible: dlg.detail && dlg.detail.parentKey
                     text: dlg.detail && dlg.detail.parentKey
-                          ? i18n("Padre: %1 — %2", dlg.detail.parentKey,
-                                                    dlg.detail.parentSummary || "")
+                          ? (dlg.detail.parentKey +
+                             (dlg.detail.parentSummary ? "  —  " + dlg.detail.parentSummary : ""))
                           : ""
-                    visible: text.length > 0
-                    opacity: 0.7
+                    font.bold: true
                     wrapMode: Text.WordWrap
+                }
+
+                PlasmaComponents3.Label {
+                    text: i18n("Asignado a:")
+                    opacity: 0.6
+                }
+                PlasmaComponents3.Label {
+                    Layout.fillWidth: true
+                    text: dlg.detail ? (dlg.detail.assignee || "—") : "—"
                 }
             }
 
@@ -242,17 +273,6 @@ Item {
                     }
                 }
                 Item { Layout.fillWidth: true }
-                ColumnLayout {
-                    spacing: 0
-                    PlasmaComponents3.Label {
-                        text: i18n("Asignado a")
-                        opacity: 0.6
-                        font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
-                    }
-                    PlasmaComponents3.Label {
-                        text: dlg.detail ? (dlg.detail.assignee || "—") : "—"
-                    }
-                }
             }
 
             // Description

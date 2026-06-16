@@ -8,6 +8,8 @@
  *   3: remaining hours (uses the same _remainingSec() strategy as the rings)
  *   4: parent issue    (optional, gated by worklogSubtaskShowParent)
  *
+ * Click a column header to sort by it; click again to flip the direction.
+ *
  * Left-click on a row → emits subtaskActivated(subtask) so the parent shows
  * the SubtaskDetailDialog.
  * Right-click → menu with "Cambiar estado" (transitions submenu, fetched
@@ -25,9 +27,34 @@ Item {
 
     property var jiraStore
     readonly property int _v: jiraStore ? jiraStore.version : 0
-    readonly property var _rows: jiraStore ? (jiraStore.subtasks || []) : []
     readonly property bool _showParent:
         plasmoid.configuration.worklogSubtaskShowParent !== false
+
+    // Sort state. Empty _sortKey keeps the JQL's own ORDER BY. Clicking a
+    // header sets it; clicking the active one flips direction.
+    property string _sortKey: ""
+    property bool _sortAsc: true
+
+    // Rows after applying the current sort. Re-evaluates on store version,
+    // sort key/direction or store change.
+    readonly property var _displayRows: {
+        var _ = tbl._v;
+        var arr = (tbl.jiraStore ? (tbl.jiraStore.subtasks || []) : []).slice();
+        var key = tbl._sortKey;
+        if (!key) return arr;
+        var asc = tbl._sortAsc ? 1 : -1;
+        arr.sort(function(a, b) {
+            if (key === "remaining") {
+                return ((a.remainingSec || 0) - (b.remainingSec || 0)) * asc;
+            }
+            var va, vb;
+            if (key === "status")      { va = a.status || "";    vb = b.status || ""; }
+            else if (key === "parent") { va = a.parentKey || ""; vb = b.parentKey || ""; }
+            else                       { va = a.key || "";       vb = b.key || ""; }
+            return va.localeCompare(vb) * asc;
+        });
+        return arr;
+    }
 
     signal subtaskActivated(var subtask)
     signal openInJiraRequested(string issueKey)
@@ -38,6 +65,15 @@ Item {
     // Refresh hook for FullRepresentation.
     function refresh() {
         if (jiraStore && jiraStore.fetchSubtasks) jiraStore.fetchSubtasks();
+    }
+
+    function _toggleSort(key) {
+        if (tbl._sortKey === key) tbl._sortAsc = !tbl._sortAsc;
+        else { tbl._sortKey = key; tbl._sortAsc = true; }
+    }
+    function _sortGlyph(key) {
+        if (tbl._sortKey !== key) return "";
+        return tbl._sortAsc ? "  ▲" : "  ▼";   // ▲ / ▼
     }
 
     // Right-click menu state — populated when the user opens the menu on
@@ -86,6 +122,38 @@ Item {
     }
     function _statusFg() { return "#1a1a1a"; }
 
+    // Column geometry — shared by the header row and the data rows so they
+    // stay aligned. The spacer separates the right-aligned "Disp." numbers
+    // from the "Padre" codes (they used to butt up against each other).
+    readonly property int _statusW: 110
+    readonly property int _dispW: 70
+    readonly property int _gapW: 16
+    readonly property int _parentW: 90
+
+    // A clickable column header with sort affordance.
+    component HeaderCell: Item {
+        property string title: ""
+        property string skey: ""
+        property int halign: Text.AlignLeft
+        Layout.preferredHeight: hcLabel.implicitHeight + 2
+        PlasmaComponents3.Label {
+            id: hcLabel
+            anchors.fill: parent
+            text: parent.title + tbl._sortGlyph(parent.skey)
+            opacity: tbl._sortKey === parent.skey ? 0.9 : 0.6
+            font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+            font.bold: true
+            horizontalAlignment: parent.halign
+            verticalAlignment: Text.AlignVCenter
+            elide: Text.ElideRight
+        }
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: tbl._toggleSort(parent.skey)
+        }
+    }
+
     ColumnLayout {
         id: col
         anchors.fill: parent
@@ -101,7 +169,7 @@ Item {
                 font.bold: true
             }
             PlasmaComponents3.Label {
-                text: tbl._rows.length > 0 ? ("(" + tbl._rows.length + ")") : ""
+                text: tbl._displayRows.length > 0 ? ("(" + tbl._displayRows.length + ")") : ""
                 opacity: 0.6
                 font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
             }
@@ -115,40 +183,25 @@ Item {
             }
         }
 
-        // -------- Column header --------
+        // -------- Column header (clickable to sort) --------
         RowLayout {
             Layout.fillWidth: true
             spacing: PlasmaCore.Units.smallSpacing
 
-            PlasmaComponents3.Label {
-                Layout.fillWidth: true
-                text: i18n("Subtarea")
-                opacity: 0.6
-                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
-                font.bold: true
+            HeaderCell { Layout.fillWidth: true; title: i18n("Subtarea"); skey: "key" }
+            HeaderCell { Layout.preferredWidth: tbl._statusW; title: i18n("Estado"); skey: "status" }
+            HeaderCell {
+                Layout.preferredWidth: tbl._dispW
+                title: i18n("Disp.")
+                skey: "remaining"
+                halign: Text.AlignRight
             }
-            PlasmaComponents3.Label {
-                Layout.preferredWidth: 110
-                text: i18n("Estado")
-                opacity: 0.6
-                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
-                font.bold: true
-            }
-            PlasmaComponents3.Label {
-                Layout.preferredWidth: 70
-                horizontalAlignment: Text.AlignRight
-                text: i18n("Disp.")
-                opacity: 0.6
-                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
-                font.bold: true
-            }
-            PlasmaComponents3.Label {
-                Layout.preferredWidth: 90
+            Item { Layout.preferredWidth: tbl._gapW; visible: tbl._showParent }
+            HeaderCell {
+                Layout.preferredWidth: tbl._parentW
                 visible: tbl._showParent
-                text: i18n("Padre")
-                opacity: 0.6
-                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
-                font.bold: true
+                title: i18n("Padre")
+                skey: "parent"
             }
         }
 
@@ -168,7 +221,7 @@ Item {
             ListView {
                 id: list
                 spacing: 1
-                model: (tbl._v, tbl._rows)
+                model: tbl._displayRows
                 delegate: Rectangle {
                     width: list.width
                     height: row.implicitHeight + 6
@@ -177,6 +230,27 @@ Item {
                            : "transparent"
                     radius: 2
 
+                    // Background click/right-click area. Declared FIRST so
+                    // the content (labels) sits on top — labels don't accept
+                    // mouse buttons, so clicks fall through to here, while a
+                    // HoverHandler on the parent label can still show its
+                    // tooltip (handlers don't block this area's hover).
+                    MouseArea {
+                        id: rowMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                        onClicked: function(mouse) {
+                            if (mouse.button === Qt.LeftButton) {
+                                tbl.subtaskActivated(modelData);
+                            } else if (mouse.button === Qt.RightButton) {
+                                var p = mapToItem(tbl, mouse.x, mouse.y);
+                                tbl._openMenuFor(modelData, p.x, p.y);
+                            }
+                        }
+                    }
+
                     RowLayout {
                         id: row
                         anchors.fill: parent
@@ -184,28 +258,24 @@ Item {
                         spacing: PlasmaCore.Units.smallSpacing
 
                         // Code + summary
-                        ColumnLayout {
+                        RowLayout {
                             Layout.fillWidth: true
-                            spacing: 0
-                            RowLayout {
+                            spacing: 6
+                            PlasmaComponents3.Label {
+                                text: modelData.key
+                                font.family: "monospace"
+                                font.bold: true
+                            }
+                            PlasmaComponents3.Label {
                                 Layout.fillWidth: true
-                                spacing: 6
-                                PlasmaComponents3.Label {
-                                    text: modelData.key
-                                    font.family: "monospace"
-                                    font.bold: true
-                                }
-                                PlasmaComponents3.Label {
-                                    Layout.fillWidth: true
-                                    text: modelData.summary
-                                    elide: Text.ElideRight
-                                }
+                                text: modelData.summary
+                                elide: Text.ElideRight
                             }
                         }
 
                         // Status badge
                         Rectangle {
-                            Layout.preferredWidth: 110
+                            Layout.preferredWidth: tbl._statusW
                             Layout.preferredHeight: 18
                             radius: 9
                             color: tbl._statusBg(modelData.statusColor)
@@ -223,51 +293,33 @@ Item {
 
                         // Remaining hours
                         PlasmaComponents3.Label {
-                            Layout.preferredWidth: 70
+                            Layout.preferredWidth: tbl._dispW
                             horizontalAlignment: Text.AlignRight
                             text: tbl._fmtHours(modelData.remainingSec)
                             font.family: "monospace"
                         }
 
-                        // Parent (optional)
+                        // Spacer between Disp. and Padre.
+                        Item { Layout.preferredWidth: tbl._gapW; visible: tbl._showParent }
+
+                        // Parent (optional). Tooltip via a HoverHandler so it
+                        // works even though the click area covers the row.
                         PlasmaComponents3.Label {
                             id: parentLabel
-                            Layout.preferredWidth: 90
+                            Layout.preferredWidth: tbl._parentW
                             visible: tbl._showParent
                             text: modelData.parentKey || ""
                             font.family: "monospace"
                             elide: Text.ElideRight
                             opacity: modelData.parentKey ? 0.85 : 0.35
 
+                            HoverHandler { id: parentHover }
                             PlasmaComponents3.ToolTip.text: modelData.parentSummary
                                                             ? (modelData.parentKey + " — " + modelData.parentSummary)
                                                             : ""
-                            PlasmaComponents3.ToolTip.visible: parentHover.containsMouse &&
+                            PlasmaComponents3.ToolTip.visible: parentHover.hovered &&
                                                                !!modelData.parentSummary
                             PlasmaComponents3.ToolTip.delay: 300
-
-                            MouseArea {
-                                id: parentHover
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                acceptedButtons: Qt.NoButton
-                            }
-                        }
-                    }
-
-                    MouseArea {
-                        id: rowMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        acceptedButtons: Qt.LeftButton | Qt.RightButton
-                        onClicked: function(mouse) {
-                            if (mouse.button === Qt.LeftButton) {
-                                tbl.subtaskActivated(modelData);
-                            } else if (mouse.button === Qt.RightButton) {
-                                var p = mapToItem(tbl, mouse.x, mouse.y);
-                                tbl._openMenuFor(modelData, p.x, p.y);
-                            }
                         }
                     }
                 }

@@ -1,5 +1,26 @@
 # Changelog — Jira / Clockify Worklog Calendar
 
+## 0.8.1 — Subtask table: sortable columns, spacing, tooltip + modal fields
+
+- **Sortable columns.** Click a column header (Subtarea / Estado /
+  Disp. / Padre) to sort by it; click again to flip the direction. A
+  ▲ / ▼ glyph marks the active column. Empty sort keeps the JQL's own
+  `ORDER BY`.
+- **Disp. / Padre no longer collide.** Added a fixed spacer column
+  between the right-aligned "Disp." numbers and the "Padre" codes
+  (shared by header + rows so they stay aligned), so e.g. `— CP-2650`
+  reads as two columns again.
+- **Parent tooltip fixed.** The hover area was being shadowed by the
+  row-wide click `MouseArea`. The delegate now puts the click area
+  underneath the content and detects parent-cell hover with a
+  `HoverHandler`, so the tooltip (parent key — summary) shows again.
+- **Detail modal: clearer fields.** Status badge sits on its own row;
+  below it a labeled grid always shows **Tipo de actividad**,
+  **Prioridad**, **Padre** (code — title) and **Asignado a**. The
+  parent line is bold and wraps.
+
+Bumped metadata 0.8.0 → 0.8.1.
+
 ## 0.8.0 — Subtask table (third bottom-panel section)
 
 - **Subtask table.** New third bottom-panel view — the vertical switch
