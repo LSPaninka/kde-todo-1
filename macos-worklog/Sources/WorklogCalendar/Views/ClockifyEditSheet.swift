@@ -178,10 +178,10 @@ struct ClockifyEditSheet: View {
             // Asegurarnos de tener proyectos / tags cargados.
             store.ensureContext { _ in }
         }
-        .onChange(of: startDate) { newValue in
+        .onChange(of: startDate) { _, newValue in
             if !startTimeFocused { startTimeText = Self.format(newValue) }
         }
-        .onChange(of: endDate) { newValue in
+        .onChange(of: endDate) { _, newValue in
             if !endTimeFocused { endTimeText = Self.format(newValue) }
         }
     }
@@ -217,7 +217,7 @@ struct ClockifyEditSheet: View {
             .textFieldStyle(.roundedBorder)
             .focused(isStart ? $startTimeFocused : $endTimeFocused)
             .onSubmit { applyTimeText(isStart: isStart) }
-            .onChange(of: isStart ? startTimeFocused : endTimeFocused) { focused in
+            .onChange(of: isStart ? startTimeFocused : endTimeFocused) { _, focused in
                 if !focused { applyTimeText(isStart: isStart) }
             }
     }

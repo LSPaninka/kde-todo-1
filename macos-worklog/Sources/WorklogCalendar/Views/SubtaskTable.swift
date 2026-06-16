@@ -172,7 +172,7 @@ struct SubtaskTable: View {
             .help("Recargar subtareas")
         }
         // Foco automático al abrir el filtro.
-        .onChange(of: searchOpen) { isOpen in
+        .onChange(of: searchOpen) { _, isOpen in
             if isOpen { searchFocused = true }
         }
     }

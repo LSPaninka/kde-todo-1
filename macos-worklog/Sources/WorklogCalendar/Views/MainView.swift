@@ -133,29 +133,29 @@ struct MainView: View {
             syncProjectId = settings.clockifyDefaultProjectId
             syncNow()
         }
-        .onChange(of: settings.clockifyDefaultProjectId) { _ in
+        .onChange(of: settings.clockifyDefaultProjectId) {
             // Si editan el default en Preferencias, reflejarlo acá.
             syncProjectId = settings.clockifyDefaultProjectId
         }
         // Cambios en Preferencias del bloque "Sprint (experimental)" →
         // re-fetch sin esperar al ↻ (sólo si los rings están visibles).
-        .onChange(of: settings.sprintStrategy) { _ in if showBottomPanel && bottomIsRings { jira.fetchSprintInfo { _ in } } }
-        .onChange(of: settings.sprintField)    { _ in if showBottomPanel && bottomIsRings { jira.fetchSprintInfo { _ in } } }
-        .onChange(of: settings.sprintBoardId)  { _ in if showBottomPanel && bottomIsRings { jira.fetchSprintInfo { _ in } } }
-        .onChange(of: settings.remainingMode)  { _ in if showBottomPanel && bottomIsRings { jira.fetchSprintInfo { _ in } } }
+        .onChange(of: settings.sprintStrategy) { if showBottomPanel && bottomIsRings { jira.fetchSprintInfo { _ in } } }
+        .onChange(of: settings.sprintField)    { if showBottomPanel && bottomIsRings { jira.fetchSprintInfo { _ in } } }
+        .onChange(of: settings.sprintBoardId)  { if showBottomPanel && bottomIsRings { jira.fetchSprintInfo { _ in } } }
+        .onChange(of: settings.remainingMode)  { if showBottomPanel && bottomIsRings { jira.fetchSprintInfo { _ in } } }
         // Si recién encienden el panel inferior, traigamos los datos.
-        .onChange(of: settings.showSprintGauges) { on in if on, bottomIsRings { jira.fetchSprintInfo { _ in } } }
+        .onChange(of: settings.showSprintGauges) { _, on in if on, bottomIsRings { jira.fetchSprintInfo { _ in } } }
         // Cambio de vista del panel inferior (botones del switch, wheel
         // o config) → refrescar la nueva vista.  El heatmap se refresca
         // sólo via `.onAppear`; rings y subtareas necesitan re-fetch.
-        .onChange(of: settings.bottomView) { _ in refreshBottomView() }
+        .onChange(of: settings.bottomView) { refreshBottomView() }
         // Si deshabilitan la tabla de subtareas mientras está visible,
         // caemos a "rings".
-        .onChange(of: settings.showSubtaskTable) { on in
+        .onChange(of: settings.showSubtaskTable) { _, on in
             if !on && settings.bottomView == "subtasks" { settings.bottomView = "rings" }
         }
         // Editar el JQL de subtareas con la tabla visible → recargar.
-        .onChange(of: settings.subtaskJql) { _ in
+        .onChange(of: settings.subtaskJql) {
             if showBottomPanel && bottomIsSubtasks { jira.fetchSubtasks() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .worklogOpenPreferences)) { _ in
@@ -437,7 +437,7 @@ struct MainView: View {
             }
             .pickerStyle(.menu)
             .frame(width: 180)
-            .onChange(of: settings.source) { _ in syncNow() }
+            .onChange(of: settings.source) { syncNow() }
         }
     }
 
@@ -468,7 +468,7 @@ struct MainView: View {
         .pickerStyle(.menu)
         .frame(width: 200)
         .help("Proyecto destino del sync Jira → Clockify")
-        .onChange(of: syncProjectId) { newValue in
+        .onChange(of: syncProjectId) { _, newValue in
             // Persistir para próximas sesiones.
             settings.clockifyDefaultProjectId = newValue
         }

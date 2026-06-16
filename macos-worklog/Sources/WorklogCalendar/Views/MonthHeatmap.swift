@@ -114,7 +114,7 @@ struct MonthHeatmap: View {
             grid
         }
         .onAppear  { refresh() }
-        .onChange(of: monthOffset) { _ in refresh() }
+        .onChange(of: monthOffset) { refresh() }
     }
 
     private var header: some View {

@@ -45,7 +45,7 @@ struct RingGauge: View {
         // Cuando el valor objetivo cambia (refetch del sprint), animamos
         // suavemente hacia el nuevo target.
         .onAppear { startFill() }
-        .onChange(of: value) { _ in
+        .onChange(of: value) {
             withAnimation(.easeOut(duration: 1.0)) {
                 displayValue = value
             }
@@ -53,8 +53,8 @@ struct RingGauge: View {
         // Loop de fade: alterna `fadeOn` y dejamos que `animation` haga
         // la interpolación de color.  Sin `useFadeLoop`, el color queda
         // fijo en `baseColor`.
-        .onChange(of: useFadeLoop) { on in restartFade(on: on) }
-        .onChange(of: intermittent)  { _ in restartFade(on: useFadeLoop) }
+        .onChange(of: useFadeLoop) { _, on in restartFade(on: on) }
+        .onChange(of: intermittent)  { restartFade(on: useFadeLoop) }
         .onAppear { restartFade(on: useFadeLoop) }
     }
 

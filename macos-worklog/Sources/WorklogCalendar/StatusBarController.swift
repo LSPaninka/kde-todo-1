@@ -46,7 +46,7 @@ final class StatusBarController: NSObject {
          jira: JiraWorklogStore,
          clockify: ClockifyStore,
          onOpenApp: @escaping () -> Void) {
-        statusItem = NSStatusBar.system.statusItem(length: NSStatusItem.variableLength)
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
 
         if let button = statusItem.button {

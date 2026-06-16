@@ -234,11 +234,11 @@ struct EntryBlockView: View {
                 // El refetch del padre actualizó la posición/duración del
                 // bloque: ya lo está pintando bien, así que limpiamos los
                 // deltas locales para no quedar offset el doble.
-                .onChange(of: block.startedMs) { _ in
+                .onChange(of: block.startedMs) {
                     dragOffsetX = 0
                     dragOffsetY = 0
                 }
-                .onChange(of: block.durationSec) { _ in
+                .onChange(of: block.durationSec) {
                     resizeTopDy = 0
                     resizeHeightDelta = 0
                 }

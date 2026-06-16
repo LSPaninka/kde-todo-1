@@ -160,10 +160,10 @@ struct JiraEditSheet: View {
         // Cuando los +/- cambian start/endDate, refrescamos el texto
         // pero sólo si el campo no está siendo editado (para no
         // mover el cursor del usuario mientras tipea).
-        .onChange(of: startDate) { newValue in
+        .onChange(of: startDate) { _, newValue in
             if !startTimeFocused { startTimeText = Self.format(newValue) }
         }
-        .onChange(of: endDate) { newValue in
+        .onChange(of: endDate) { _, newValue in
             if !endTimeFocused { endTimeText = Self.format(newValue) }
         }
     }
@@ -246,7 +246,7 @@ struct JiraEditSheet: View {
             .textFieldStyle(.roundedBorder)
             .focused(isStart ? $startTimeFocused : $endTimeFocused)
             .onSubmit { applyTimeText(isStart: isStart) }
-            .onChange(of: isStart ? startTimeFocused : endTimeFocused) { focused in
+            .onChange(of: isStart ? startTimeFocused : endTimeFocused) { _, focused in
                 // Al perder foco: aplicamos lo que esté tipeado, igual
                 // que onSubmit (`Tab` / clic afuera vale).
                 if !focused { applyTimeText(isStart: isStart) }
