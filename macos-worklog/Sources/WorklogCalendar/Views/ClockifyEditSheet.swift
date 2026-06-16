@@ -4,7 +4,7 @@ import SwiftUI
 struct ClockifyEditSheet: View {
     @ObservedObject var store: ClockifyStore
     @ObservedObject var settings: AppSettings
-    @Binding var presented: Bool
+    @Environment(\.dismiss) private var dismiss
 
     /// `nil` = crear; seteado = editar.
     let editing: ClockifyEntry?
@@ -28,7 +28,6 @@ struct ClockifyEditSheet: View {
 
     init(store: ClockifyStore,
          settings: AppSettings,
-         presented: Binding<Bool>,
          editing: ClockifyEntry?,
          start: Date,
          end: Date,
@@ -38,7 +37,6 @@ struct ClockifyEditSheet: View {
          onDeleted: @escaping () -> Void) {
         self.store = store
         self.settings = settings
-        self._presented = presented
         self.editing = editing
         self._startDate = State(initialValue: start)
         self._endDate = State(initialValue: end)
@@ -64,7 +62,7 @@ struct ClockifyEditSheet: View {
                 Text(isEdit ? "Editar entrada Clockify" : "Nueva entrada Clockify")
                     .font(.title3).bold()
                 Spacer()
-                Button(action: { presented = false }) {
+                Button(action: { dismiss() }) {
                     Image(systemName: "xmark.circle.fill")
                 }
                 .buttonStyle(.borderless)
@@ -161,7 +159,7 @@ struct ClockifyEditSheet: View {
                     }
                     .disabled(loading)
                 }
-                Button("Cancelar") { presented = false }
+                Button("Cancelar") { dismiss() }
                     .keyboardShortcut(.cancelAction)
                     .disabled(loading)
                 Button(isEdit ? "Guardar" : "Crear", action: save)
@@ -275,7 +273,7 @@ struct ClockifyEditSheet: View {
                 loading = false
                 switch result {
                 case .success:
-                    presented = false
+                    dismiss()
                     onSaved()
                 case .failure(let err):
                     status = (err.message, true)
@@ -293,7 +291,7 @@ struct ClockifyEditSheet: View {
                 loading = false
                 switch result {
                 case .success:
-                    presented = false
+                    dismiss()
                     onSaved()
                 case .failure(let err):
                     status = (err.message, true)
@@ -310,7 +308,7 @@ struct ClockifyEditSheet: View {
             loading = false
             switch result {
             case .success:
-                presented = false
+                dismiss()
                 onDeleted()
             case .failure(let err):
                 status = (err.message, true)

@@ -7,7 +7,7 @@ import SwiftUI
 struct SubtaskDetailSheet: View {
     @ObservedObject var jira: JiraWorklogStore
     @ObservedObject var settings: AppSettings
-    @Binding var presented: Bool
+    @Environment(\.dismiss) private var dismiss
 
     /// La fila que disparó el modal (datos mínimos para arrancar).
     let subtask: JiraSubtask
@@ -58,7 +58,7 @@ struct SubtaskDetailSheet: View {
             Text(activeSummary).font(.headline).lineLimit(2)
             Spacer()
             if loading { ProgressView().controlSize(.small) }
-            Button(action: { presented = false }) {
+            Button(action: { dismiss() }) {
                 Image(systemName: "xmark.circle.fill")
             }
             .buttonStyle(.borderless)
@@ -138,7 +138,7 @@ struct SubtaskDetailSheet: View {
     private var footer: some View {
         HStack {
             Spacer()
-            Button("Cerrar") { presented = false }
+            Button("Cerrar") { dismiss() }
                 .keyboardShortcut(.cancelAction)
             Button("Abrir en Jira") {
                 if let url = jira.issueWebUrl(activeKey) {

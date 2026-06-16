@@ -36,6 +36,9 @@ struct CalendarView: View {
     /// crea una copia idéntica vía `createWorklog` / `createEntry`.
     let onDuplicateJira: (CalendarBlock) -> Void
     let onDuplicateClockify: (CalendarBlock) -> Void
+    /// Eliminar definitivamente el bloque (menú contextual).
+    let onDeleteJira: (CalendarBlock) -> Void
+    let onDeleteClockify: (CalendarBlock) -> Void
 
     private let rowHeight: CGFloat = 22
     private let hourColumnWidth: CGFloat = 56
@@ -56,6 +59,26 @@ struct CalendarView: View {
 
     /// `weekStart` es Domingo → idx 0 (Dom) y 6 (Sáb) son fin de semana.
     private func isWeekend(_ idx: Int) -> Bool { idx == 0 || idx == 6 }
+
+    /// IDs de bloques que se pisan en el tiempo con otro del mismo
+    /// origen.  Lo usamos para que `EntryBlockView` los borde de naranja
+    /// (Jira) o amarillo (Clockify) y el usuario detecte duplicados.
+    private func overlappingIds(in blocks: [CalendarBlock]) -> Set<String> {
+        var out: Set<String> = []
+        for i in 0..<blocks.count {
+            let a = blocks[i]
+            let aEnd = a.startedMs + Double(a.durationSec) * 1000
+            for j in (i + 1)..<blocks.count {
+                let b = blocks[j]
+                let bEnd = b.startedMs + Double(b.durationSec) * 1000
+                if a.startedMs < bEnd && b.startedMs < aEnd {
+                    out.insert(a.id)
+                    out.insert(b.id)
+                }
+            }
+        }
+        return out
+    }
 
     /// Único punto de salida hacia el padre para los tres gestos.
     /// Clampea al rango visible (Domingo→Sábado siguiente) y obliga un
@@ -250,7 +273,12 @@ struct CalendarView: View {
     // MARK: - Body (hour col + 7 day cols)
 
     private var bodyGrid: some View {
-        HStack(spacing: 0) {
+        // Computamos los IDs de bloques con overlap UNA vez por render
+        // (no por columna) — abrimos el cálculo a toda la semana así
+        // un overlap que cruza la medianoche también se marca.
+        let jiraOverlap = overlappingIds(in: jiraBlocks)
+        let clockifyOverlap = overlappingIds(in: clockifyBlocks)
+        return HStack(spacing: 0) {
             hourColumn
             ForEach(0..<7, id: \.self) { i in
                 DayColumnView(
@@ -281,7 +309,11 @@ struct CalendarView: View {
                     onResizeBottomJira:     { b, dh, fine in handleResizeBottom(block: b, deltaH: dh, isJira: true,  fine: fine) },
                     onResizeBottomClockify: { b, dh, fine in handleResizeBottom(block: b, deltaH: dh, isJira: false, fine: fine) },
                     onDuplicateJira:        onDuplicateJira,
-                    onDuplicateClockify:    onDuplicateClockify
+                    onDuplicateClockify:    onDuplicateClockify,
+                    onDeleteJira:           onDeleteJira,
+                    onDeleteClockify:       onDeleteClockify,
+                    jiraOverlapIds:         jiraOverlap,
+                    clockifyOverlapIds:     clockifyOverlap
                 )
                 .frame(maxWidth: .infinity)
             }
@@ -339,6 +371,13 @@ private struct DayColumnView: View {
     /// Botón "duplicar" del bloque.
     let onDuplicateJira:        (CalendarBlock) -> Void
     let onDuplicateClockify:    (CalendarBlock) -> Void
+    /// Menú contextual "Eliminar" del bloque.
+    let onDeleteJira:           (CalendarBlock) -> Void
+    let onDeleteClockify:       (CalendarBlock) -> Void
+    /// IDs de bloques que pisan a otro del mismo origen (overlap visual
+    /// para destacar duplicados pre-sync Jira → Clockify).
+    let jiraOverlapIds:         Set<String>
+    let clockifyOverlapIds:     Set<String>
 
     @State private var dragStart: CGPoint? = nil
     @State private var dragCurrent: CGPoint? = nil
@@ -372,6 +411,27 @@ private struct DayColumnView: View {
         let dayStart = weekStart.timeIntervalSince1970 * 1000 + Double(dayIndex) * 86_400_000
         let minFromStart = Double(px / rowHeight) * 30
         return dayStart + (Double(viewMode.startHour) * 60 + minFromStart) * 60_000
+    }
+
+    /// Click izquierdo en vacío → crea un worklog de 30 min anclado al
+    /// slot del cursor.  En modo combinado el lado izquierdo del día
+    /// dispara crear en Jira, el derecho en Clockify.
+    private func createBlockAt(location: CGPoint, width: CGFloat) {
+        let slot = Int(floor(location.y / rowHeight))
+        guard slot >= 0, slot < viewMode.slotsPerDay else { return }
+        let startMs = pxToMs(CGFloat(slot) * rowHeight)
+        let endMs   = startMs + 30 * 60 * 1000
+        let pressLeft = combined ? location.x < width / 2 : true
+        let sel = DragSelection(dayIndex: dayIndex,
+                                startMs: startMs, endMs: endMs,
+                                pressLeft: pressLeft)
+        if combined {
+            if pressLeft { onCreateJira(sel) } else { onCreateClockify(sel) }
+        } else if sourcePure == .jira {
+            onCreateJira(sel)
+        } else {
+            onCreateClockify(sel)
+        }
     }
 
     /// Posición Y de un bloque con precisión de minutos — así un bloque
@@ -445,6 +505,8 @@ private struct DayColumnView: View {
                         onResizeTop:     { dy, fine in onResizeTopJira(b, dy, fine) },
                         onResizeBottom:  { dh, fine in onResizeBottomJira(b, dh, fine) },
                         onDuplicate:     { onDuplicateJira(b) },
+                        onDelete:        { onDeleteJira(b) },
+                        overlapping:     jiraOverlapIds.contains(b.id),
                         rowHeight: rowHeight,
                         columnWidth: width,
                         columnHeight: totalHeight,
@@ -466,6 +528,8 @@ private struct DayColumnView: View {
                         onResizeTop:     { dy, fine in onResizeTopClockify(b, dy, fine) },
                         onResizeBottom:  { dh, fine in onResizeBottomClockify(b, dh, fine) },
                         onDuplicate:     { onDuplicateClockify(b) },
+                        onDelete:        { onDeleteClockify(b) },
+                        overlapping:     clockifyOverlapIds.contains(b.id),
                         rowHeight: rowHeight,
                         columnWidth: width,
                         columnHeight: totalHeight,
@@ -478,6 +542,14 @@ private struct DayColumnView: View {
             }
             .frame(width: width, height: totalHeight)
             .contentShape(Rectangle())
+            // Click izquierdo en vacío → crea un worklog de 30 min en el
+            // slot clickeado.  El DragGesture(minimumDistance: 2) NO se
+            // dispara para taps sin movimiento, así que llegan acá.  Si
+            // hacés click sobre un bloque, su `.onTapGesture` interno
+            // gana por hit-test (siempre hijo > padre en SwiftUI).
+            .onTapGesture(coordinateSpace: .local) { location in
+                createBlockAt(location: location, width: width)
+            }
             .gesture(
                 DragGesture(minimumDistance: 2, coordinateSpace: .local)
                     .onChanged { value in

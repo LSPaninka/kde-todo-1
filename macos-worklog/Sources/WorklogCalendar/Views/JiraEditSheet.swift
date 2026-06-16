@@ -4,7 +4,10 @@ import SwiftUI
 struct JiraEditSheet: View {
     @ObservedObject var store: JiraWorklogStore
     @ObservedObject var settings: AppSettings
-    @Binding var presented: Bool
+    /// Cerramos vía Environment.dismiss; el padre usa
+    /// `.sheet(item:)` así el item se inyecta sincrónicamente y nunca
+    /// queda en blanco la primera vez.
+    @Environment(\.dismiss) private var dismiss
 
     /// Si `editing == nil` estamos creando; si está seteado estamos
     /// editando ese worklog.
@@ -32,7 +35,6 @@ struct JiraEditSheet: View {
 
     init(store: JiraWorklogStore,
          settings: AppSettings,
-         presented: Binding<Bool>,
          editing: JiraWorklog?,
          start: Date,
          end: Date,
@@ -40,7 +42,6 @@ struct JiraEditSheet: View {
          onDeleted: @escaping () -> Void) {
         self.store = store
         self.settings = settings
-        self._presented = presented
         self.editing = editing
         self._startDate = State(initialValue: start)
         self._endDate = State(initialValue: end)
@@ -72,7 +73,7 @@ struct JiraEditSheet: View {
                 Text(isEdit ? "Editar worklog" : "Nuevo worklog")
                     .font(.title3).bold()
                 Spacer()
-                Button(action: { presented = false }) {
+                Button(action: { dismiss() }) {
                     Image(systemName: "xmark.circle.fill")
                 }
                 .buttonStyle(.borderless)
@@ -143,7 +144,7 @@ struct JiraEditSheet: View {
                     }
                     .disabled(loading)
                 }
-                Button("Cancelar") { presented = false }
+                Button("Cancelar") { dismiss() }
                     .keyboardShortcut(.cancelAction)   // ⎋ cierra el sheet
                     .disabled(loading)
                 Button(isEdit ? "Guardar" : "Crear", action: save)
@@ -321,7 +322,7 @@ struct JiraEditSheet: View {
                 loading = false
                 switch result {
                 case .success:
-                    presented = false
+                    dismiss()
                     onSaved()
                 case .failure(let err):
                     status = (err.message, true)
@@ -337,7 +338,7 @@ struct JiraEditSheet: View {
                 loading = false
                 switch result {
                 case .success:
-                    presented = false
+                    dismiss()
                     onSaved()
                 case .failure(let err):
                     status = (err.message, true)
@@ -354,7 +355,7 @@ struct JiraEditSheet: View {
             loading = false
             switch result {
             case .success:
-                presented = false
+                dismiss()
                 onDeleted()
             case .failure(let err):
                 status = (err.message, true)

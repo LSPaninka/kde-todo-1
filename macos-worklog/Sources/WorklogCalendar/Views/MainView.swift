@@ -16,18 +16,16 @@ struct MainView: View {
 
     @State private var weekStart: Date = sundayOf(Date())
 
-    // Sheets.
-    @State private var jiraSheet: Bool = false
-    @State private var jiraSheetSelection: (editing: JiraWorklog?, start: Date, end: Date)? = nil
-
-    @State private var clockifySheet: Bool = false
-    @State private var clockifySheetSelection: (editing: ClockifyEntry?, start: Date, end: Date)? = nil
-
+    // Sheets — usamos `.sheet(item:)` con structs `Identifiable` así el
+    // `item` se inyecta sincrónicamente.  Con la API vieja
+    // (`.sheet(isPresented:)` + `if let selection`) el primer open
+    // mostraba el modal en blanco porque el estado todavía no había
+    // propagado al cierre del builder.
+    @State private var jiraSheetItem: JiraSheetItem? = nil
+    @State private var clockifySheetItem: ClockifySheetItem? = nil
+    @State private var subtaskSelection: JiraSubtask? = nil
     @State private var showSettings: Bool = false
     @State private var showDebug: Bool = false
-
-    @State private var subtaskSheet: Bool = false
-    @State private var subtaskSelection: JiraSubtask? = nil
 
     // Status banner (auto-clear).
     @State private var statusBanner: (text: String, isError: Bool) = ("", false)
@@ -117,7 +115,9 @@ struct MainView: View {
                     applyClockify(block, newStartMs: newStartMs, newDurationSec: newDur)
                 },
                 onDuplicateJira:     { block in duplicateJira(block) },
-                onDuplicateClockify: { block in duplicateClockify(block) }
+                onDuplicateClockify: { block in duplicateClockify(block) },
+                onDeleteJira:        { block in deleteJira(block) },
+                onDeleteClockify:    { block in deleteClockify(block) }
             )
             .frame(maxHeight: .infinity)
 
@@ -161,48 +161,39 @@ struct MainView: View {
         .onReceive(NotificationCenter.default.publisher(for: .worklogOpenPreferences)) { _ in
             showSettings = true
         }
-        // Jira sheet
-        .sheet(isPresented: $jiraSheet) {
-            if let sel = jiraSheetSelection {
-                JiraEditSheet(
-                    store: jira,
-                    settings: settings,
-                    presented: $jiraSheet,
-                    editing: sel.editing,
-                    start: sel.start,
-                    end: sel.end,
-                    onSaved: { syncNow() },
-                    onDeleted: { syncNow() }
-                )
-            }
+        // Jira sheet — `item:` garantiza inyección sincrónica del valor.
+        .sheet(item: $jiraSheetItem) { item in
+            JiraEditSheet(
+                store: jira,
+                settings: settings,
+                editing: item.editing,
+                start: item.start,
+                end: item.end,
+                onSaved:   { jiraSheetItem = nil; syncNow() },
+                onDeleted: { jiraSheetItem = nil; syncNow() }
+            )
         }
         // Clockify sheet
-        .sheet(isPresented: $clockifySheet) {
-            if let sel = clockifySheetSelection {
-                ClockifyEditSheet(
-                    store: clockify,
-                    settings: settings,
-                    presented: $clockifySheet,
-                    editing: sel.editing,
-                    start: sel.start,
-                    end: sel.end,
-                    defaultProjectId: settings.clockifyDefaultProjectId,
-                    defaultBillable: settings.clockifyBillableDefault,
-                    onSaved: { syncNow() },
-                    onDeleted: { syncNow() }
-                )
-            }
+        .sheet(item: $clockifySheetItem) { item in
+            ClockifyEditSheet(
+                store: clockify,
+                settings: settings,
+                editing: item.editing,
+                start: item.start,
+                end: item.end,
+                defaultProjectId: settings.clockifyDefaultProjectId,
+                defaultBillable: settings.clockifyBillableDefault,
+                onSaved:   { clockifySheetItem = nil; syncNow() },
+                onDeleted: { clockifySheetItem = nil; syncNow() }
+            )
         }
-        // Subtask detail sheet
-        .sheet(isPresented: $subtaskSheet) {
-            if let sub = subtaskSelection {
-                SubtaskDetailSheet(
-                    jira: jira,
-                    settings: settings,
-                    presented: $subtaskSheet,
-                    subtask: sub
-                )
-            }
+        // Subtask detail sheet — JiraSubtask ya es Identifiable.
+        .sheet(item: $subtaskSelection) { sub in
+            SubtaskDetailSheet(
+                jira: jira,
+                settings: settings,
+                subtask: sub
+            )
         }
         // Preferences
         .sheet(isPresented: $showSettings) {
@@ -322,7 +313,7 @@ struct MainView: View {
     /// → hacia los anillos).
     private var bottomPanel: some View {
         HStack(alignment: .center, spacing: 8) {
-            ZStack {
+            ZStack(alignment: .topLeading) {
                 switch bottomView {
                 case "subtasks":
                     SubtaskTable(
@@ -389,6 +380,12 @@ struct MainView: View {
     @State private var wheelAccum: CGFloat = 0
     @State private var wheelLastFire: Date = .distantPast
     private func handleBottomPanelWheel(_ dy: CGFloat) {
+        // En la vista de Subtareas el wheel tiene que scrollear la lista
+        // de filas, no cambiar de sección.  Para los demás (rings,
+        // heatmap) no hay ScrollView interno, así que el wheel se
+        // dedica al ciclo.
+        if bottomIsSubtasks { return }
+
         let now = Date()
         if now.timeIntervalSince(wheelLastFire) < 0.25 {
             return                         // todavía en cooldown
@@ -533,7 +530,6 @@ struct MainView: View {
 
     private func openSubtaskDetail(_ sub: JiraSubtask) {
         subtaskSelection = sub
-        subtaskSheet = true
     }
 
     private func openInJira(_ key: String) {
@@ -643,6 +639,38 @@ struct MainView: View {
         }
     }
 
+    /// Menú contextual → "Eliminar" sobre un bloque Jira.
+    private func deleteJira(_ block: CalendarBlock) {
+        guard let w = jira.worklogs.first(where: { "jira-\($0.id)" == block.id }) else { return }
+        setStatus("Eliminando worklog…", isError: false, sticky: true)
+        jira.deleteWorklog(issueKey: w.issueKey, worklogId: w.id) { result in
+            switch result {
+            case .success:
+                setStatus("Worklog eliminado.", isError: false)
+                syncNow()
+            case .failure(let err):
+                setStatus("Error eliminando: \(err.message)", isError: true)
+                syncNow()
+            }
+        }
+    }
+
+    /// Menú contextual → "Eliminar" sobre una entry Clockify.
+    private func deleteClockify(_ block: CalendarBlock) {
+        guard let e = clockify.entries.first(where: { "clockify-\($0.id)" == block.id }) else { return }
+        setStatus("Eliminando entry…", isError: false, sticky: true)
+        clockify.deleteEntry(id: e.id) { result in
+            switch result {
+            case .success:
+                setStatus("Entry eliminada.", isError: false)
+                syncNow()
+            case .failure(let err):
+                setStatus("Error eliminando: \(err.message)", isError: true)
+                syncNow()
+            }
+        }
+    }
+
     /// Idem para Clockify.  Preserva descripción, proyecto, tags y
     /// billable; sólo se desplaza start y se ajusta end por la nueva
     /// `durationSec`.
@@ -691,12 +719,10 @@ struct MainView: View {
     }
 
     private func openJiraSheet(editing: JiraWorklog?, start: Date, end: Date) {
-        jiraSheetSelection = (editing, start, end)
-        jiraSheet = true
+        jiraSheetItem = JiraSheetItem(editing: editing, start: start, end: end)
     }
     private func openClockifySheet(editing: ClockifyEntry?, start: Date, end: Date) {
-        clockifySheetSelection = (editing, start, end)
-        clockifySheet = true
+        clockifySheetItem = ClockifySheetItem(editing: editing, start: start, end: end)
     }
 
     // MARK: - Helpers
@@ -723,4 +749,20 @@ struct MainView: View {
         let ey = cal.component(.year, from: end)
         return "\(sd) \(months[sm]) — \(ed) \(months[em]) \(ey)"
     }
+}
+
+/// Envoltorios `Identifiable` para que los sheets se abran con el
+/// `item` ya seteado (evita el bug del modal-en-blanco la primera vez).
+struct JiraSheetItem: Identifiable {
+    let id = UUID()
+    let editing: JiraWorklog?
+    let start: Date
+    let end: Date
+}
+
+struct ClockifySheetItem: Identifiable {
+    let id = UUID()
+    let editing: ClockifyEntry?
+    let start: Date
+    let end: Date
 }

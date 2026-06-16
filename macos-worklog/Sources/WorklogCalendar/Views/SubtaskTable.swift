@@ -107,10 +107,15 @@ struct SubtaskTable: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        // `maxHeight: .infinity` + alignment topLeading: ocupamos todo el
+        // alto del panel inferior y arrancamos desde arriba, así no
+        // queda el bloque centrado verticalmente con un hueco entre el
+        // header y las filas.
+        VStack(alignment: .leading, spacing: 0) {
             header
             columnHeader
-            Divider()
+                .padding(.top, 2)
+            Divider().padding(.top, 1)
             if displayRows.isEmpty {
                 Spacer(minLength: 0)
                 Text(jira.subtasks.isEmpty
@@ -120,15 +125,18 @@ struct SubtaskTable: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                 Spacer(minLength: 0)
             } else {
-                ScrollView {
+                ScrollView(.vertical, showsIndicators: true) {
                     LazyVStack(spacing: 1) {
                         ForEach(displayRows) { row in
                             rowView(row)
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private var header: some View {

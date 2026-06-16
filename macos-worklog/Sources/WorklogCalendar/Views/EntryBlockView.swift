@@ -101,8 +101,17 @@ struct EntryBlockView: View {
     let onResizeTop: (_ dy: CGFloat, _ fine: Bool) -> Void
     /// Resize del borde inferior: el padre cambia sólo `duration`.
     let onResizeBottom: (_ dh: CGFloat, _ fine: Bool) -> Void
-    /// Botón duplicar (esquina superior derecha).
+    /// Menú contextual "Duplicar" (esquina superior derecha del bloque y
+    /// segundo item del right-click).
     let onDuplicate: () -> Void
+    /// Menú contextual "Eliminar" del right-click.  El padre llama a
+    /// `deleteWorklog` / `deleteEntry` según corresponda.
+    let onDelete: () -> Void
+    /// `true` cuando este bloque pisa en el tiempo a otro del mismo
+    /// origen (Jira-Jira o Clockify-Clockify).  Cuando es así, lo
+    /// teñimos:  naranja para Jira, amarillo para Clockify, así el
+    /// usuario detecta visualmente duplicados pre-sync.
+    let overlapping: Bool
     /// Altura de cada fila de 30 min (necesaria para snappear el offset
     /// visual al soltar y para detectar el zonado top/bottom).
     let rowHeight: CGFloat
@@ -149,6 +158,11 @@ struct EntryBlockView: View {
     }
 
     private var borderColor: Color {
+        if overlapping {
+            // Jira → naranja, Clockify → amarillo (warning visual de
+            // dos worklogs / entries que se pisan en el tiempo).
+            return block.kind == .jira ? .orange : .yellow
+        }
         if block.kind == .jira {
             return Color(red: 120/255, green: 110/255, blue: 200/255)
         }
@@ -157,6 +171,10 @@ struct EntryBlockView: View {
         }
         return Color(red: 70/255, green: 170/255, blue: 100/255)
     }
+
+    /// Cuando el bloque está en overlap, engrosamos el borde a 2 px para
+    /// que sea bien visible.
+    private var borderWidth: CGFloat { overlapping ? 2 : 1 }
 
     var body: some View {
         // Color.clear claims the parent-given frame for layout / hit-testing,
@@ -192,6 +210,20 @@ struct EntryBlockView: View {
                 // menos no queda detrás de bloques contiguos).
                 .zIndex(dragMode == .move ? 999 : 0)
                 .onTapGesture(perform: onTap)
+                // Right-click: menú con duplicar / eliminar.
+                .contextMenu {
+                    Button {
+                        onDuplicate()
+                    } label: {
+                        Label("Duplicar", systemImage: "doc.on.doc")
+                    }
+                    Divider()
+                    Button(role: .destructive) {
+                        onDelete()
+                    } label: {
+                        Label("Eliminar", systemImage: "trash")
+                    }
+                }
                 // `highPriorityGesture` (en vez de `gesture`) es el
                 // equivalente al `preventStealing: true` del MouseArea
                 // QML: gana frente al pan del ScrollView que envuelve
@@ -308,30 +340,38 @@ struct EntryBlockView: View {
                 .fill(fillColor)
                 .overlay(
                     RoundedRectangle(cornerRadius: 3, style: .continuous)
-                        .stroke(borderColor, lineWidth: 1)
+                        .stroke(borderColor, lineWidth: borderWidth)
                 )
 
             if single {
+                // Bloque de 30 min (o modo combinado): sólo cabe una
+                // línea, así que truncamos al final.
                 Text(block.compactText)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: 9, weight: .semibold))
                     .foregroundColor(.white)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .padding(.horizontal, 4)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                VStack(alignment: .leading, spacing: 0) {
+                // Bloque >= 60 min: la hora arriba en bold (una línea)
+                // y el título abajo con soft-wrap hasta 2-3 líneas
+                // según el alto disponible.
+                VStack(alignment: .leading, spacing: 1) {
                     Text(block.topText)
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.system(size: 9, weight: .semibold))
                         .lineLimit(1)
+                        .truncationMode(.tail)
                     Text(block.bottomText)
-                        .font(.system(size: 10, weight: .regular))
-                        .lineLimit(1)
+                        .font(.system(size: 9, weight: .regular))
+                        .lineLimit(3)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
                 }
                 .foregroundColor(.white)
                 .padding(.horizontal, 4)
-                .padding(.vertical, 3)
+                .padding(.vertical, 2)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }

@@ -309,10 +309,18 @@ final class ClockifyStore: ObservableObject {
             var toCreate: [(start: Date, end: Date, desc: String)] = []
             for j in jiraWorklogs {
                 let desc = j.issueSummary.isEmpty ? j.issueKey : "\(j.issueKey): \(j.issueSummary)"
+                let jEndMs = j.startedMs + Double(j.durationSec) * 1000
+                // Dedup por **overlap temporal con misma key** en
+                // lugar de comparar duración exacta.  Antes, si en Jira
+                // alargabas el worklog 10 min, este check fallaba y se
+                // creaba una segunda entry encima de la vieja.  Ahora,
+                // mientras exista cualquier Clockify entry con la misma
+                // `description` que pisa el rango horario del worklog
+                // Jira, lo salteamos.
                 let alreadyThere = self.entries.contains { c in
-                    c.description == desc &&
-                    abs(c.startedMs - j.startedMs) <= 60_000 &&
-                    abs(c.durationSec - j.durationSec) <= 60
+                    if c.description != desc { return false }
+                    let cEndMs = c.startedMs + Double(c.durationSec) * 1000
+                    return c.startedMs < jEndMs && j.startedMs < cEndMs
                 }
                 if alreadyThere { continue }
                 let start = Date(timeIntervalSince1970: j.startedMs / 1000)
