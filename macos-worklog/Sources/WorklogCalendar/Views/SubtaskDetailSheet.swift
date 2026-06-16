@@ -19,7 +19,8 @@ struct SubtaskDetailSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             header
-            metaRow
+            statusRow
+            metaGrid
             estimatesRow
             Divider()
 
@@ -64,8 +65,9 @@ struct SubtaskDetailSheet: View {
         }
     }
 
-    private var metaRow: some View {
-        HStack(spacing: 8) {
+    /// Badge de estado solo, en su propia fila.
+    private var statusRow: some View {
+        HStack {
             if !activeStatus.isEmpty {
                 Text(activeStatus)
                     .font(.caption2).bold()
@@ -73,21 +75,47 @@ struct SubtaskDetailSheet: View {
                     .padding(.horizontal, 8).padding(.vertical, 2)
                     .background(Capsule().fill(JiraStatusBadge.color(for: activeStatusColor)))
             }
-            if let d = detail {
-                if !d.issuetype.isEmpty {
-                    Text("Tipo: \(d.issuetype)").font(.caption).foregroundColor(.secondary)
-                }
-                if !d.priority.isEmpty {
-                    Text("Prioridad: \(d.priority)").font(.caption).foregroundColor(.secondary)
-                }
-            }
-            if !activeParentKey.isEmpty {
-                Text("Padre: \(activeParentKey) — \(activeParentSummary)")
-                    .font(.caption).foregroundColor(.secondary)
-                    .lineLimit(1)
-            }
             Spacer()
         }
+    }
+
+    /// Grid de campos etiquetados: Tipo, Prioridad, Padre, Asignado a.
+    /// Siempre los mostramos (con "—" cuando no hay valor), salvo Padre
+    /// que sólo aparece si la issue es subtarea de algo.
+    private var metaGrid: some View {
+        Grid(alignment: .leadingFirstTextBaseline,
+             horizontalSpacing: 12, verticalSpacing: 3) {
+            GridRow {
+                Text("Tipo de actividad:").foregroundColor(.secondary)
+                Text(detail?.issuetype.isEmpty == false ? detail!.issuetype : "—")
+                    .bold()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            GridRow {
+                Text("Prioridad:").foregroundColor(.secondary)
+                Text(detail?.priority.isEmpty == false ? detail!.priority : "—")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if !activeParentKey.isEmpty {
+                GridRow {
+                    Text("Padre:").foregroundColor(.secondary)
+                    Text(parentDisplay)
+                        .bold()
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            GridRow {
+                Text("Asignado a:").foregroundColor(.secondary)
+                Text(detail?.assignee.isEmpty == false ? detail!.assignee : "—")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    private var parentDisplay: String {
+        if activeParentSummary.isEmpty { return activeParentKey }
+        return "\(activeParentKey)  —  \(activeParentSummary)"
     }
 
     private var estimatesRow: some View {
@@ -96,10 +124,6 @@ struct SubtaskDetailSheet: View {
             estimateCol("Quemadas", detail?.spentSec)
             estimateCol("Disponible", detail?.remainingSec ?? subtask.remainingSec)
             Spacer()
-            VStack(alignment: .leading, spacing: 0) {
-                Text("Asignado a").font(.caption2).foregroundColor(.secondary)
-                Text(detail?.assignee.isEmpty == false ? detail!.assignee : "—")
-            }
         }
     }
 

@@ -27,6 +27,9 @@ enum JiraStatusBadge {
 /// Columnas: código + título, badge de estado, horas disponibles y
 /// (opcional) issue padre.  Click izquierdo → detalle; click derecho →
 /// menú contextual (cambiar estado + abrir en Jira).
+///
+/// Click en un header ordena por esa columna; click de nuevo invierte.
+/// Sin orden seleccionado, las filas mantienen el ORDER BY del JQL.
 struct SubtaskTable: View {
     @ObservedObject var jira: JiraWorklogStore
     @ObservedObject var settings: AppSettings
@@ -43,7 +46,47 @@ struct SubtaskTable: View {
     @State private var transitionsByKey: [String: [JiraTransition]] = [:]
     @State private var loadingKeys: Set<String> = []
 
+    /// Columnas ordenables.  `nil` = mantener el orden del JQL.
+    enum SortKey { case key, status, remaining, parent }
+    @State private var sortKey: SortKey? = nil
+    @State private var sortAsc: Bool = true
+
     private var showParent: Bool { settings.subtaskShowParent }
+
+    // Geometría compartida entre header y filas para que el spacer (la
+    // separación entre "Disp." y "Padre") evite el choque "— CP-2650".
+    private let statusW: CGFloat = 110
+    private let dispW:   CGFloat = 64
+    private let gapW:    CGFloat = 16
+    private let parentW: CGFloat = 90
+
+    /// Filas con el orden activo aplicado.  Si `sortKey == nil`
+    /// devolvemos `jira.subtasks` tal cual (el orden del JQL).
+    private var displayRows: [JiraSubtask] {
+        guard let key = sortKey else { return jira.subtasks }
+        let mult = sortAsc ? 1 : -1
+        return jira.subtasks.sorted { a, b in
+            switch key {
+            case .remaining:
+                return (a.remainingSec - b.remainingSec) * mult < 0
+            case .status:
+                return a.status.localizedCompare(b.status) == (mult > 0 ? .orderedAscending : .orderedDescending)
+            case .parent:
+                return a.parentKey.localizedCompare(b.parentKey) == (mult > 0 ? .orderedAscending : .orderedDescending)
+            case .key:
+                return a.key.localizedCompare(b.key) == (mult > 0 ? .orderedAscending : .orderedDescending)
+            }
+        }
+    }
+
+    private func toggleSort(_ k: SortKey) {
+        if sortKey == k { sortAsc.toggle() }
+        else { sortKey = k; sortAsc = true }
+    }
+    private func sortGlyph(_ k: SortKey) -> String {
+        guard sortKey == k else { return "" }
+        return sortAsc ? "  ▲" : "  ▼"
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -59,7 +102,7 @@ struct SubtaskTable: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 1) {
-                        ForEach(jira.subtasks) { row in
+                        ForEach(displayRows) { row in
                             rowView(row)
                         }
                     }
@@ -86,17 +129,38 @@ struct SubtaskTable: View {
 
     private var columnHeader: some View {
         HStack(spacing: 6) {
-            Text("Subtarea").font(.caption2).bold().foregroundColor(.secondary)
+            headerCell(title: "Subtarea", key: .key, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Text("Estado").font(.caption2).bold().foregroundColor(.secondary)
-                .frame(width: 110, alignment: .leading)
-            Text("Disp.").font(.caption2).bold().foregroundColor(.secondary)
-                .frame(width: 64, alignment: .trailing)
+            headerCell(title: "Estado", key: .status, alignment: .leading)
+                .frame(width: statusW, alignment: .leading)
+            headerCell(title: "Disp.", key: .remaining, alignment: .trailing)
+                .frame(width: dispW, alignment: .trailing)
             if showParent {
-                Text("Padre").font(.caption2).bold().foregroundColor(.secondary)
-                    .frame(width: 90, alignment: .leading)
+                Color.clear.frame(width: gapW)
+                headerCell(title: "Padre", key: .parent, alignment: .leading)
+                    .frame(width: parentW, alignment: .leading)
             }
         }
+    }
+
+    /// Header clickeable de una columna con su glifo de sort.
+    @ViewBuilder
+    private func headerCell(title: String,
+                             key: SortKey,
+                             alignment: TextAlignment) -> some View {
+        let isActive = sortKey == key
+        Text(title + sortGlyph(key))
+            .font(.caption2).bold()
+            .foregroundColor(.secondary)
+            .opacity(isActive ? 0.95 : 0.6)
+            .multilineTextAlignment(alignment)
+            .lineLimit(1)
+            .contentShape(Rectangle())
+            .onTapGesture { toggleSort(key) }
+            .onHover { hovering in
+                if hovering { NSCursor.pointingHand.set() }
+                else        { NSCursor.arrow.set() }
+            }
     }
 
     @ViewBuilder
@@ -118,7 +182,7 @@ struct SubtaskTable: View {
                 .foregroundColor(Color(white: 0.10))
                 .lineLimit(1)
                 .padding(.horizontal, 6).padding(.vertical, 2)
-                .frame(width: 110)
+                .frame(width: statusW)
                 .background(
                     Capsule().fill(JiraStatusBadge.color(for: row.statusColor))
                 )
@@ -126,15 +190,17 @@ struct SubtaskTable: View {
             // Horas disponibles
             Text(JiraStatusBadge.fmtHours(row.remainingSec))
                 .font(.system(.caption, design: .monospaced))
-                .frame(width: 64, alignment: .trailing)
+                .frame(width: dispW, alignment: .trailing)
 
-            // Padre (opcional)
+            // Padre (opcional), con un spacer fijo antes para que no
+            // choque con el "—" del Disp.
             if showParent {
+                Color.clear.frame(width: gapW)
                 Text(row.parentKey.isEmpty ? "—" : row.parentKey)
                     .font(.system(.caption, design: .monospaced))
                     .lineLimit(1).truncationMode(.tail)
                     .opacity(row.parentKey.isEmpty ? 0.35 : 0.85)
-                    .frame(width: 90, alignment: .leading)
+                    .frame(width: parentW, alignment: .leading)
                     .help(row.parentSummary.isEmpty ? "" : "\(row.parentKey) — \(row.parentSummary)")
             }
         }
