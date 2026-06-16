@@ -1,5 +1,16 @@
 # Changelog — Jira / Clockify Worklog Calendar
 
+## 0.8.2 — Subtask table: inline filter (lupa)
+
+- **Filter field.** A magnifying-glass button to the left of the
+  reload button toggles an inline filter, same shape as the
+  new-worklog modal's issue-picker filter. The field matches against
+  key, summary, status, parent key and parent summary
+  (case-insensitive substring) and re-runs sort on top. Esc closes
+  and clears.
+
+Bumped metadata 0.8.1 → 0.8.2.
+
 ## 0.8.1 — Subtask table: sortable columns, spacing, tooltip + modal fields
 
 - **Sortable columns.** Click a column header (Subtarea / Estado /

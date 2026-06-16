@@ -35,11 +35,27 @@ Item {
     property string _sortKey: ""
     property bool _sortAsc: true
 
-    // Rows after applying the current sort. Re-evaluates on store version,
-    // sort key/direction or store change.
+    // Inline search state — toggled by the magnifying-glass button on the
+    // top-right. Filter matches against key, summary, status, parent key
+    // and parent summary (case-insensitive substring), same shape as the
+    // new-worklog modal's picker filter.
+    property bool _searchOpen: false
+    property string _searchText: ""
+
+    // Rows after applying the current filter + sort. Re-evaluates on store
+    // version, search text, sort key or sort direction.
     readonly property var _displayRows: {
         var _ = tbl._v;
         var arr = (tbl.jiraStore ? (tbl.jiraStore.subtasks || []) : []).slice();
+        var q = (tbl._searchText || "").trim().toLowerCase();
+        if (q.length > 0) {
+            arr = arr.filter(function(r) {
+                var hay = ((r.key || "") + " " + (r.summary || "") + " " +
+                           (r.status || "") + " " + (r.parentKey || "") + " " +
+                           (r.parentSummary || "")).toLowerCase();
+                return hay.indexOf(q) >= 0;
+            });
+        }
         var key = tbl._sortKey;
         if (!key) return arr;
         var asc = tbl._sortAsc ? 1 : -1;
@@ -169,11 +185,42 @@ Item {
                 font.bold: true
             }
             PlasmaComponents3.Label {
+                visible: !tbl._searchOpen
                 text: tbl._displayRows.length > 0 ? ("(" + tbl._displayRows.length + ")") : ""
                 opacity: 0.6
                 font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
             }
-            Item { Layout.fillWidth: true }
+            Item { visible: !tbl._searchOpen; Layout.fillWidth: true }
+
+            // Inline filter field (visible while the lupa is toggled on).
+            // Esc closes & clears, same as the calendar's quick-search.
+            PlasmaComponents3.TextField {
+                id: searchField
+                visible: tbl._searchOpen
+                Layout.fillWidth: true
+                placeholderText: i18n("Filtrar subtareas…")
+                text: tbl._searchText
+                onTextChanged: tbl._searchText = text
+                Keys.onEscapePressed: function(event) {
+                    tbl._searchOpen = false;
+                    tbl._searchText = "";
+                    event.accepted = true;
+                }
+                onVisibleChanged: if (visible) forceActiveFocus()
+            }
+
+            PlasmaComponents3.ToolButton {
+                icon.name: "edit-find"
+                checkable: true
+                checked: tbl._searchOpen
+                onClicked: {
+                    tbl._searchOpen = !tbl._searchOpen;
+                    if (!tbl._searchOpen) tbl._searchText = "";
+                }
+                PlasmaComponents3.ToolTip.text: i18n("Buscar en la lista")
+                PlasmaComponents3.ToolTip.visible: hovered
+                PlasmaComponents3.ToolTip.delay: 500
+            }
             PlasmaComponents3.ToolButton {
                 icon.name: "view-refresh"
                 onClicked: tbl.refresh()
