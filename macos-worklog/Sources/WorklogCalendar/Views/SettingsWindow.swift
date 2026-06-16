@@ -82,8 +82,22 @@ struct SettingsWindow: View {
                 )
             }
 
+            Section("Tabla de subtareas (panel inferior)") {
+                Toggle("Mostrar la vista de subtareas en el switch",
+                       isOn: $settings.showSubtaskTable)
+                Toggle("Mostrar la columna de issue padre",
+                       isOn: $settings.subtaskShowParent)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("JQL de subtareas").font(.caption).foregroundColor(.secondary)
+                    TextField("JQL", text: $settings.subtaskJql, axis: .vertical)
+                        .lineLimit(2...4)
+                        .font(.system(.caption, design: .monospaced))
+                        .textFieldStyle(.roundedBorder)
+                }
+            }
+
             Section("Sprint (experimental)") {
-                Toggle("Mostrar panel inferior (anillos o heatmap)",
+                Toggle("Mostrar panel inferior (anillos / subtareas / heatmap)",
                        isOn: $settings.showSprintGauges)
 
                 Picker("Estrategia para encontrar el sprint activo",

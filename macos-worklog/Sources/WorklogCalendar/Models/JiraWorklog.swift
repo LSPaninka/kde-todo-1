@@ -43,3 +43,47 @@ struct JiraSprintInfo: Equatable {
     var startMs: Double
     var endMs: Double
 }
+
+/// Una fila de la tabla de subtareas (tercera vista del panel inferior).
+struct JiraSubtask: Identifiable, Hashable {
+    var id: String { key }
+    var key: String
+    var summary: String
+    var status: String
+    var statusCategory: String   // new, indeterminate, done
+    var statusColor: String      // blue-gray, yellow, green, …
+    var remainingSec: Int
+    var parentKey: String
+    var parentSummary: String
+}
+
+/// Una transición de estado disponible para una issue
+/// (GET /issue/{key}/transitions).
+struct JiraTransition: Identifiable, Hashable {
+    var id: String
+    var name: String
+    var toStatus: String
+    var toStatusColor: String
+}
+
+/// Detalle completo de una issue para el modal de subtarea.
+struct JiraIssueDetail {
+    var key: String
+    var summary: String
+    var status: String
+    var statusCategory: String
+    var statusColor: String
+    var description: String
+    var issuetype: String
+    var priority: String
+    var assignee: String
+    var reporter: String
+    var parentKey: String
+    var parentSummary: String
+    var originalEstimateSec: Int
+    var remainingSec: Int
+    var spentSec: Int
+    var created: String
+    var updated: String
+}
+

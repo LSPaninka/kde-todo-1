@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Pantalla principal de la app.  Cabecera (modo + navegación de semana
@@ -25,6 +26,9 @@ struct MainView: View {
     @State private var showSettings: Bool = false
     @State private var showDebug: Bool = false
 
+    @State private var subtaskSheet: Bool = false
+    @State private var subtaskSelection: JiraSubtask? = nil
+
     // Status banner (auto-clear).
     @State private var statusBanner: (text: String, isError: Bool) = ("", false)
     @State private var bannerClearTask: DispatchWorkItem? = nil
@@ -48,10 +52,24 @@ struct MainView: View {
     /// algo útil que mostrar (gauges piden Jira, heatmap acepta los dos).
     private var showBottomPanel: Bool { settings.showSprintGauges }
 
-    /// `true` cuando la vista del panel es la de los anillos.
-    private var bottomIsRings: Bool { settings.bottomView == "rings" }
-    /// `true` cuando es el heatmap mensual.
-    private var bottomIsHeatmap: Bool { settings.bottomView == "heatmap" }
+    /// Vistas disponibles del panel inferior, en orden del switch.  La
+    /// del medio (subtareas) sólo aparece si está habilitada.
+    private var bottomViews: [String] {
+        var arr = ["rings"]
+        if settings.showSubtaskTable { arr.append("subtasks") }
+        arr.append("heatmap")
+        return arr
+    }
+
+    /// Vista efectiva: cae a "rings" si la guardada ya no está disponible
+    /// (ej. deshabilitaron la tabla de subtareas).
+    private var bottomView: String {
+        bottomViews.contains(settings.bottomView) ? settings.bottomView : "rings"
+    }
+
+    private var bottomIsRings: Bool { bottomView == "rings" }
+    private var bottomIsSubtasks: Bool { bottomView == "subtasks" }
+    private var bottomIsHeatmap: Bool { bottomView == "heatmap" }
 
     /// Los rings solo aportan cuando hay datos de Jira (modo Jira o
     /// combinado) y la vista es de 9h.  Si no, el switch al panel de
@@ -129,11 +147,16 @@ struct MainView: View {
         .onChange(of: settings.showSprintGauges) { on in if on, bottomIsRings { jira.fetchSprintInfo { _ in } } }
         // Cambio de vista del panel inferior (botones del switch, wheel
         // o config) → refrescar la nueva vista.  El heatmap se refresca
-        // sólo via `.onAppear`; los rings sí necesitan re-fetch.
-        .onChange(of: settings.bottomView) { _ in
-            if showBottomPanel && bottomIsRings && ringsAvailable {
-                jira.fetchSprintInfo { _ in }
-            }
+        // sólo via `.onAppear`; rings y subtareas necesitan re-fetch.
+        .onChange(of: settings.bottomView) { _ in refreshBottomView() }
+        // Si deshabilitan la tabla de subtareas mientras está visible,
+        // caemos a "rings".
+        .onChange(of: settings.showSubtaskTable) { on in
+            if !on && settings.bottomView == "subtasks" { settings.bottomView = "rings" }
+        }
+        // Editar el JQL de subtareas con la tabla visible → recargar.
+        .onChange(of: settings.subtaskJql) { _ in
+            if showBottomPanel && bottomIsSubtasks { jira.fetchSubtasks() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .worklogOpenPreferences)) { _ in
             showSettings = true
@@ -167,6 +190,17 @@ struct MainView: View {
                     defaultBillable: settings.clockifyBillableDefault,
                     onSaved: { syncNow() },
                     onDeleted: { syncNow() }
+                )
+            }
+        }
+        // Subtask detail sheet
+        .sheet(isPresented: $subtaskSheet) {
+            if let sub = subtaskSelection {
+                SubtaskDetailSheet(
+                    jira: jira,
+                    settings: settings,
+                    presented: $subtaskSheet,
+                    subtask: sub
                 )
             }
         }
@@ -274,17 +308,24 @@ struct MainView: View {
 
     // MARK: - Footer
 
-    /// Panel inferior: a la izquierda el contenido (anillos o heatmap),
-    /// a la derecha un switch vertical de dos botones-ícono para
-    /// alternar.  Scrollear con la rueda / trackpad sobre el panel
-    /// también alterna (down → heatmap, up → rings).
+    /// Panel inferior: a la izquierda el contenido (anillos / subtareas /
+    /// heatmap), a la derecha un switch vertical de hasta tres botones.
+    /// Scrollear con la rueda / trackpad cicla entre las vistas
+    /// disponibles (down → hacia el heatmap, up → hacia los anillos).
     private var bottomPanel: some View {
         HStack(alignment: .center, spacing: 8) {
             ZStack {
-                if bottomIsRings {
-                    SprintGauges(jira: jira)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                } else {
+                switch bottomView {
+                case "subtasks":
+                    SubtaskTable(
+                        jira: jira,
+                        settings: settings,
+                        onActivate: { sub in openSubtaskDetail(sub) },
+                        onOpenInJira: { key in openInJira(key) },
+                        onTransition: { sub, t in transitionSubtask(sub, t) }
+                    )
+                    .transition(.opacity)
+                case "heatmap":
                     MonthHeatmap(
                         jira: jira,
                         clockify: clockify,
@@ -294,10 +335,13 @@ struct MainView: View {
                         }
                     )
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
+                default:
+                    SprintGauges(jira: jira)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
             .frame(maxWidth: .infinity)
-            .animation(.easeInOut(duration: 0.25), value: settings.bottomView)
+            .animation(.easeInOut(duration: 0.25), value: bottomView)
 
             VStack(spacing: 4) {
                 bottomViewButton(
@@ -306,6 +350,14 @@ struct MainView: View {
                     label: "Anillos Sprint / Horas",
                     enabled: ringsAvailable
                 )
+                if settings.showSubtaskTable {
+                    bottomViewButton(
+                        target: "subtasks",
+                        systemName: "list.bullet.rectangle",
+                        label: "Tabla de subtareas",
+                        enabled: true
+                    )
+                }
                 bottomViewButton(
                     target: "heatmap",
                     systemName: "square.grid.3x3",
@@ -322,17 +374,25 @@ struct MainView: View {
     @State private var wheelAccum: CGFloat = 0
     private func handleBottomPanelWheel(_ dy: CGFloat) {
         // El trackpad manda muchos eventos chiquitos con el mismo signo:
-        // acumulamos hasta cruzar un umbral, después clasificamos según
-        // signo y reseteamos.
+        // acumulamos hasta cruzar un umbral, después ciclamos por
+        // `bottomViews` (clamp en los extremos) y reseteamos.
         wheelAccum += dy
         let threshold: CGFloat = 8
         if wheelAccum >= threshold {
-            settings.bottomView = "rings"     // scroll up
+            cycleBottomView(-1)               // scroll up → hacia los anillos
             wheelAccum = 0
         } else if wheelAccum <= -threshold {
-            settings.bottomView = "heatmap"   // scroll down
+            cycleBottomView(+1)               // scroll down → hacia el heatmap
             wheelAccum = 0
         }
+    }
+
+    /// Avanza/retrocede en `bottomViews`, sin wrap.
+    private func cycleBottomView(_ delta: Int) {
+        let views = bottomViews
+        let idx = views.firstIndex(of: bottomView) ?? 0
+        let next = Swift.max(0, Swift.min(views.count - 1, idx + delta))
+        if next != idx { settings.bottomView = views[next] }
     }
 
     /// Botón-ícono individual del switch.  Marca el activo con relleno
@@ -341,7 +401,7 @@ struct MainView: View {
                                    systemName: String,
                                    label: String,
                                    enabled: Bool) -> some View {
-        let active = settings.bottomView == target
+        let active = bottomView == target
         return Button {
             settings.bottomView = target
         } label: {
@@ -432,12 +492,47 @@ struct MainView: View {
     private func syncNow() {
         if settings.source == .jira || settings.source == .jiraClockify {
             jira.fetchWeek(starting: weekStart)
-            if showBottomPanel && bottomIsRings && ringsAvailable {
-                jira.fetchSprintInfo { _ in }
-            }
         }
         if settings.source == .clockify || settings.source == .jiraClockify {
             clockify.fetchWeek(starting: weekStart)
+        }
+        refreshBottomView()
+    }
+
+    /// Refresca el contenido de la vista del panel inferior activa.
+    private func refreshBottomView() {
+        guard showBottomPanel else { return }
+        if bottomIsRings, ringsAvailable {
+            jira.fetchSprintInfo { _ in }
+        } else if bottomIsSubtasks {
+            jira.fetchSubtasks()
+        }
+        // El heatmap recarga solo vía su `.onAppear`.
+    }
+
+    // MARK: - Subtareas
+
+    private func openSubtaskDetail(_ sub: JiraSubtask) {
+        subtaskSelection = sub
+        subtaskSheet = true
+    }
+
+    private func openInJira(_ key: String) {
+        if let url = jira.issueWebUrl(key) {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    private func transitionSubtask(_ sub: JiraSubtask, _ t: JiraTransition) {
+        setStatus("Cambiando estado de \(sub.key)…", isError: false, sticky: true)
+        jira.transitionIssue(issueKey: sub.key, transitionId: t.id) { result in
+            switch result {
+            case .success:
+                setStatus("Estado de \(sub.key) actualizado.", isError: false)
+                jira.fetchSubtasks()
+            case .failure(let err):
+                setStatus("No se pudo cambiar el estado: \(err.message)", isError: true)
+            }
         }
     }
 

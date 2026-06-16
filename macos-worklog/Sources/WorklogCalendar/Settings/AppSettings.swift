@@ -71,8 +71,17 @@ final class AppSettings: ObservableObject {
     /// (`worklogShowSprintGauges`) para no perder la preferencia.
     @Published var showSprintGauges: Bool = true { didSet { ud.set(showSprintGauges, forKey: "worklogShowSprintGauges") } }
     /// Qué se muestra en el panel inferior: `"rings"` (gauges Sprint+
-    /// Horas) o `"heatmap"` (mapa mensual de horas).
+    /// Horas), `"subtasks"` (tabla de subtareas) o `"heatmap"` (mapa
+    /// mensual de horas).
     @Published var bottomView: String = "rings" { didSet { ud.set(bottomView, forKey: "worklogBottomView") } }
+    /// Muestra la tercera vista del panel inferior: la tabla de subtareas.
+    @Published var showSubtaskTable: Bool = true { didSet { ud.set(showSubtaskTable, forKey: "worklogShowSubtaskTable") } }
+    /// JQL que alimenta la tabla de subtareas.
+    @Published var subtaskJql: String =
+        "issuetype in subTaskIssueTypes() AND assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC"
+        { didSet { ud.set(subtaskJql, forKey: "worklogSubtaskJql") } }
+    /// Muestra la columna de issue padre en la tabla de subtareas.
+    @Published var subtaskShowParent: Bool = true { didSet { ud.set(subtaskShowParent, forKey: "worklogSubtaskShowParent") } }
     /// Cómo descubrir el sprint activo.  Default
     /// `"subtask-customfield"` cubre el caso típico (usuario sólo dueño
     /// de subtareas).  `"agile-board"` necesita un boardId.
@@ -128,7 +137,14 @@ final class AppSettings: ObservableObject {
             showSprintGauges = ud.bool(forKey: "worklogShowSprintGauges")
         }
         if let s = ud.string(forKey: "worklogBottomView"),
-           s == "rings" || s == "heatmap" { bottomView = s }
+           s == "rings" || s == "subtasks" || s == "heatmap" { bottomView = s }
+        if ud.object(forKey: "worklogShowSubtaskTable") != nil {
+            showSubtaskTable = ud.bool(forKey: "worklogShowSubtaskTable")
+        }
+        if let s = ud.string(forKey: "worklogSubtaskJql"), !s.isEmpty { subtaskJql = s }
+        if ud.object(forKey: "worklogSubtaskShowParent") != nil {
+            subtaskShowParent = ud.bool(forKey: "worklogSubtaskShowParent")
+        }
         if let s = ud.string(forKey: "worklogSprintStrategy"), !s.isEmpty { sprintStrategy = s }
         if let s = ud.string(forKey: "worklogSprintField"),    !s.isEmpty { sprintField = s }
         if let n = ud.object(forKey: "worklogSprintBoardId") as? Int { sprintBoardId = n }

@@ -17,6 +17,8 @@ final class JiraWorklogStore: ObservableObject {
 
     @Published private(set) var worklogs: [JiraWorklog] = []
     @Published private(set) var assignableIssues: [JiraAssignableIssue] = []
+    /// Filas de la tabla de subtareas (vista del panel inferior).
+    @Published private(set) var subtasks: [JiraSubtask] = []
     @Published private(set) var myAccountId: String = ""
 
     /// Sprint activo del usuario (o `nil` si no hay).  Lo llena
@@ -886,5 +888,171 @@ final class JiraWorklogStore: ObservableObject {
            let n = t["remainingEstimateSeconds"] as? Int { return n }
         if let n = f["timeestimate"] as? Int { return n }
         return 0
+    }
+
+    // MARK: - Tabla de subtareas
+
+    /// Puebla `subtasks` desde el JQL configurado (`settings.subtaskJql`).
+    func fetchSubtasks(completion: @escaping (Bool) -> Void = { _ in }) {
+        guard let creds = credentials() else { completion(false); return }
+        let jql = settings.subtaskJql.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fields = "summary,status,parent,timeoriginalestimate,timeestimate,timetracking"
+        guard let url = jqlSearchURL(creds: creds, jql: jql, maxResults: 100, fields: fields) else {
+            completion(false); return
+        }
+        log("Subtasks GET \(url.absoluteString)")
+        send(.get, url: url, body: nil, creds: creds) { [weak self] code, body in
+            guard let self else { completion(false); return }
+            if code != 200 {
+                self.warn("Subtasks exit=\(code): \(body.prefix(240))")
+                completion(false); return
+            }
+            guard let data = body.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let raw = json["issues"] as? [[String: Any]] else {
+                completion(false); return
+            }
+            var out: [JiraSubtask] = []
+            for r in raw {
+                let key = (r["key"] as? String) ?? ""
+                let f = (r["fields"] as? [String: Any]) ?? [:]
+                let st = (f["status"] as? [String: Any]) ?? [:]
+                let sc = (st["statusCategory"] as? [String: Any]) ?? [:]
+                let parent = f["parent"] as? [String: Any]
+                let parentKey = (parent?["key"] as? String) ?? ""
+                let parentSummary = ((parent?["fields"] as? [String: Any])?["summary"] as? String) ?? ""
+                out.append(.init(
+                    key: key,
+                    summary: (f["summary"] as? String) ?? "",
+                    status: (st["name"] as? String) ?? "",
+                    statusCategory: (sc["key"] as? String) ?? "",
+                    statusColor: (sc["colorName"] as? String) ?? "",
+                    remainingSec: self.remainingSec(fields: f),
+                    parentKey: parentKey,
+                    parentSummary: parentSummary
+                ))
+            }
+            self.subtasks = out
+            self.log("Subtasks: \(out.count) fila(s).")
+            completion(true)
+        }
+    }
+
+    /// GET /issue/{key}/transitions → transiciones disponibles.
+    func fetchTransitions(issueKey: String,
+                          completion: @escaping ([JiraTransition]) -> Void) {
+        guard let creds = credentials() else { completion([]); return }
+        let escaped = issueKey.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? issueKey
+        let url = URL(string: creds.site + "/rest/api/3/issue/\(escaped)/transitions")!
+        log("Transitions GET \(url.absoluteString)")
+        send(.get, url: url, body: nil, creds: creds) { [weak self] code, body in
+            guard let self else { completion([]); return }
+            if code != 200 {
+                self.warn("Transitions exit=\(code): \(body.prefix(200))")
+                completion([]); return
+            }
+            guard let data = body.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let arr = json["transitions"] as? [[String: Any]] else {
+                completion([]); return
+            }
+            var out: [JiraTransition] = []
+            for t in arr {
+                let to = (t["to"] as? [String: Any]) ?? [:]
+                let sc = (to["statusCategory"] as? [String: Any]) ?? [:]
+                out.append(.init(
+                    id: "\(t["id"] ?? "")",
+                    name: (t["name"] as? String) ?? "",
+                    toStatus: (to["name"] as? String) ?? "",
+                    toStatusColor: (sc["colorName"] as? String) ?? ""
+                ))
+            }
+            completion(out)
+        }
+    }
+
+    /// POST /issue/{key}/transitions con `{transition:{id}}`.  204 = OK.
+    func transitionIssue(issueKey: String,
+                         transitionId: String,
+                         completion: @escaping (Result<Void, StringError>) -> Void) {
+        guard let creds = credentials() else {
+            completion(.failure(StringError(lastError))); return
+        }
+        let escaped = issueKey.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? issueKey
+        let url = URL(string: creds.site + "/rest/api/3/issue/\(escaped)/transitions")!
+        let body: [String: Any] = ["transition": ["id": transitionId]]
+        log("POST \(url.absoluteString) transition=\(transitionId)")
+        sendJson(.post, url: url, body: body, creds: creds) { [weak self] code, resp in
+            if code == 204 || code == 200 {
+                self?.log("transition OK.")
+                completion(.success(()))
+            } else {
+                let msg = Self.extractError(resp)
+                self?.warn("transition exit=\(code): \(msg)")
+                completion(.failure(StringError("HTTP \(code): \(msg)")))
+            }
+        }
+    }
+
+    /// GET /issue/{key} → detalle completo para el modal.
+    func fetchIssueDetail(issueKey: String,
+                          completion: @escaping (JiraIssueDetail?) -> Void) {
+        guard let creds = credentials() else { completion(nil); return }
+        let escaped = issueKey.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? issueKey
+        let fields = "summary,status,description,parent,issuetype,priority,assignee," +
+            "reporter,timeoriginalestimate,timeestimate,timetracking,timespent,created,updated"
+        guard let url = URL(string: creds.site + "/rest/api/3/issue/\(escaped)?fields=\(fields)") else {
+            completion(nil); return
+        }
+        log("IssueDetail GET \(url.absoluteString)")
+        send(.get, url: url, body: nil, creds: creds) { [weak self] code, body in
+            guard let self else { completion(nil); return }
+            if code != 200 {
+                self.warn("IssueDetail exit=\(code): \(body.prefix(200))")
+                completion(nil); return
+            }
+            guard let data = body.data(using: .utf8),
+                  let d = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                completion(nil); return
+            }
+            let f = (d["fields"] as? [String: Any]) ?? [:]
+            let st = (f["status"] as? [String: Any]) ?? [:]
+            let sc = (st["statusCategory"] as? [String: Any]) ?? [:]
+            let parent = f["parent"] as? [String: Any]
+            let tt = f["timetracking"] as? [String: Any]
+            let spent: Int = (tt?["timeSpentSeconds"] as? Int) ?? (f["timespent"] as? Int) ?? 0
+            let orig: Int = {
+                if let n = f["timeoriginalestimate"] as? Int { return n }
+                if let n = tt?["originalEstimateSeconds"] as? Int { return n }
+                return 0
+            }()
+            let detail = JiraIssueDetail(
+                key: (d["key"] as? String) ?? "",
+                summary: (f["summary"] as? String) ?? "",
+                status: (st["name"] as? String) ?? "",
+                statusCategory: (sc["key"] as? String) ?? "",
+                statusColor: (sc["colorName"] as? String) ?? "",
+                description: Self.extractAdfText(f["description"]),
+                issuetype: ((f["issuetype"] as? [String: Any])?["name"] as? String) ?? "",
+                priority: ((f["priority"] as? [String: Any])?["name"] as? String) ?? "",
+                assignee: ((f["assignee"] as? [String: Any])?["displayName"] as? String) ?? "",
+                reporter: ((f["reporter"] as? [String: Any])?["displayName"] as? String) ?? "",
+                parentKey: (parent?["key"] as? String) ?? "",
+                parentSummary: ((parent?["fields"] as? [String: Any])?["summary"] as? String) ?? "",
+                originalEstimateSec: orig,
+                remainingSec: self.remainingSec(fields: f),
+                spentSec: spent,
+                created: (f["created"] as? String) ?? "",
+                updated: (f["updated"] as? String) ?? ""
+            )
+            completion(detail)
+        }
+    }
+
+    /// URL pública de una issue (`{site}/browse/{key}`).
+    func issueWebUrl(_ issueKey: String) -> URL? {
+        guard let creds = credentials(), !issueKey.isEmpty else { return nil }
+        let escaped = issueKey.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? issueKey
+        return URL(string: creds.site + "/browse/\(escaped)")
     }
 }
