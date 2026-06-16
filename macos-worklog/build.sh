@@ -21,6 +21,15 @@ if [[ $CLEAN -eq 1 ]]; then
     rm -rf .build build
 fi
 
+# Si no existe el ícono de la app, lo generamos con el script auxiliar.
+# (Si querés tu propio ícono, dropealo como
+# Sources/WorklogCalendar/Resources/AppIcon.icns y este paso lo respeta.)
+ICNS_PATH="$ROOT/Sources/WorklogCalendar/Resources/AppIcon.icns"
+if [[ ! -f "$ICNS_PATH" ]]; then
+    echo "==> No hay AppIcon.icns — lo genero (reloj en llamas)"
+    "$ROOT/tools/make-app-icon.sh"
+fi
+
 echo "==> swift build -c release"
 swift build --configuration release
 

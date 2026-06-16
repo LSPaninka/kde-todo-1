@@ -60,6 +60,28 @@ swift run -c release
 (el binario directo no hace `setActivationPolicy`, así que vas a perder
 el Dock icon — usá el bundle `.app` para todo lo demás).
 
+### Ícono de la app (`.icns`)
+
+`build.sh` genera automáticamente
+`Sources/WorklogCalendar/Resources/AppIcon.icns` si no existe — un reloj
+blanco sobre llamas naranjas dibujado por
+`tools/make-app-icon.swift`. Si querés cambiarlo:
+
+* **Reemplazá el ícono entero**: dropeá tu propio `.icns` como
+  `Sources/WorklogCalendar/Resources/AppIcon.icns` y rebuilea con
+  `./build.sh`. El script lo respeta sin tocarlo.
+* **Tweakeá el diseño**: editá `tools/make-app-icon.swift` (los
+  parámetros `pointSize`, `color`, `at:` para reloj y llama), borrá el
+  `.icns` viejo y corré `./build.sh` o directamente
+  `./tools/make-app-icon.sh`.
+
+### Cómo cerrar la app
+
+Cerrar la ventana grande **no termina la app** — sigue viva en la barra
+de menús. Para salir del todo, **click derecho** (o ctrl-click) en el
+ícono de reloj de la barra superior → **Salir**. Eso desconecta los
+fetches de Jira/Clockify y libera el `NSStatusItem`.
+
 ---
 
 ## Configuración

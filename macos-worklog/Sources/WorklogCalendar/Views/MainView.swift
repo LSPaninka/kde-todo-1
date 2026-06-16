@@ -308,10 +308,18 @@ struct MainView: View {
 
     // MARK: - Footer
 
+    /// Altura fija del panel inferior — la suficiente para los anillos
+    /// (110 px de diámetro + label arriba + leyenda abajo).  Las otras
+    /// vistas (subtareas, heatmap) se adaptan a este lienzo.  Tener un
+    /// alto fijo evita que cambiar de modo desplace el calendario de
+    /// arriba.
+    private let bottomPanelHeight: CGFloat = 220
+
     /// Panel inferior: a la izquierda el contenido (anillos / subtareas /
-    /// heatmap), a la derecha un switch vertical de hasta tres botones.
-    /// Scrollear con la rueda / trackpad cicla entre las vistas
-    /// disponibles (down → hacia el heatmap, up → hacia los anillos).
+    /// heatmap), a la derecha un switch vertical de hasta tres botones
+    /// fijos en el centro vertical.  Scrollear con la rueda / trackpad
+    /// cicla entre las vistas disponibles (down → hacia el heatmap, up
+    /// → hacia los anillos).
     private var bottomPanel: some View {
         HStack(alignment: .center, spacing: 8) {
             ZStack {
@@ -340,9 +348,12 @@ struct MainView: View {
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .animation(.easeInOut(duration: 0.25), value: bottomView)
 
+            // Switch vertical pinned al centro-derecha.  El `maxHeight:
+            // .infinity` + `alignment: .center` lo deja siempre en el
+            // mismo lugar, no importa qué vista esté activa.
             VStack(spacing: 4) {
                 bottomViewButton(
                     target: "rings",
@@ -365,25 +376,33 @@ struct MainView: View {
                     enabled: true
                 )
             }
+            .frame(maxHeight: .infinity, alignment: .center)
         }
+        .frame(height: bottomPanelHeight)
         .background(WheelCatcher { dy in handleBottomPanelWheel(dy) })
     }
 
-    /// Acumulador para evitar que un swipe largo de trackpad dispare
-    /// múltiples toggles.  Reseteamos en cuanto cruzamos el umbral.
+    /// Acumulador + cooldown para el wheel.  Umbral bajo (2 px) +
+    /// cooldown de 250 ms para que con el trackpad sienta responsivo y
+    /// con la rueda física dispare en un click — sin disparar 20 veces
+    /// por swipe largo.
     @State private var wheelAccum: CGFloat = 0
+    @State private var wheelLastFire: Date = .distantPast
     private func handleBottomPanelWheel(_ dy: CGFloat) {
-        // El trackpad manda muchos eventos chiquitos con el mismo signo:
-        // acumulamos hasta cruzar un umbral, después ciclamos por
-        // `bottomViews` (clamp en los extremos) y reseteamos.
+        let now = Date()
+        if now.timeIntervalSince(wheelLastFire) < 0.25 {
+            return                         // todavía en cooldown
+        }
         wheelAccum += dy
-        let threshold: CGFloat = 8
+        let threshold: CGFloat = 2
         if wheelAccum >= threshold {
-            cycleBottomView(-1)               // scroll up → hacia los anillos
+            cycleBottomView(-1)            // scroll up → hacia los anillos
             wheelAccum = 0
+            wheelLastFire = now
         } else if wheelAccum <= -threshold {
-            cycleBottomView(+1)               // scroll down → hacia el heatmap
+            cycleBottomView(+1)            // scroll down → hacia el heatmap
             wheelAccum = 0
+            wheelLastFire = now
         }
     }
 

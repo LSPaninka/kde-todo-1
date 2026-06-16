@@ -40,12 +40,19 @@ final class StatusBarController: NSObject {
     private var eventMonitor: EventMonitor?
 
     /// Tamaño compacto del popover (todo a escala dentro de este lienzo).
-    static let popoverSize = NSSize(width: 1000, height: 700)
+    /// 780 alcanza para mostrar la franja 17:30–18:00 del calendario 9h
+    /// que antes quedaba cortada en monitores con poca altura.
+    static let popoverSize = NSSize(width: 1000, height: 780)
+
+    /// Closure que el botón "Abrir aplicación" del menú contextual usa
+    /// para traer la ventana grande al frente.
+    private let onOpenApp: () -> Void
 
     init(settings: AppSettings,
          jira: JiraWorklogStore,
          clockify: ClockifyStore,
          onOpenApp: @escaping () -> Void) {
+        self.onOpenApp = onOpenApp
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
 
@@ -55,6 +62,9 @@ final class StatusBarController: NSObject {
             button.toolTip = "Worklog Calendar — Jira / Clockify"
             button.action = #selector(togglePopover(_:))
             button.target = self
+            // También aceptamos el right-up para mostrar el menú
+            // contextual con "Abrir aplicación" + "Salir".
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
 
         // `.applicationDefined`: el popover sólo se cierra cuando se lo
@@ -71,7 +81,7 @@ final class StatusBarController: NSObject {
             clockify: clockify,
             onOpenApp: { [weak self] in
                 self?.closePopover()
-                onOpenApp()
+                self?.onOpenApp()
             }
         )
         .frame(width: Self.popoverSize.width, height: Self.popoverSize.height)
@@ -86,11 +96,47 @@ final class StatusBarController: NSObject {
     // MARK: - Toggle
 
     @objc private func togglePopover(_ sender: Any?) {
+        // Right-click (o ctrl-click) → menú contextual con Abrir / Salir.
+        // Sólo así se puede cerrar la app — cerrar la ventana grande la
+        // deja viva en la barra de menús.
+        if let event = NSApp.currentEvent,
+           event.type == .rightMouseUp || event.modifierFlags.contains(.control) {
+            showContextMenu()
+            return
+        }
+        // Left-click → toggle del popover.
         if popover.isShown {
             closePopover()
         } else {
             showPopover()
         }
+    }
+
+    private func showContextMenu() {
+        guard let button = statusItem.button else { return }
+        let menu = NSMenu()
+        let open = NSMenuItem(title: "Abrir aplicación",
+                              action: #selector(openAppFromMenu(_:)),
+                              keyEquivalent: "")
+        open.target = self
+        menu.addItem(open)
+        menu.addItem(.separator())
+        let quit = NSMenuItem(title: "Salir",
+                              action: #selector(quitApp(_:)),
+                              keyEquivalent: "q")
+        quit.target = self
+        menu.addItem(quit)
+        menu.popUp(positioning: nil,
+                   at: NSPoint(x: 0, y: button.bounds.height + 4),
+                   in: button)
+    }
+
+    @objc private func openAppFromMenu(_ sender: Any?) {
+        closePopover()
+        onOpenApp()
+    }
+    @objc private func quitApp(_ sender: Any?) {
+        NSApplication.shared.terminate(nil)
     }
 
     private func showPopover() {
@@ -108,15 +154,19 @@ final class StatusBarController: NSObject {
 
     // MARK: - Ícono
 
-    /// Reloj blanco (SF Symbol "clock").  `isTemplate = false` + palette
-    /// blanca para que la barra de menús no lo recoloreé.
+    /// SF Symbol "clock" como **template image** — macOS lo tinta solo
+    /// según el contexto de la barra de menús (blanco en barra oscura,
+    /// negro en barra clara, perfectamente nítido a cualquier DPI).
+    /// La versión previa usaba `paletteColors: [.white]` + `isTemplate
+    /// = false`, lo que en monitores 1080×720 derivaba en un glifo
+    /// distorsionado ("(_)") porque el rasterizador elegía variantes
+    /// de tamaño incorrectas.
     private static func clockImage() -> NSImage {
-        let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .regular)
-            .applying(NSImage.SymbolConfiguration(paletteColors: [.white]))
+        let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .medium)
         let image = NSImage(systemSymbolName: "clock",
                             accessibilityDescription: "Worklog Calendar")?
-            .withSymbolConfiguration(config)
-        image?.isTemplate = false
-        return image ?? NSImage()
+            .withSymbolConfiguration(config) ?? NSImage()
+        image.isTemplate = true
+        return image
     }
 }
