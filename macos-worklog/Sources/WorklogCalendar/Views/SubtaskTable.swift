@@ -51,6 +51,12 @@ struct SubtaskTable: View {
     @State private var sortKey: SortKey? = nil
     @State private var sortAsc: Bool = true
 
+    /// Filtro inline (toggle de la lupa).  Match contra `key`, `summary`,
+    /// `status`, `parentKey` y `parentSummary` (substring, case-insens.).
+    @State private var searchOpen: Bool = false
+    @State private var searchText: String = ""
+    @FocusState private var searchFocused: Bool
+
     private var showParent: Bool { settings.subtaskShowParent }
 
     // Geometría compartida entre header y filas para que el spacer (la
@@ -60,12 +66,24 @@ struct SubtaskTable: View {
     private let gapW:    CGFloat = 16
     private let parentW: CGFloat = 90
 
-    /// Filas con el orden activo aplicado.  Si `sortKey == nil`
-    /// devolvemos `jira.subtasks` tal cual (el orden del JQL).
+    /// Filas con filtro + orden aplicados.  Sin filtro y sin orden,
+    /// devolvemos `jira.subtasks` tal cual (orden del JQL).
     private var displayRows: [JiraSubtask] {
-        guard let key = sortKey else { return jira.subtasks }
+        var rows = jira.subtasks
+
+        let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        if !q.isEmpty {
+            rows = rows.filter { r in
+                let hay = "\(r.key) \(r.summary) \(r.status) \(r.parentKey) \(r.parentSummary)"
+                    .lowercased()
+                return hay.contains(q)
+            }
+        }
+
+        guard let key = sortKey else { return rows }
         let mult = sortAsc ? 1 : -1
-        return jira.subtasks.sorted { a, b in
+        return rows.sorted { a, b in
             switch key {
             case .remaining:
                 return (a.remainingSec - b.remainingSec) * mult < 0
@@ -93,9 +111,11 @@ struct SubtaskTable: View {
             header
             columnHeader
             Divider()
-            if jira.subtasks.isEmpty {
+            if displayRows.isEmpty {
                 Spacer(minLength: 0)
-                Text("Sin subtareas. Ajustá el JQL en Preferencias.")
+                Text(jira.subtasks.isEmpty
+                     ? "Sin subtareas. Ajustá el JQL en Preferencias."
+                     : "Sin resultados para «\(searchText)».")
                     .font(.caption).foregroundColor(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
                 Spacer(minLength: 0)
@@ -114,16 +134,46 @@ struct SubtaskTable: View {
     private var header: some View {
         HStack(spacing: 6) {
             Text("Subtareas").font(.headline)
-            if !jira.subtasks.isEmpty {
-                Text("(\(jira.subtasks.count))")
-                    .font(.caption2).foregroundColor(.secondary)
+
+            // Cuando el filtro está abierto, el TextField ocupa el lugar
+            // del contador + spacer.  Esc lo cierra y limpia.
+            if searchOpen {
+                TextField("Filtrar subtareas…", text: $searchText)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($searchFocused)
+                    .onKeyPress(.escape) {
+                        searchOpen = false
+                        searchText = ""
+                        return .handled
+                    }
+                    .frame(maxWidth: .infinity)
+            } else {
+                if !displayRows.isEmpty {
+                    Text("(\(displayRows.count))")
+                        .font(.caption2).foregroundColor(.secondary)
+                }
+                Spacer()
             }
-            Spacer()
+
+            Button {
+                searchOpen.toggle()
+                if !searchOpen { searchText = "" }
+            } label: {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(searchOpen ? .accentColor : .primary)
+            }
+            .buttonStyle(.borderless)
+            .help("Buscar en la lista")
+
             Button { jira.fetchSubtasks() } label: {
                 Image(systemName: "arrow.clockwise")
             }
             .buttonStyle(.borderless)
             .help("Recargar subtareas")
+        }
+        // Foco automático al abrir el filtro.
+        .onChange(of: searchOpen) { isOpen in
+            if isOpen { searchFocused = true }
         }
     }
 
