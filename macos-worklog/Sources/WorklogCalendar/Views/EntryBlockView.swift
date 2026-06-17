@@ -206,7 +206,7 @@ struct EntryBlockView: View {
             Color.clear
                 .overlay(alignment: .topLeading) {
                     visualBlock(width: geo.size.width,
-                                height: Swift.max(rowHeight, baseHeight + resizeHeightDelta))
+                                height: Swift.max(rowHeight / 3, baseHeight + resizeHeightDelta))
                         .offset(x: dragOffsetX, y: dragOffsetY + resizeTopDy)
                 }
                 .overlay(alignment: .topTrailing) {
@@ -216,11 +216,24 @@ struct EntryBlockView: View {
                     }
                 }
                 .contentShape(Rectangle())
+                // `.onHover` para tracking del estado (mostrar el botón
+                // duplicar).  El cursor lo manejamos con
+                // `.onContinuousHover` para saber la Y exacta y elegir
+                // entre las 4-flechas (mover, centro) o las 2-flechas
+                // verticales (resize, top/bottom 5 px).
                 .onHover { isHovering in
                     hovered = isHovering
-                    if isHovering {
-                        NSCursor.resizeUpDown.set()
-                    } else {
+                    if !isHovering { NSCursor.arrow.set() }
+                }
+                .onContinuousHover { phase in
+                    switch phase {
+                    case .active(let loc):
+                        if loc.y < edgePx || loc.y > baseHeight - edgePx {
+                            NSCursor.resizeUpDown.set()
+                        } else {
+                            Self.moveAllDirections.set()
+                        }
+                    case .ended:
                         NSCursor.arrow.set()
                     }
                 }
@@ -438,6 +451,45 @@ struct EntryBlockView: View {
             .onTapGesture { onDuplicate() }
             .help("Duplicar este worklog")
     }
+
+    /// Cursor de "4 flechas" para el modo move.  Lo dibujamos a partir
+    /// del SF Symbol `arrow.up.and.down.and.arrow.left.and.right` con
+    /// fondo negro + relleno blanco para que se vea sobre cualquier
+    /// fondo de bloque, igual que los cursores nativos de macOS.
+    static let moveAllDirections: NSCursor = {
+        let canvas = NSSize(width: 22, height: 22)
+        let img = NSImage(size: canvas)
+        img.lockFocus()
+
+        // Outline negro (bold) un poquito más grande.
+        let outlineConfig = NSImage.SymbolConfiguration(pointSize: 17, weight: .heavy)
+            .applying(NSImage.SymbolConfiguration(paletteColors: [.black]))
+        if let outline = NSImage(
+            systemSymbolName: "arrow.up.and.down.and.arrow.left.and.right",
+            accessibilityDescription: "Mover bloque"
+        )?.withSymbolConfiguration(outlineConfig) {
+            let r = NSRect(x: (canvas.width - outline.size.width) / 2,
+                           y: (canvas.height - outline.size.height) / 2,
+                           width: outline.size.width, height: outline.size.height)
+            outline.draw(in: r)
+        }
+        // Relleno blanco arriba.
+        let fillConfig = NSImage.SymbolConfiguration(pointSize: 15, weight: .regular)
+            .applying(NSImage.SymbolConfiguration(paletteColors: [.white]))
+        if let fill = NSImage(
+            systemSymbolName: "arrow.up.and.down.and.arrow.left.and.right",
+            accessibilityDescription: nil
+        )?.withSymbolConfiguration(fillConfig) {
+            let r = NSRect(x: (canvas.width - fill.size.width) / 2,
+                           y: (canvas.height - fill.size.height) / 2,
+                           width: fill.size.width, height: fill.size.height)
+            fill.draw(in: r)
+        }
+
+        img.unlockFocus()
+        return NSCursor(image: img,
+                        hotSpot: NSPoint(x: canvas.width / 2, y: canvas.height / 2))
+    }()
 }
 
 extension Color {

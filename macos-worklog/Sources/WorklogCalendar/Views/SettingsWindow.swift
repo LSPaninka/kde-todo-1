@@ -106,6 +106,11 @@ struct SettingsWindow: View {
                 Toggle("Mostrar panel inferior (anillos / subtareas / heatmap)",
                        isOn: $settings.showSprintGauges)
 
+                Toggle("Habilitar vista de Anillos (Sprint / Horas)",
+                       isOn: $settings.showRingsView)
+                Text("Apagado por default — los anillos hoy consumen ~20 % de CPU constante. Cuando está apagado, el ícono del switch aparece gris al final.")
+                    .font(.caption2).foregroundColor(.secondary)
+
                 Picker("Estrategia para encontrar el sprint activo",
                        selection: $settings.sprintStrategy) {
                     Text("Subtareas + custom field (default)").tag("subtask-customfield")

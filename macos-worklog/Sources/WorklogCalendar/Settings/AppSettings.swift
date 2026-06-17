@@ -81,6 +81,13 @@ final class AppSettings: ObservableObject {
     /// Horas), `"subtasks"` (tabla de subtareas) o `"heatmap"` (mapa
     /// mensual de horas).
     @Published var bottomView: String = "rings" { didSet { ud.set(bottomView, forKey: "worklogBottomView") } }
+    /// Habilita la vista de **anillos** (Sprint / Horas).  Por default
+    /// está apagada porque hoy consume CPU constante (~20%); cuando
+    /// está apagada el ícono del switch queda gris y no se puede
+    /// seleccionar.  La orden de las vistas en el switch también
+    /// cambia: con anillos = [rings, subtasks, heatmap]; sin anillos
+    /// = [subtasks, heatmap, rings-gray].
+    @Published var showRingsView: Bool = false { didSet { ud.set(showRingsView, forKey: "worklogShowRingsView") } }
     /// Muestra la tercera vista del panel inferior: la tabla de subtareas.
     @Published var showSubtaskTable: Bool = true { didSet { ud.set(showSubtaskTable, forKey: "worklogShowSubtaskTable") } }
     /// JQL que alimenta la tabla de subtareas.
@@ -146,6 +153,9 @@ final class AppSettings: ObservableObject {
         }
         if let s = ud.string(forKey: "worklogBottomView"),
            s == "rings" || s == "subtasks" || s == "heatmap" { bottomView = s }
+        if ud.object(forKey: "worklogShowRingsView") != nil {
+            showRingsView = ud.bool(forKey: "worklogShowRingsView")
+        }
         if ud.object(forKey: "worklogShowSubtaskTable") != nil {
             showSubtaskTable = ud.bool(forKey: "worklogShowSubtaskTable")
         }

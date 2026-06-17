@@ -321,18 +321,21 @@ struct CalendarView: View {
     }
 
     private var hourColumn: some View {
+        // Las etiquetas se alinean al TOPE de cada slot — esto es lo
+        // que esperan ver los usuarios: un bloque que arranca a las
+        // 09:00 tiene su borde superior justo en la línea "09:00".
+        // (Antes estaban centradas verticalmente y el bloque parecía
+        // "salir" de la grilla.)
         VStack(spacing: 0) {
             ForEach(0..<slots, id: \.self) { slot in
-                ZStack {
+                ZStack(alignment: .topTrailing) {
                     Rectangle()
                         .fill(slot % 2 == 0 ? Color.white.opacity(0.02) : Color.clear)
-                    HStack {
-                        Spacer()
-                        Text(slotLabel(slot))
-                            .font(.system(size: 9, design: .monospaced))
-                            .opacity(slot % 2 == 0 ? 0.85 : 0.45)
-                            .padding(.trailing, 4)
-                    }
+                    Text(slotLabel(slot))
+                        .font(.system(size: 9, design: .monospaced))
+                        .opacity(slot % 2 == 0 ? 0.85 : 0.45)
+                        .padding(.trailing, 4)
+                        .offset(y: -5)        // que el baseline caiga sobre el borde superior del slot
                 }
                 .frame(height: rowHeight)
             }
@@ -385,6 +388,17 @@ private struct DayColumnView: View {
     /// Shift apretado al iniciar el drag-to-create → snap a 10 min.
     @State private var pressFine: Bool = false
 
+    /// Flash visual del click-to-create (35 0ms) — mismo formato que el
+    /// rectángulo del drag-to-create para dar feedback inmediato.
+    @State private var clickFlash: ClickFlash? = nil
+    struct ClickFlash {
+        let top: CGFloat
+        let bottom: CGFloat
+        let leftX: CGFloat
+        let width: CGFloat
+        let label: String
+    }
+
     private var totalHeight: CGFloat { CGFloat(viewMode.slotsPerDay) * rowHeight }
 
     /// Píxeles por slot del paso actual: una fila completa (30 min)
@@ -419,9 +433,26 @@ private struct DayColumnView: View {
     private func createBlockAt(location: CGPoint, width: CGFloat) {
         let slot = Int(floor(location.y / rowHeight))
         guard slot >= 0, slot < viewMode.slotsPerDay else { return }
-        let startMs = pxToMs(CGFloat(slot) * rowHeight)
+        let top    = CGFloat(slot) * rowHeight
+        let bottom = top + rowHeight
+        let startMs = pxToMs(top)
         let endMs   = startMs + 30 * 60 * 1000
         let pressLeft = combined ? location.x < width / 2 : true
+
+        // Flash visual del rectángulo azul antes de abrir el modal.  Se
+        // auto-dismiss después de 400 ms — para entonces el sheet ya
+        // está montado y el feedback se pisa con el modal.
+        let leftX: CGFloat = combined ? (pressLeft ? 0 : width / 2) : 0
+        let flashW: CGFloat = combined ? width / 2 : width
+        clickFlash = ClickFlash(top: top, bottom: bottom,
+                                leftX: leftX, width: flashW,
+                                label: "\(timeOf(startMs))–\(timeOf(endMs))")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            // Sólo limpiamos si todavía es este flash (evita race con un
+            // nuevo click rápido).
+            self.clickFlash = nil
+        }
+
         let sel = DragSelection(dayIndex: dayIndex,
                                 startMs: startMs, endMs: endMs,
                                 pressLeft: pressLeft)
@@ -432,6 +463,14 @@ private struct DayColumnView: View {
         } else {
             onCreateClockify(sel)
         }
+    }
+
+    /// Formato compacto "HH:MM" para las etiquetas del drag selection.
+    private func timeOf(_ ms: Double) -> String {
+        let d = Date(timeIntervalSince1970: ms / 1000)
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        return f.string(from: d)
     }
 
     /// Posición Y de un bloque con precisión de minutos — así un bloque
@@ -482,16 +521,52 @@ private struct DayColumnView: View {
                         .offset(x: width / 2 - 0.5)
                 }
 
-                // Drag selection rectangle.
+                // Drag selection rectangle — con etiqueta del rango
+                // horario al centro para que el usuario vea "10:00–10:30"
+                // mientras arrastra.
                 if dragStart != nil, dragCurrent != nil {
                     let leftX: CGFloat = combined ? (pressLeft ? 0 : width / 2) : 0
                     let w: CGFloat = combined ? width / 2 : width
+                    let label = "\(timeOf(pxToMs(snappedTop)))–\(timeOf(pxToMs(snappedBottom)))"
                     Rectangle()
                         .fill(Color.accentColor.opacity(0.30))
                         .overlay(Rectangle().stroke(Color.accentColor, lineWidth: 1))
+                        .overlay(
+                            Text(label)
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 4)
+                                        .fill(Color.black.opacity(0.55))
+                                )
+                        )
                         .frame(width: w, height: snappedBottom - snappedTop)
                         .offset(x: leftX, y: snappedTop)
                         .allowsHitTesting(false)
+                }
+
+                // Flash de click izquierdo: mismo formato que el drag,
+                // pero auto-dismiss después de ~350 ms para dar
+                // feedback visual de que se creó el bloque.
+                if let f = clickFlash {
+                    Rectangle()
+                        .fill(Color.accentColor.opacity(0.30))
+                        .overlay(Rectangle().stroke(Color.accentColor, lineWidth: 1))
+                        .overlay(
+                            Text(f.label)
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 4)
+                                        .fill(Color.black.opacity(0.55))
+                                )
+                        )
+                        .frame(width: f.width, height: f.bottom - f.top)
+                        .offset(x: f.leftX, y: f.top)
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
                 }
 
                 // Jira blocks.

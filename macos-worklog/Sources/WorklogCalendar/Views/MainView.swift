@@ -50,24 +50,55 @@ struct MainView: View {
     /// algo útil que mostrar (gauges piden Jira, heatmap acepta los dos).
     private var showBottomPanel: Bool { settings.showSprintGauges }
 
-    /// Vistas disponibles del panel inferior, en orden del switch.  La
-    /// del medio (subtareas) sólo aparece si está habilitada.
+    /// Vistas disponibles del panel inferior, en el orden en el que
+    /// se ciclan con la rueda.  El ícono de Anillos sigue apareciendo
+    /// en el switch aunque esté deshabilitado, pero no entra al ciclo.
     private var bottomViews: [String] {
-        var arr = ["rings"]
+        var arr: [String] = []
+        if settings.showRingsView { arr.append("rings") }
         if settings.showSubtaskTable { arr.append("subtasks") }
         arr.append("heatmap")
         return arr
     }
 
-    /// Vista efectiva: cae a "rings" si la guardada ya no está disponible
-    /// (ej. deshabilitaron la tabla de subtareas).
+    /// Vista efectiva: cae a la primera disponible si la guardada ya no
+    /// lo está (ej. deshabilitaron Anillos o Subtareas).
     private var bottomView: String {
-        bottomViews.contains(settings.bottomView) ? settings.bottomView : "rings"
+        bottomViews.contains(settings.bottomView)
+            ? settings.bottomView
+            : (bottomViews.first ?? "heatmap")
     }
 
     private var bottomIsRings: Bool { bottomView == "rings" }
     private var bottomIsSubtasks: Bool { bottomView == "subtasks" }
     private var bottomIsHeatmap: Bool { bottomView == "heatmap" }
+
+    /// Orden de los botones del switch.  Cuando Anillos está habilitado
+    /// va primero (Anillos / Subtareas / Heatmap); cuando está
+    /// deshabilitado va al final con el ícono en gris para que el
+    /// usuario sepa que existe pero no se puede usar.
+    private var switchOrder: [(target: String, systemName: String, label: String, enabled: Bool)] {
+        let ringsTarget: (String, String, String, Bool) = (
+            "rings", "circle.dashed",
+            settings.showRingsView
+                ? "Anillos Sprint / Horas"
+                : "Anillos Sprint / Horas (deshabilitado en Preferencias)",
+            settings.showRingsView && ringsAvailable
+        )
+        let subtasksTarget: (String, String, String, Bool) = (
+            "subtasks", "list.bullet.rectangle", "Tabla de subtareas", settings.showSubtaskTable
+        )
+        let heatmapTarget: (String, String, String, Bool) = (
+            "heatmap", "square.grid.3x3", "Mapa mensual de horas", true
+        )
+        if settings.showRingsView {
+            return [ringsTarget, subtasksTarget, heatmapTarget]
+        } else {
+            // Sin anillos: subtareas + heatmap primero, anillos al
+            // final como ícono gris.
+            return [subtasksTarget, heatmapTarget, ringsTarget]
+        }
+    }
 
     /// Los rings solo aportan cuando hay datos de Jira (modo Jira o
     /// combinado) y la vista es de 9h.  Si no, el switch al panel de
@@ -149,10 +180,17 @@ struct MainView: View {
         // o config) → refrescar la nueva vista.  El heatmap se refresca
         // sólo via `.onAppear`; rings y subtareas necesitan re-fetch.
         .onChange(of: settings.bottomView) { refreshBottomView() }
-        // Si deshabilitan la tabla de subtareas mientras está visible,
-        // caemos a "rings".
+        // Si deshabilitan la tabla de subtareas o los anillos mientras
+        // están visibles, caemos a la primera vista disponible.
         .onChange(of: settings.showSubtaskTable) { _, on in
-            if !on && settings.bottomView == "subtasks" { settings.bottomView = "rings" }
+            if !on && settings.bottomView == "subtasks" {
+                settings.bottomView = bottomViews.first ?? "heatmap"
+            }
+        }
+        .onChange(of: settings.showRingsView) { _, on in
+            if !on && settings.bottomView == "rings" {
+                settings.bottomView = bottomViews.first ?? "heatmap"
+            }
         }
         // Editar el JQL de subtareas con la tabla visible → recargar.
         .onChange(of: settings.subtaskJql) {
@@ -347,26 +385,14 @@ struct MainView: View {
             // .infinity` + `alignment: .center` lo deja siempre en el
             // mismo lugar, no importa qué vista esté activa.
             VStack(spacing: 4) {
-                bottomViewButton(
-                    target: "rings",
-                    systemName: "circle.dashed",
-                    label: "Anillos Sprint / Horas",
-                    enabled: ringsAvailable
-                )
-                if settings.showSubtaskTable {
+                ForEach(switchOrder, id: \.target) { btn in
                     bottomViewButton(
-                        target: "subtasks",
-                        systemName: "list.bullet.rectangle",
-                        label: "Tabla de subtareas",
-                        enabled: true
+                        target: btn.target,
+                        systemName: btn.systemName,
+                        label: btn.label,
+                        enabled: btn.enabled
                     )
                 }
-                bottomViewButton(
-                    target: "heatmap",
-                    systemName: "square.grid.3x3",
-                    label: "Mapa mensual de horas",
-                    enabled: true
-                )
             }
             .frame(maxHeight: .infinity, alignment: .center)
         }
@@ -421,7 +447,7 @@ struct MainView: View {
                                    systemName: String,
                                    label: String,
                                    enabled: Bool) -> some View {
-        let active = bottomView == target
+        let active = bottomView == target && enabled
         return Button {
             settings.bottomView = target
         } label: {
@@ -430,6 +456,11 @@ struct MainView: View {
                 .frame(width: 22, height: 22)
                 .background(active ? Color.accentColor.opacity(0.25) : Color.clear)
                 .clipShape(RoundedRectangle(cornerRadius: 4))
+                // Deshabilitado → ícono gris para que se note la
+                // diferencia visual (sin esto la opacity por default
+                // del Button .disabled lo deja demasiado tenue).
+                .foregroundColor(enabled ? .primary : .secondary)
+                .opacity(enabled ? 1.0 : 0.45)
         }
         .buttonStyle(.borderless)
         .disabled(!enabled)
