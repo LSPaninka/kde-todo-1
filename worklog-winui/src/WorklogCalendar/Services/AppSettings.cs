@@ -64,6 +64,13 @@ public sealed class AppSettings : INotifyPropertyChanged
     // -------- Bottom panel --------
     /// <summary>Which bottom-panel view shows: "rings", "subtasks" or "heatmap".</summary>
     public string BottomView { get; set; } = "rings";
+    /// <summary>
+    /// Whether the Sprint/Horas rings are offered as a bottom-panel view.
+    /// Off by default — the subtask table is the more useful day-to-day
+    /// view. When off, rings is excluded from the wheel cycle and its
+    /// switch button is grayed out.
+    /// </summary>
+    public bool ShowRingsView { get; set; } = false;
     /// <summary>Gate the third (subtask table) view on/off.</summary>
     public bool ShowSubtaskTable { get; set; } = true;
     /// <summary>JQL that drives the subtask table.</summary>

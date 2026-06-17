@@ -28,6 +28,7 @@ public sealed partial class SettingsDialog : ContentDialog
         ModalH.Value = _s.ModalHeight;
 
         ShowGauges.IsChecked = _s.ShowSprintGauges;
+        ShowRingsView.IsChecked = _s.ShowRingsView;
         ShowSubtaskTable.IsChecked = _s.ShowSubtaskTable;
         SubtaskShowParent.IsChecked = _s.SubtaskShowParent;
         SubtaskJql.Text = _s.SubtaskJql;
@@ -76,6 +77,7 @@ public sealed partial class SettingsDialog : ContentDialog
         _s.ModalHeight = (int)ModalH.Value;
 
         _s.ShowSprintGauges = ShowGauges.IsChecked == true;
+        _s.ShowRingsView = ShowRingsView.IsChecked == true;
         _s.ShowSubtaskTable = ShowSubtaskTable.IsChecked == true;
         _s.SubtaskShowParent = SubtaskShowParent.IsChecked == true;
         _s.SubtaskJql = SubtaskJql.Text ?? "";

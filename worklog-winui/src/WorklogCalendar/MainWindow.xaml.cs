@@ -269,23 +269,31 @@ public sealed partial class MainWindow : Window
     private bool BottomIsSubtasks => CurrentBottomView == "subtasks";
     private bool BottomIsHeatmap  => CurrentBottomView == "heatmap";
 
-    /// <summary>Views in switch order. "subtasks" only when the user opted in.</summary>
+    /// <summary>
+    /// Views in switch / wheel order. Rings only appear when the user opts
+    /// in (ShowRingsView); subtasks only when ShowSubtaskTable is on. The
+    /// order mirrors the macOS build: rings-first when enabled, otherwise
+    /// subtasks → heatmap (rings still reachable via its grayed button but
+    /// excluded from the wheel cycle).
+    /// </summary>
     private List<string> AvailableBottomViews()
     {
-        var v = new List<string> { "rings" };
+        var v = new List<string>();
+        if (_settings.ShowRingsView) v.Add("rings");
         if (_settings.ShowSubtaskTable) v.Add("subtasks");
         v.Add("heatmap");
         return v;
     }
 
-    /// <summary>Saved view, falling back to "rings" if the user disabled the
-    /// active one (e.g. switched off the subtask table while subtasks was selected).</summary>
+    /// <summary>Saved view, falling back to the first available one if the
+    /// active view was disabled (e.g. rings off, or subtask table off).</summary>
     private string CurrentBottomView
     {
         get
         {
-            var v = _settings.BottomView ?? "rings";
-            return AvailableBottomViews().Contains(v) ? v : "rings";
+            var views = AvailableBottomViews();
+            var v = _settings.BottomView ?? "";
+            return views.Contains(v) ? v : views[0];
         }
     }
 
@@ -332,6 +340,30 @@ public sealed partial class MainWindow : Window
         SubtasksSwitchBtn.IsChecked = BottomIsSubtasks;
         HeatmapSwitchBtn.IsChecked  = BottomIsHeatmap;
         SubtasksSwitchBtn.Visibility = _settings.ShowSubtaskTable ? Visibility.Visible : Visibility.Collapsed;
+
+        // Rings is opt-in. When off, gray + disable its button and move it
+        // to the bottom of the switch (matches the macOS build); the wheel
+        // cycle already excludes it via AvailableBottomViews.
+        bool ringsOn = _settings.ShowRingsView;
+        RingsSwitchBtn.IsEnabled = ringsOn;
+        RingsSwitchBtn.Opacity = ringsOn ? 1.0 : 0.45;
+        ReorderSwitchButtons(ringsOn);
+    }
+
+    private void ReorderSwitchButtons(bool ringsFirst)
+    {
+        // Desired order: rings-first when enabled, else subtasks → heatmap → rings.
+        var order = ringsFirst
+            ? new UIElement[] { RingsSwitchBtn, SubtasksSwitchBtn, HeatmapSwitchBtn }
+            : new UIElement[] { SubtasksSwitchBtn, HeatmapSwitchBtn, RingsSwitchBtn };
+        // Only touch the panel if the order actually differs (avoids reflow churn).
+        bool same = SwitchPanel.Children.Count == order.Length;
+        if (same)
+            for (int i = 0; i < order.Length; i++)
+                if (!ReferenceEquals(SwitchPanel.Children[i], order[i])) { same = false; break; }
+        if (same) return;
+        SwitchPanel.Children.Clear();
+        foreach (var el in order) SwitchPanel.Children.Add(el);
     }
 
     /// <summary>Fade + slide the bottom content when switching views.</summary>
@@ -507,6 +539,16 @@ public sealed partial class MainWindow : Window
             ApplyWindowGeometry();
             ReapplyAlwaysOnTop();
             _clockify.Init();
+            Subtasks.Settings = _settings;
+            // If the user disabled the view that was showing (rings or the
+            // subtask table), persist the normalized fallback so the saved
+            // BottomView stays valid.
+            var normalized = CurrentBottomView;
+            if (_settings.BottomView != normalized)
+            {
+                _settings.BottomView = normalized;
+                SettingsService.Save(_settings);
+            }
             Calendar.Refresh();
             await RefreshAsync();
         }

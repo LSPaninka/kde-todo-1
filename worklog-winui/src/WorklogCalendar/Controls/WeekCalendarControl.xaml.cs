@@ -61,6 +61,7 @@ public sealed partial class WeekCalendarControl : UserControl
     private readonly List<Canvas> _dayCanvases = new();
     private readonly List<Border> _totalsCells = new();
     private readonly Dictionary<Canvas, Rectangle> _dragOverlays = new();
+    private readonly Dictionary<Canvas, Border> _dragLabels = new();
 
     public WeekCalendarControl()
     {
@@ -81,6 +82,7 @@ public sealed partial class WeekCalendarControl : UserControl
         _dayCanvases.Clear();
         _totalsCells.Clear();
         _dragOverlays.Clear();
+        _dragLabels.Clear();
 
         RootGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(HourColWidth) });
         for (int i = 0; i < 7; i++)
@@ -168,6 +170,10 @@ public sealed partial class WeekCalendarControl : UserControl
             Canvas.SetLeft(bg, 0); Canvas.SetTop(bg, slot * RowHeight);
             stack.Children.Add(bg);
 
+            // Align the label to the TOP of its slot so it lines up with a
+            // block that starts on that slot boundary (a block at 09:00
+            // starts at y=0, so "09:00" must sit at the top of slot 0, not
+            // centered in it).
             var tb = new TextBlock
             {
                 Text = SlotLabel(slot),
@@ -176,7 +182,7 @@ public sealed partial class WeekCalendarControl : UserControl
                 TextAlignment = TextAlignment.Right,
                 Width = HourColWidth - 6
             };
-            Canvas.SetLeft(tb, 0); Canvas.SetTop(tb, slot * RowHeight + 4);
+            Canvas.SetLeft(tb, 0); Canvas.SetTop(tb, slot * RowHeight + 1);
             stack.Children.Add(tb);
         }
         Grid.SetRow(stack, 2); Grid.SetColumn(stack, 0);
@@ -249,6 +255,25 @@ public sealed partial class WeekCalendarControl : UserControl
             Canvas.SetZIndex(drag, 9999);
             canvas.Children.Add(drag);
             _dragOverlays[canvas] = drag;
+
+            // A centered "HH:MM–HH:MM" capsule that updates live as the
+            // user drags (and flashes briefly on click-to-create).
+            var lbl = new Border
+            {
+                Background = new SolidColorBrush(Color.FromArgb(0x8C, 0, 0, 0)),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(6, 1, 6, 1),
+                IsHitTestVisible = false,
+                Visibility = Visibility.Collapsed,
+                Child = new TextBlock
+                {
+                    FontSize = 10,
+                    Foreground = new SolidColorBrush(Colors.White)
+                }
+            };
+            Canvas.SetZIndex(lbl, 10000);
+            canvas.Children.Add(lbl);
+            _dragLabels[canvas] = lbl;
 
             if (IsCombined)
             {
@@ -452,7 +477,7 @@ public sealed partial class WeekCalendarControl : UserControl
         Canvas.SetZIndex(dupBtn, 10);
         inner.Children.Add(dupBtn);
 
-        var card = new Border
+        var card = new CursorBorder
         {
             Background = fill,
             BorderBrush = border,
@@ -574,7 +599,20 @@ public sealed partial class WeekCalendarControl : UserControl
 
     private void OnBlockMoved(Border card, BlockTag tag, PointerRoutedEventArgs e)
     {
-        if (tag.Mode == 0) return;
+        if (tag.Mode == 0)
+        {
+            // Plain hover (not dragging): pick the cursor by pointer Y —
+            // top/bottom 5 px advertise the resize, the middle the move.
+            if (card is CursorBorder cb)
+            {
+                double y = e.GetCurrentPoint(card).Position.Y;
+                bool nearEdge = y < EdgePx || y > card.ActualHeight - EdgePx;
+                cb.SetCursorShape(nearEdge
+                    ? Microsoft.UI.Input.InputSystemCursorShape.SizeNorthSouth
+                    : Microsoft.UI.Input.InputSystemCursorShape.SizeAll);
+            }
+            return;
+        }
         var canvas = card.Parent as Canvas;
         if (canvas == null) return;
         var pos = card.TransformToVisual(canvas).TransformPoint(e.GetCurrentPoint(card).Position);
@@ -745,7 +783,6 @@ public sealed partial class WeekCalendarControl : UserControl
         canvas.ReleasePointerCapture(e.Pointer);
         var pt = e.GetCurrentPoint(canvas);
         _drag.Remove(canvas);
-        HideDragOverlay(canvas);
 
         bool fine = IsShiftDown();
         var dayDate = WeekStart.AddDays(day);
@@ -754,6 +791,10 @@ public sealed partial class WeekCalendarControl : UserControl
         int floorMin = fine ? 10 : 30;
         if (endMs <= startMs) endMs = startMs + floorMin * 60_000;
         long dayMs = ToMs(dayDate);
+
+        // Flash the marker briefly so the chosen slot is visible behind the
+        // create modal, then auto-clear after ~400 ms.
+        FlashMarker(canvas);
 
         if (IsCombined)
         {
@@ -764,9 +805,20 @@ public sealed partial class WeekCalendarControl : UserControl
         else CreateClockifyRequested?.Invoke(dayMs, startMs, endMs);
     }
 
+    /// <summary>Keep the overlay + range label visible for ~400 ms, then hide.</summary>
+    private void FlashMarker(Canvas canvas)
+    {
+        var timer = DispatcherQueue.CreateTimer();
+        timer.Interval = TimeSpan.FromMilliseconds(400);
+        timer.IsRepeating = false;
+        timer.Tick += (s, e) => { timer.Stop(); HideDragOverlay(canvas); };
+        timer.Start();
+    }
+
     private void HideDragOverlay(Canvas canvas)
     {
         if (_dragOverlays.TryGetValue(canvas, out var ov)) ov.Visibility = Visibility.Collapsed;
+        if (_dragLabels.TryGetValue(canvas, out var lb)) lb.Visibility = Visibility.Collapsed;
     }
 
     private void UpdateDragOverlay(Canvas canvas, double curY)
@@ -783,7 +835,31 @@ public sealed partial class WeekCalendarControl : UserControl
         Canvas.SetLeft(overlay, left);
         overlay.Width = w;
         overlay.Height = Math.Max(stepPx, bot - top);
+
+        // Live "HH:MM–HH:MM" label centered in the rectangle.
+        int day = _dayCanvases.IndexOf(canvas);
+        if (day >= 0) ShowRangeLabel(canvas, day, top, bot, left, w, fine);
     }
+
+    /// <summary>Position + fill the time-range capsule over a drag/flash rectangle.</summary>
+    private void ShowRangeLabel(Canvas canvas, int day, double top, double bot, double left, double w, bool fine)
+    {
+        if (!_dragLabels.TryGetValue(canvas, out var lbl)) return;
+        var dayDate = WeekStart.AddDays(day);
+        long startMs = MsAtSnappedPx(dayDate, top, fine);
+        long endMs = MsAtSnappedPx(dayDate, bot, fine);
+        if (lbl.Child is TextBlock tb)
+            tb.Text = $"{ShortTime(startMs)}–{ShortTime(endMs)}";
+        lbl.Visibility = Visibility.Visible;
+        // Center horizontally over the rectangle; vertically centered in it.
+        lbl.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+        double lw = lbl.DesiredSize.Width, lh = lbl.DesiredSize.Height;
+        Canvas.SetLeft(lbl, left + (w - lw) / 2);
+        Canvas.SetTop(lbl, top + Math.Max(0, (bot - top - lh) / 2));
+    }
+
+    private static string ShortTime(long ms) =>
+        DateTimeOffset.FromUnixTimeMilliseconds(ms).LocalDateTime.ToString("HH:mm");
 
     private double SnapPx(double y, double stepPx)
     {
@@ -879,5 +955,23 @@ public sealed partial class WeekCalendarControl : UserControl
                           && byte.TryParse(s.Substring(4, 2), System.Globalization.NumberStyles.HexNumber, null, out var b))
         { col = Color.FromArgb(255, r, g, b); return true; }
         return false;
+    }
+}
+
+/// <summary>
+/// A Border that can swap its pointer cursor. UIElement.ProtectedCursor is
+/// only settable from a subclass, so worklog blocks use this to show a move
+/// (SizeAll / 4-arrow) cursor in the middle and a resize (SizeNorthSouth)
+/// cursor over the top/bottom edges.
+/// </summary>
+public sealed class CursorBorder : Microsoft.UI.Xaml.Controls.Border
+{
+    private Microsoft.UI.Input.InputSystemCursorShape? _current;
+
+    public void SetCursorShape(Microsoft.UI.Input.InputSystemCursorShape shape)
+    {
+        if (_current == shape) return;
+        _current = shape;
+        this.ProtectedCursor = Microsoft.UI.Input.InputSystemCursor.Create(shape);
     }
 }

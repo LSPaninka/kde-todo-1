@@ -87,6 +87,8 @@
                     <!-- Sprint (experimental) -->
                     <TextBlock Text="Sprint (experimental)" FontWeight="SemiBold"
                                Margin="0,16,0,4" Opacity="0.85" />
+                    <CheckBox x:Name="ShowRingsView"
+                              Content="Ofrecer los anillos Sprint/Horas como vista del panel inferior" />
                     <TextBlock Text="Cómo descubrir el sprint activo del usuario."
                                Opacity="0.6" FontSize="11" TextWrapping="Wrap" />
                     <RadioButtons x:Name="SprintStrategyChooser" SelectedIndex="0">
