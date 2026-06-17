@@ -32,6 +32,12 @@ struct SettingsWindow: View {
 
     private var generalTab: some View {
         Form {
+            Section("Aplicación") {
+                Toggle("Mostrar en el Dock", isOn: $settings.showInDock)
+                Text("Apagado = la app vive sólo en la barra de menús (sin ícono en el Dock ni en ⌘-Tab). Para salir: click derecho en el ícono del reloj → Salir.")
+                    .font(.caption2).foregroundColor(.secondary)
+            }
+
             Section("Vista") {
                 Picker("Modo horario", selection: $settings.viewMode) {
                     Text("9h (09:00 – 18:00)").tag(ViewHourMode.h9)

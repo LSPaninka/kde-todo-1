@@ -42,6 +42,13 @@ final class AppSettings: ObservableObject {
     @Published var showIssueSummary: Bool = false { didSet { ud.set(showIssueSummary, forKey: "worklogShowIssueSummary") } }
     @Published var debug: Bool = true { didSet { ud.set(debug, forKey: "worklogDebug") } }
 
+    /// Si está apagado (default), la app corre como *agent app*: sólo el
+    /// ícono de la barra de menús, sin ícono en el Dock ni en ⌘-Tab.
+    /// Si está prendido, se comporta como app normal con ícono en el
+    /// Dock.  El `AppDelegate` observa este flag y aplica la
+    /// `NSApplication.ActivationPolicy` en caliente.
+    @Published var showInDock: Bool = false { didSet { ud.set(showInDock, forKey: "worklogShowInDock") } }
+
     // Tamaño preferido de la ventana principal.
     @Published var windowWidth: Int = 1100 { didSet { ud.set(windowWidth, forKey: "worklogWindowWidth") } }
     @Published var windowHeight: Int = 800 { didSet { ud.set(windowHeight, forKey: "worklogWindowHeight") } }
@@ -122,6 +129,7 @@ final class AppSettings: ObservableObject {
         }
         showIssueSummary = ud.bool(forKey: "worklogShowIssueSummary")
         if ud.object(forKey: "worklogDebug") != nil { debug = ud.bool(forKey: "worklogDebug") }
+        if ud.object(forKey: "worklogShowInDock") != nil { showInDock = ud.bool(forKey: "worklogShowInDock") }
         if let w = ud.object(forKey: "worklogWindowWidth")  as? Int { windowWidth  = w }
         if let h = ud.object(forKey: "worklogWindowHeight") as? Int { windowHeight = h }
         if let w = ud.object(forKey: "worklogModalWidth")   as? Int { modalWidth   = w }

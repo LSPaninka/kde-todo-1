@@ -75,12 +75,21 @@ blanco sobre llamas naranjas dibujado por
   `.icns` viejo y corré `./build.sh` o directamente
   `./tools/make-app-icon.sh`.
 
+### Modo barra de menús vs. Dock
+
+Por defecto la app corre como **agent app**: vive sólo en la barra de
+menús, sin ícono en el Dock ni en ⌘-Tab, y arranca en silencio (sólo el
+ícono de reloj). Para mostrarla también en el Dock, activá
+**Preferencias → General → Aplicación → "Mostrar en el Dock"**. El
+cambio se aplica en caliente (no hace falta reiniciar) y se persiste.
+
 ### Cómo cerrar la app
 
 Cerrar la ventana grande **no termina la app** — sigue viva en la barra
 de menús. Para salir del todo, **click derecho** (o ctrl-click) en el
-ícono de reloj de la barra superior → **Salir**. Eso desconecta los
-fetches de Jira/Clockify y libera el `NSStatusItem`.
+ícono de reloj de la barra superior → **Salir**. (En modo agent app
+⌘-Q no alcanza porque la app no tiene foco cuando sólo está el menubar;
+el menú contextual del ícono es el camino confiable.)
 
 ---
 

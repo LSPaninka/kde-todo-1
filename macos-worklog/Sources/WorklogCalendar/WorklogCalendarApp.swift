@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 /// Entry point.  SPM no soporta `@main struct ... : App`, así que armamos
@@ -10,7 +11,8 @@ struct WorklogCalendarMain {
         let app = NSApplication.shared
         let delegate = AppDelegate()
         app.delegate = delegate
-        app.setActivationPolicy(.regular)   // app normal (con Dock icon)
+        // La activation policy real (.regular vs .accessory) la define
+        // `AppDelegate` según `settings.showInDock`.
         app.run()
     }
 }
@@ -21,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var jira: JiraWorklogStore!
     var clockify: ClockifyStore!
     var statusBar: StatusBarController!
+    private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         settings = AppSettings()
@@ -53,7 +56,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.minSize = NSSize(width: 720, height: 480)
         window.setFrameAutosaveName("WorklogCalendarMain")
         window.delegate = self
-        window.makeKeyAndOrderFront(nil)
+
+        // Política de activación inicial: con Dock (.regular) si el
+        // usuario lo activó; si no, agent app (.accessory, sólo barra
+        // de menús).
+        applyActivationPolicy(settings.showInDock)
 
         // Ícono de reloj blanco en la barra de menús con el popover
         // compacto (Jira / Clockify).  El botón "abrir app" del popover
@@ -66,7 +73,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         buildMainMenu()
-        NSApp.activate(ignoringOtherApps: true)
+
+        // En modo "con Dock" abrimos la ventana al arrancar (app normal).
+        // En modo agent app arrancamos en silencio: sólo el ícono de la
+        // barra de menús; la ventana se abre on-demand desde el popover.
+        if settings.showInDock {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+
+        // Aplicar el cambio en caliente cuando se togglea el setting.
+        settings.$showInDock
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] show in
+                self?.applyActivationPolicy(show)
+            }
+            .store(in: &cancellables)
+    }
+
+    /// Aplica `.regular` (ícono en Dock) o `.accessory` (sólo barra de
+    /// menús).  Al volver a `.regular` traemos la ventana al frente.
+    private func applyActivationPolicy(_ showInDock: Bool) {
+        NSApp.setActivationPolicy(showInDock ? .regular : .accessory)
+        if showInDock {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        }
     }
 
     /// Trae la ventana principal al frente (la usa el botón "abrir app"
