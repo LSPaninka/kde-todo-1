@@ -484,7 +484,7 @@ public sealed partial class WeekCalendarControl : UserControl
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(3),
             Padding = new Thickness(3),
-            Child = inner,
+            Content = inner,
             // Don't let the parent ScrollViewer treat a press-and-move on
             // this block as a scroll/pan gesture (preventStealing in QML).
             ManipulationMode = ManipulationModes.None
@@ -959,12 +959,13 @@ public sealed partial class WeekCalendarControl : UserControl
 }
 
 /// <summary>
-/// A Border that can swap its pointer cursor. UIElement.ProtectedCursor is
-/// only settable from a subclass, so worklog blocks use this to show a move
-/// (SizeAll / 4-arrow) cursor in the middle and a resize (SizeNorthSouth)
-/// cursor over the top/bottom edges.
+/// A ContentPresenter that can swap its pointer cursor. UIElement
+/// .ProtectedCursor is only settable from a subclass and the obvious
+/// candidate (Border) is sealed in WinUI 3, so we subclass
+/// ContentPresenter — same Background / BorderBrush / BorderThickness /
+/// CornerRadius / Padding / Content surface.
 /// </summary>
-public sealed class CursorBorder : Microsoft.UI.Xaml.Controls.Border
+public sealed class CursorBorder : Microsoft.UI.Xaml.Controls.ContentPresenter
 {
     private Microsoft.UI.Input.InputSystemCursorShape? _current;
 
