@@ -489,7 +489,7 @@ public sealed partial class WeekCalendarControl : UserControl
             // this block as a scroll/pan gesture (preventStealing in QML).
             ManipulationMode = ManipulationModes.None
         };
-        var tag = new BlockTag(isJira, startedMs, durSec, entry);
+        var tag = new BlockTag(isJira, startedMs, durSec, entry) { DefaultBorderBrush = border };
         card.Tag = tag;
 
         // Show / hide the duplicate button on hover. PointerEntered fires
@@ -535,9 +535,18 @@ public sealed partial class WeekCalendarControl : UserControl
         public int Mode;
         public bool Dragged;
         public bool IsDragging => Mode != 0;
+        /// <summary>Default brush set in BuildBlock; used to restore the
+        /// border after an overlap highlight is removed.</summary>
+        public Brush? DefaultBorderBrush;
         public BlockTag(bool isJira, long startedMs, int durationSec, object entry)
         { IsJira = isJira; StartedMs = startedMs; DurationSec = durationSec; Entry = entry; }
     }
+
+    // Overlap-highlight colours.
+    private static readonly SolidColorBrush OverlapJiraBrush =
+        new(Color.FromArgb(0xFF, 0xFF, 0x9D, 0x33));   // orange
+    private static readonly SolidColorBrush OverlapClockifyBrush =
+        new(Color.FromArgb(0xFF, 0xFF, 0xD9, 0x00));   // yellow
 
     private void LayoutEntryBlocks(Canvas canvas, double width)
     {
@@ -562,6 +571,50 @@ public sealed partial class WeekCalendarControl : UserControl
             Canvas.SetTop(b, y);
             b.Width = Math.Max(0, w);
             b.Height = Math.Max(0, h);
+        }
+        MarkOverlaps(canvas);
+    }
+
+    /// <summary>
+    /// Walk the day's blocks and outline any pair that overlap in time:
+    /// orange (2 px) for Jira-vs-Jira, yellow (2 px) for Clockify-vs-Clockify.
+    /// Non-overlapping blocks revert to their per-block default border.
+    /// </summary>
+    private void MarkOverlaps(Canvas canvas)
+    {
+        var blocks = new List<(ContentPresenter cp, BlockTag t)>();
+        foreach (var child in canvas.Children)
+            if (child is ContentPresenter cp && cp.Tag is BlockTag t) blocks.Add((cp, t));
+
+        var overlap = new HashSet<ContentPresenter>();
+        for (int i = 0; i < blocks.Count; i++)
+        {
+            for (int j = i + 1; j < blocks.Count; j++)
+            {
+                var (cpA, tA) = blocks[i];
+                var (cpB, tB) = blocks[j];
+                if (tA.IsJira != tB.IsJira) continue;   // only same-source overlaps highlighted
+                long aS = tA.StartedMs, aE = aS + tA.DurationSec * 1000L;
+                long bS = tB.StartedMs, bE = bS + tB.DurationSec * 1000L;
+                if (aS < bE && bS < aE)
+                {
+                    overlap.Add(cpA);
+                    overlap.Add(cpB);
+                }
+            }
+        }
+        foreach (var (cp, t) in blocks)
+        {
+            if (overlap.Contains(cp))
+            {
+                cp.BorderBrush = t.IsJira ? OverlapJiraBrush : OverlapClockifyBrush;
+                cp.BorderThickness = new Thickness(2);
+            }
+            else
+            {
+                cp.BorderBrush = t.DefaultBorderBrush;
+                cp.BorderThickness = new Thickness(1);
+            }
         }
     }
 

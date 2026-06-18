@@ -128,12 +128,20 @@ public sealed partial class MainWindow : Window
         };
 
         // Store change notifications: rebuild calendar on each property change.
+        // CRITICAL: marshal to the UI thread. PropertyChanged can fire from
+        // the HttpClient's worker thread (no SynchronizationContext on the
+        // setter), and touching UI from there silently throws — which is
+        // why a drag-to-move appeared to "snap back" on release (the
+        // post-Update refetch's Refresh exception was being swallowed and
+        // the UI kept the stale store positions).
         _jira.PropertyChanged += (s, e) =>
         {
             if (e.PropertyName is nameof(JiraWorklogStore.Worklogs)
                 or nameof(JiraWorklogStore.Loading)
                 or nameof(JiraWorklogStore.LastError))
-            { UpdateStatus(); Calendar.Refresh(); UpdateTotals(); }
+            {
+                DispatcherQueue.TryEnqueue(() => { UpdateStatus(); Calendar.Refresh(); UpdateTotals(); });
+            }
         };
         _clockify.PropertyChanged += (s, e) =>
         {
@@ -142,10 +150,13 @@ public sealed partial class MainWindow : Window
                 or nameof(ClockifyStore.LastError)
                 or nameof(ClockifyStore.Projects))
             {
-                UpdateStatus();
-                RefillSyncProjectCombo();
-                Calendar.Refresh();
-                UpdateTotals();
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    UpdateStatus();
+                    RefillSyncProjectCombo();
+                    Calendar.Refresh();
+                    UpdateTotals();
+                });
             }
         };
 
@@ -584,8 +595,8 @@ public sealed partial class MainWindow : Window
         try
         {
             var projectId = string.IsNullOrEmpty(_settings.ClockifyDefaultProjectId) ? null : _settings.ClockifyDefaultProjectId;
-            var (created, skipped, failed) = await _clockify.SyncFromJiraAsync(_jira.Worklogs, projectId, _settings.ClockifyBillableDefault);
-            SetStatus($"Sync terminado: {created} creadas, {skipped} ya existían, {failed} fallaron.", failed > 0);
+            var (created, updated, skipped, failed) = await _clockify.SyncFromJiraAsync(_jira.Worklogs, projectId, _settings.ClockifyBillableDefault);
+            SetStatus($"Sync: {created} creadas, {updated} actualizadas, {skipped} ya existían, {failed} fallaron.", failed > 0);
             await _clockify.FetchWeekAsync(_weekStart);
         }
         finally { SyncJiraToClockifyBtn.IsEnabled = true; }

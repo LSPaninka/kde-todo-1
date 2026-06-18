@@ -378,36 +378,78 @@ public sealed class ClockifyStore : INotifyPropertyChanged
 
     // ----- Sync from Jira --------------------------------------------------
 
-    public async Task<(int created, int skipped, int failed)> SyncFromJiraAsync(
+    /// <summary>
+    /// For each Jira worklog: if a Clockify entry already exists with the
+    /// SAME description on that same calendar day, decide whether it's
+    /// already in sync (skip) or needs to be re-aligned (update its start +
+    /// duration). Only when there's no description match on that day do we
+    /// create a fresh entry. This avoids the old behaviour where bumping a
+    /// Jira worklog by 10 minutes produced a duplicate Clockify entry next
+    /// to the original one.
+    /// </summary>
+    public async Task<(int created, int updated, int skipped, int failed)> SyncFromJiraAsync(
         IReadOnlyList<JiraWorklog> jiraWorklogs, string? defaultProjectId, bool defaultBillable)
     {
-        if (jiraWorklogs.Count == 0) return (0, 0, 0);
-        if (!await EnsureContextAsync()) return (0, 0, 0);
+        if (jiraWorklogs.Count == 0) return (0, 0, 0, 0);
+        if (!await EnsureContextAsync()) return (0, 0, 0, 0);
+
         var toCreate = new List<(DateTime start, DateTime end, string desc)>();
+        var toUpdate = new List<(ClockifyEntry existing, DateTime start, DateTime end)>();
+        int skipped = 0;
+        // Per-day match index — first wins. Mark a matched entry so a
+        // second Jira worklog with the same description on the same day
+        // (rare but possible) doesn't fight over it.
+        var consumed = new HashSet<string>();
+
         foreach (var j in jiraWorklogs)
         {
             var desc = j.IssueKey + (string.IsNullOrEmpty(j.IssueSummary) ? "" : ": " + j.IssueSummary);
-            bool hit = false;
+            var jStart = DateTimeOffset.FromUnixTimeMilliseconds(j.StartedUnixMs).LocalDateTime;
+            var jDay = jStart.Date;
+
+            ClockifyEntry? match = null;
             foreach (var c in Entries)
             {
+                if (consumed.Contains(c.Id)) continue;
                 if (c.Description != desc) continue;
-                if (Math.Abs(c.StartedUnixMs - j.StartedUnixMs) > 60000) continue;
-                if (Math.Abs(c.DurationSec - j.DurationSec) > 60) continue;
-                hit = true; break;
+                var cDay = DateTimeOffset.FromUnixTimeMilliseconds(c.StartedUnixMs).LocalDateTime.Date;
+                if (cDay != jDay) continue;
+                match = c; break;
             }
-            if (hit) continue;
-            var start = DateTimeOffset.FromUnixTimeMilliseconds(j.StartedUnixMs).LocalDateTime;
-            toCreate.Add((start, start.AddSeconds(j.DurationSec), desc));
+
+            if (match != null)
+            {
+                consumed.Add(match.Id);
+                bool sameStart = Math.Abs(match.StartedUnixMs - j.StartedUnixMs) <= 60_000;
+                bool sameDur   = Math.Abs(match.DurationSec - j.DurationSec) <= 60;
+                if (sameStart && sameDur) { skipped++; continue; }
+                toUpdate.Add((match, jStart, jStart.AddSeconds(j.DurationSec)));
+            }
+            else
+            {
+                toCreate.Add((jStart, jStart.AddSeconds(j.DurationSec), desc));
+            }
         }
-        Log($"Sync: {toCreate.Count} entries to create, {jiraWorklogs.Count - toCreate.Count} already present.");
-        int created = 0, failed = 0;
+        Log($"Sync: create={toCreate.Count} update={toUpdate.Count} skip={skipped}");
+
+        int created = 0, updated = 0, failed = 0;
+        foreach (var (exist, st, en) in toUpdate)
+        {
+            // Preserve the existing project / tags / billable so we only
+            // re-align the time window — the user already set those.
+            var (ok, err) = await UpdateEntryAsync(exist.Id, st, en, exist.Description,
+                string.IsNullOrEmpty(exist.ProjectId) ? null : exist.ProjectId,
+                exist.TagIds, exist.Billable);
+            if (ok) updated++;
+            else { failed++; Warn($"Sync update failed ({exist.Description}) — {err}"); }
+        }
         foreach (var (start, end, desc) in toCreate)
         {
             var (ok, err) = await CreateEntryAsync(start, end, desc, defaultProjectId, null, defaultBillable);
             if (ok) created++;
             else { failed++; Warn($"Sync create failed ({desc}) — {err}"); }
         }
-        return (created, jiraWorklogs.Count - toCreate.Count, failed);
+        return (created, updated, skipped, failed);
     }
 
     // ----- Helpers ---------------------------------------------------------

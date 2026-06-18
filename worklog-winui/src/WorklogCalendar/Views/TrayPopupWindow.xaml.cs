@@ -365,8 +365,8 @@ public sealed partial class TrayPopupWindow : Window
         try
         {
             var projectId = string.IsNullOrEmpty(_settings.ClockifyDefaultProjectId) ? null : _settings.ClockifyDefaultProjectId;
-            var (created, skipped, failed) = await _clockify.SyncFromJiraAsync(_jira.Worklogs, projectId, _settings.ClockifyBillableDefault);
-            SetStatus($"Sync: {created} creadas, {skipped} ya existían, {failed} fallaron.", failed > 0);
+            var (created, updated, skipped, failed) = await _clockify.SyncFromJiraAsync(_jira.Worklogs, projectId, _settings.ClockifyBillableDefault);
+            SetStatus($"Sync: {created} creadas, {updated} actualizadas, {skipped} ya existían, {failed} fallaron.", failed > 0);
             await _clockify.FetchWeekAsync(_weekStart);
         }
         finally { SyncJiraToClockifyBtn.IsEnabled = true; }
