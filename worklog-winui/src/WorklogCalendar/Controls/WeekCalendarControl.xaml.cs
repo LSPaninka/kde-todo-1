@@ -388,10 +388,10 @@ public sealed partial class WeekCalendarControl : UserControl
     private void ClearEntryBlocks(Canvas canvas)
     {
         for (int i = canvas.Children.Count - 1; i >= 0; i--)
-            if (canvas.Children[i] is Border) canvas.Children.RemoveAt(i);
+            if (canvas.Children[i] is FrameworkElement fe && fe.Tag is BlockTag) canvas.Children.RemoveAt(i);
     }
 
-    private Border BuildBlock(object entry, bool isJira)
+    private ContentPresenter BuildBlock(object entry, bool isJira)
     {
         long startedMs; int durSec; string title; string subtitle; SolidColorBrush fill; SolidColorBrush border;
         if (isJira)
@@ -545,7 +545,7 @@ public sealed partial class WeekCalendarControl : UserControl
         if (day < 0) return;
         foreach (var child in canvas.Children)
         {
-            if (child is not Border b || b.Tag is not BlockTag t) continue;
+            if (child is not ContentPresenter b || b.Tag is not BlockTag t) continue;
             if (t.IsDragging) continue;   // don't yank a block out from under the cursor
             // Minute-precise positioning so 10-min blocks render at their
             // real size (1 row = 30 min = RowHeight).
@@ -567,7 +567,7 @@ public sealed partial class WeekCalendarControl : UserControl
 
     // ---- Block interaction ------------------------------------------------
 
-    private void OnBlockPressed(Border card, BlockTag tag, PointerRoutedEventArgs e)
+    private void OnBlockPressed(ContentPresenter card, BlockTag tag, PointerRoutedEventArgs e)
     {
         var pt = e.GetCurrentPoint(card);
         if (!pt.Properties.IsLeftButtonPressed) return;
@@ -597,7 +597,7 @@ public sealed partial class WeekCalendarControl : UserControl
         e.Handled = true;
     }
 
-    private void OnBlockMoved(Border card, BlockTag tag, PointerRoutedEventArgs e)
+    private void OnBlockMoved(ContentPresenter card, BlockTag tag, PointerRoutedEventArgs e)
     {
         if (tag.Mode == 0)
         {
@@ -660,7 +660,7 @@ public sealed partial class WeekCalendarControl : UserControl
         }
     }
 
-    private void OnBlockReleased(Border card, BlockTag tag, PointerRoutedEventArgs e)
+    private void OnBlockReleased(ContentPresenter card, BlockTag tag, PointerRoutedEventArgs e)
     {
         var canvas = card.Parent as Canvas;
         if (canvas == null) return;
@@ -724,7 +724,7 @@ public sealed partial class WeekCalendarControl : UserControl
         return (int)(Math.Round(rawMin / g) * g);
     }
 
-    private void ResetBlock(Border card, BlockTag tag)
+    private void ResetBlock(ContentPresenter card, BlockTag tag)
     {
         if (tag.Mode == 0) return;
         tag.Mode = 0;
