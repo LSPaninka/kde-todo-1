@@ -632,6 +632,42 @@ public sealed class JiraWorklogStore : INotifyPropertyChanged
         return (false, $"HTTP {code}: {msg}");
     }
 
+    /// <summary>
+    /// Optimistic local update: mutate the in-memory worklog and raise
+    /// PropertyChanged so the UI reflects the move immediately without
+    /// waiting for the next FetchWeek. Without this, a drag-to-move could
+    /// "snap back" because the post-update Refresh ran with stale store
+    /// data while the refetch was still in flight (or had been cached by
+    /// Jira and returned the old position briefly).
+    /// </summary>
+    public void UpdateLocalWorklog(string worklogId, DateTime newStarted, int newDurationSec)
+    {
+        if (string.IsNullOrEmpty(worklogId)) return;
+        var list = new List<JiraWorklog>(Worklogs);
+        bool changed = false;
+        for (int i = 0; i < list.Count; i++)
+        {
+            if (list[i].Id != worklogId) continue;
+            var w = list[i];
+            list[i] = new JiraWorklog
+            {
+                Id = w.Id,
+                IssueId = w.IssueId,
+                IssueKey = w.IssueKey,
+                IssueSummary = w.IssueSummary,
+                StartedUnixMs = new DateTimeOffset(DateTime.SpecifyKind(newStarted, DateTimeKind.Local)).ToUnixTimeMilliseconds(),
+                DurationSec = newDurationSec,
+                Comment = w.Comment
+            };
+            changed = true;
+            break;
+        }
+        if (!changed) return;
+        list.Sort((a, b) => a.StartedUnixMs.CompareTo(b.StartedUnixMs));
+        Worklogs = list;
+        Raise(nameof(Worklogs));
+    }
+
     public async Task<(bool ok, string err)> DeleteWorklogAsync(string issueKey, string worklogId)
     {
         if (!HasCredentials(out var creds)) return (false, "Faltan credenciales.");

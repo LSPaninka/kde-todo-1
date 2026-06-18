@@ -321,7 +321,7 @@ public sealed partial class TrayPopupWindow : Window
         SetStatus("Actualizando worklog Jira…", false);
         var start = DateTimeOffset.FromUnixTimeMilliseconds(newStartMs).LocalDateTime;
         var (ok, err) = await _jira.UpdateWorklogAsync(w.IssueKey, w.Id, start, newDur, w.Comment ?? "");
-        if (ok) await RefreshAsync();
+        if (ok) { _jira.UpdateLocalWorklog(w.Id, start, newDur); await RefreshAsync(); }
         else SetStatus($"Jira: no se pudo guardar — {err}", true);
     }
 
@@ -333,7 +333,7 @@ public sealed partial class TrayPopupWindow : Window
         var (ok, err) = await _clockify.UpdateEntryAsync(c.Id, start, end, c.Description ?? "",
                                                          string.IsNullOrEmpty(c.ProjectId) ? null : c.ProjectId,
                                                          c.TagIds, c.Billable);
-        if (ok) await RefreshAsync();
+        if (ok) { _clockify.UpdateLocalEntry(c.Id, start, newDur); await RefreshAsync(); }
         else SetStatus($"Clockify: no se pudo guardar — {err}", true);
     }
 

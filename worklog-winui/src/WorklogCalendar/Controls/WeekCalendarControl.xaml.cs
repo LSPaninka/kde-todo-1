@@ -96,6 +96,13 @@ public sealed partial class WeekCalendarControl : UserControl
         BuildHourColumn();
         BuildDayColumns();
         UpdateTotalsCells();
+        // Force a synchronous layout pass before positioning entry blocks
+        // so each day canvas already has its ActualWidth — without this,
+        // the first RenderEntries on a brand-new canvas (ActualWidth = 0)
+        // skipped LayoutEntryBlocks and relied on the eventual SizeChanged,
+        // which can fire AFTER the user starts dragging a freshly-built
+        // block and corrupt the OrigTop math.
+        RootGrid.UpdateLayout();
         RenderEntries();
     }
 

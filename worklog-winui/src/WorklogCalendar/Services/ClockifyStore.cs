@@ -337,6 +337,43 @@ public sealed class ClockifyStore : INotifyPropertyChanged
         return (false, $"HTTP {code}: {msg}");
     }
 
+    /// <summary>
+    /// Optimistic local update for the time window of an existing entry,
+    /// so the UI reflects a drag-to-move immediately without waiting for
+    /// the refetch round-trip.
+    /// </summary>
+    public void UpdateLocalEntry(string entryId, DateTime newStart, int newDurationSec)
+    {
+        if (string.IsNullOrEmpty(entryId)) return;
+        var list = new List<ClockifyEntry>(Entries);
+        bool changed = false;
+        long newMs = new DateTimeOffset(DateTime.SpecifyKind(newStart, DateTimeKind.Local)).ToUnixTimeMilliseconds();
+        for (int i = 0; i < list.Count; i++)
+        {
+            if (list[i].Id != entryId) continue;
+            var e = list[i];
+            list[i] = new ClockifyEntry
+            {
+                Id = e.Id,
+                StartedUnixMs = newMs,
+                DurationSec = newDurationSec,
+                Description = e.Description,
+                ProjectId = e.ProjectId,
+                ProjectName = e.ProjectName,
+                ProjectColor = e.ProjectColor,
+                TagIds = e.TagIds,
+                TagNames = e.TagNames,
+                Billable = e.Billable
+            };
+            changed = true;
+            break;
+        }
+        if (!changed) return;
+        list.Sort((a, b) => a.StartedUnixMs.CompareTo(b.StartedUnixMs));
+        Entries = list;
+        Raise(nameof(Entries));
+    }
+
     public async Task<(bool ok, string err)> DeleteEntryAsync(string entryId)
     {
         if (!ContextReady(out var err1)) return (false, err1);
