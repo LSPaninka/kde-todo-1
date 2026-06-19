@@ -33,6 +33,12 @@ Rectangle {
     property string kind: "jira"   // "jira" | "clockify"
     property bool compact: false   // true in combined mode (force smaller font)
     property bool useProjectColor: false
+    // When true the block sits on top of (overlaps in time) another block
+    // of the same source on the same day — the calendar computes this
+    // per source and passes it down. Jira-Jira overlaps get an orange
+    // outline, Clockify-Clockify overlaps get yellow. Helps spot the
+    // "Jira→Clockify created a duplicate" case at a glance.
+    property bool overlapping: false
 
     // Geometry hints from the parent so the MouseArea below can decide
     // whether to constrain the drag and how to translate pixel deltas
@@ -53,7 +59,8 @@ Rectangle {
     signal duplicateRequested()
 
     radius: 3
-    border.width: 1
+    // Thicker border when overlapping so the colored ring is unmistakable.
+    border.width: overlapping ? 2 : 1
     color: block._fillColor()
     border.color: block._borderColor()
 
@@ -74,6 +81,12 @@ Rectangle {
         return Qt.rgba(120/255, 215/255, 145/255, 0.55);            // light green
     }
     function _borderColor() {
+        if (overlapping) {
+            // Vivid yellow for Clockify-Clockify, orange for Jira-Jira.
+            return kind === "jira"
+                   ? Qt.rgba(255/255, 140/255,   0/255, 1)   // dark orange
+                   : Qt.rgba(255/255, 215/255,   0/255, 1);  // gold / yellow
+        }
         if (kind === "jira") return Qt.rgba(120/255, 110/255, 200/255, 0.95);
         if (useProjectColor && entry && entry.projectColor) {
             return Qt.darker(entry.projectColor, 1.3);

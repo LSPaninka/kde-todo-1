@@ -1,5 +1,26 @@
 # Changelog — Jira / Clockify Worklog Calendar
 
+## 0.9.0 — Overlap-based Jira→Clockify sync + overlap outlines
+
+- **Jira → Clockify sync no longer duplicates resized blocks.** Dedup
+  used to match by description + ±60 s start + ±60 s duration, so a
+  Jira block that was extended by 10 minutes failed both duration
+  checks and a second Clockify entry got created on top of the old
+  one. The check is now overlap-based: same description plus any
+  time-range overlap on the same day is treated as already-synced.
+  In practice this is what the user expects — one Clockify entry per
+  Jira worklog occurrence, even after the Jira side gets resized.
+- **Yellow / orange overlap outlines.** Blocks that overlap (in time)
+  with another block of the same source on the same day now render
+  with a 2 px outline: gold (#FFD700) for Clockify-Clockify,
+  dark orange (#FF8C00) for Jira-Jira. The calendar computes an id
+  set per source on every store refresh; entries pick up
+  `overlapping: true` and `WorklogEntry._borderColor()` returns the
+  warning color instead of the regular border. Helps spot leftover
+  duplicates from old syncs, and double-logging in general.
+
+Bumped metadata 0.8.2 → 0.9.0.
+
 ## 0.8.2 — Subtask table: inline filter (lupa)
 
 - **Filter field.** A magnifying-glass button to the left of the
