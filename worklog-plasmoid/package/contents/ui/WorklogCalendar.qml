@@ -106,6 +106,14 @@ Item {
     property var _jiraByDay:     cal._rebuild(_vJira,     weekStart, jiraStore ? jiraStore.worklogs : [])
     property var _clockifyByDay: cal._rebuild(_vClockify, weekStart, clockifyStore ? clockifyStore.entries : [])
 
+    // Per-source overlap maps {entryId: true}. Two entries on the same
+    // day overlap if their [started, started+duration) intervals share
+    // any millisecond. Touching ranges (one ends exactly when the next
+    // starts) do NOT count. Recomputed on every store version bump via
+    // the same `_v…` dependencies that drive `_byDay`.
+    readonly property var _jiraOverlapMap:     cal._computeOverlaps(_vJira,     _jiraByDay)
+    readonly property var _clockifyOverlapMap: cal._computeOverlaps(_vClockify, _clockifyByDay)
+
     function _rebuild(_unusedV, _unusedWs, list) {
         var out = [[], [], [], [], [], [], []];
         if (!list) return out;
@@ -116,6 +124,27 @@ Item {
             if (dayIdx >= 0 && dayIdx < 7) out[dayIdx].push(w);
         }
         return out;
+    }
+
+    function _computeOverlaps(_unusedV, byDay) {
+        var ids = {};
+        if (!byDay) return ids;
+        for (var d = 0; d < 7; d++) {
+            var arr = byDay[d] || [];
+            for (var i = 0; i < arr.length; i++) {
+                var a = arr[i];
+                var aEnd = a.started + a.durationSec * 1000;
+                for (var j = i + 1; j < arr.length; j++) {
+                    var b = arr[j];
+                    var bEnd = b.started + b.durationSec * 1000;
+                    if (a.started < bEnd && b.started < aEnd) {
+                        ids[a.id] = true;
+                        ids[b.id] = true;
+                    }
+                }
+            }
+        }
+        return ids;
     }
 
     function _dayMs(idx) { return weekStart.getTime() + idx * 86400000; }
@@ -443,6 +472,7 @@ Item {
                             entry: modelData
                             kind: "jira"
                             compact: cal._isCombined
+                            overlapping: !!(cal._jiraOverlapMap && cal._jiraOverlapMap[modelData.id])
                             x: cal._isCombined ? 2 : 2
                             y: cal._yForEntry(modelData, dayCol.dayIndex)
                             width: cal._isCombined ? (dayCol.width / 2) - 3 : dayCol.width - 4
@@ -467,6 +497,7 @@ Item {
                             entry: modelData
                             kind: "clockify"
                             compact: cal._isCombined
+                            overlapping: !!(cal._clockifyOverlapMap && cal._clockifyOverlapMap[modelData.id])
                             // pure clockify mode → use project color if available
                             useProjectColor: !cal._isCombined
                             x: cal._isCombined ? (dayCol.width / 2) + 1 : 2

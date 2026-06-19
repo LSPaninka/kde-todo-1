@@ -469,8 +469,14 @@ QtObject {
 
     // ------------------------------------------------------------------
     // Sync from Jira: for each Jira worklog of the week create a Clockify
-    // entry with description "<key>: <summary>" if one doesn't already
-    // exist (dedup by description prefix on a matching day).
+    // entry with description "<key>: <summary>". Dedup is overlap-based:
+    // if Clockify already has an entry with the same description whose
+    // time range overlaps the Jira block (any overlap, not just exact
+    // start/duration match), the Jira block is treated as already-synced
+    // and is skipped. This is what catches the "Jira block got 10 minutes
+    // longer" case — without overlap-based dedup the previous logic
+    // (±60 s start / ±60 s duration) would create a second Clockify entry
+    // sitting on top of the old one.
     // ------------------------------------------------------------------
 
     function syncFromJira(jiraWorklogs, defaultProjectId, defaultBillable, callback) {
@@ -484,14 +490,18 @@ QtObject {
             for (var i = 0; i < jiraWorklogs.length; i++) {
                 var j = jiraWorklogs[i];
                 var desc = j.issueKey + (j.issueSummary ? ": " + j.issueSummary : "");
-                // Already there?
+                var jStart = j.started;
+                var jEnd   = j.started + j.durationSec * 1000;
+                // Already there? Same description + any time-range overlap.
                 var hit = false;
                 for (var k = 0; k < store.entries.length; k++) {
                     var c = store.entries[k];
                     if (c.description !== desc) continue;
-                    if (Math.abs(c.started - j.started) > 60000) continue;   // ±1 min
-                    if (Math.abs(c.durationSec - j.durationSec) > 60) continue;
-                    hit = true; break;
+                    var cStart = c.started;
+                    var cEnd   = c.started + c.durationSec * 1000;
+                    // Half-open intervals: touching ranges (cEnd === jStart)
+                    // do not count as overlap.
+                    if (jStart < cEnd && cStart < jEnd) { hit = true; break; }
                 }
                 if (hit) continue;
                 toCreate.push({
