@@ -49,7 +49,34 @@
                 </DropDownButton.Flyout>
             </DropDownButton>
             <Button x:Name="RefreshBtn" Grid.Column="7" Content="↻" ToolTipService.ToolTip="Sincronizar (F5)" />
-            <Button x:Name="DiagBtn" Grid.Column="8" Content="ⓘ" ToolTipService.ToolTip="Diagnóstico" />
+            <DropDownButton x:Name="DiagBtn" Grid.Column="8" Content="ⓘ"
+                            ToolTipService.ToolTip="Diagnóstico y logs">
+                <DropDownButton.Flyout>
+                    <MenuFlyout>
+                        <MenuFlyoutItem x:Name="DiagOpenMenu" Text="Diagnóstico (HTTP logs)…">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE946;" FontFamily="Segoe MDL2 Assets" />
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutSeparator />
+                        <MenuFlyoutItem x:Name="OpenLogFileMenu" Text="Abrir worklog.log (Notepad)">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE8A5;" FontFamily="Segoe MDL2 Assets" />
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutItem x:Name="OpenLogFolderMenu" Text="Abrir carpeta de logs (Explorer)">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE838;" FontFamily="Segoe MDL2 Assets" />
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutItem x:Name="ClearLogMenu" Text="Limpiar worklog.log">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE74D;" FontFamily="Segoe MDL2 Assets" />
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                    </MenuFlyout>
+                </DropDownButton.Flyout>
+            </DropDownButton>
             <Button x:Name="SettingsBtn" Grid.Column="9" Content="⚙" ToolTipService.ToolTip="Configurar..." />
         </Grid>
 

@@ -642,27 +642,24 @@ public sealed class JiraWorklogStore : INotifyPropertyChanged
     /// </summary>
     public void UpdateLocalWorklog(string worklogId, DateTime newStarted, int newDurationSec)
     {
-        if (string.IsNullOrEmpty(worklogId)) return;
+        if (string.IsNullOrEmpty(worklogId)) { FileLogger.Log("local", "UpdateLocalWorklog: empty id, skip"); return; }
         var list = new List<JiraWorklog>(Worklogs);
         bool changed = false;
+        long newMs = new DateTimeOffset(DateTime.SpecifyKind(newStarted, DateTimeKind.Local)).ToUnixTimeMilliseconds();
         for (int i = 0; i < list.Count; i++)
         {
             if (list[i].Id != worklogId) continue;
             var w = list[i];
+            FileLogger.Log("local", $"UpdateLocalWorklog HIT id={worklogId} oldStart={w.StartedUnixMs} oldDur={w.DurationSec} → newStart={newMs} newDur={newDurationSec}");
             list[i] = new JiraWorklog
             {
-                Id = w.Id,
-                IssueId = w.IssueId,
-                IssueKey = w.IssueKey,
-                IssueSummary = w.IssueSummary,
-                StartedUnixMs = new DateTimeOffset(DateTime.SpecifyKind(newStarted, DateTimeKind.Local)).ToUnixTimeMilliseconds(),
-                DurationSec = newDurationSec,
-                Comment = w.Comment
+                Id = w.Id, IssueId = w.IssueId, IssueKey = w.IssueKey, IssueSummary = w.IssueSummary,
+                StartedUnixMs = newMs, DurationSec = newDurationSec, Comment = w.Comment
             };
             changed = true;
             break;
         }
-        if (!changed) return;
+        if (!changed) { FileLogger.Log("local", $"UpdateLocalWorklog NO MATCH id={worklogId} (have {list.Count})"); return; }
         list.Sort((a, b) => a.StartedUnixMs.CompareTo(b.StartedUnixMs));
         Worklogs = list;
         Raise(nameof(Worklogs));

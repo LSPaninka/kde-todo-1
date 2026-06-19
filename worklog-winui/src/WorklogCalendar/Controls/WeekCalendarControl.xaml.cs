@@ -646,6 +646,13 @@ public sealed partial class WeekCalendarControl : UserControl
         else if (pt.Position.Y > card.ActualHeight - EdgePx) tag.Mode = 3;
         else tag.Mode = 1;
 
+        FileLogger.Log("drag", $"PRESSED mode={tag.Mode} kind={(tag.IsJira ? "jira" : "clk")} " +
+            $"id={GetEntryId(tag)} startedMs={tag.StartedMs} dur={tag.DurationSec}s " +
+            $"OrigLeft={tag.OrigLeft:F1} OrigTop={tag.OrigTop:F1} " +
+            $"ActualW={card.ActualWidth:F1} ActualH={card.ActualHeight:F1} " +
+            $"press(x,y)=({pt.Position.X:F1},{pt.Position.Y:F1}) " +
+            $"canvas(w,h)=({canvas.ActualWidth:F1},{canvas.ActualHeight:F1})");
+
         if (tag.Mode == 1)
         {
             // Float the block AND its day-column above siblings so a
@@ -655,6 +662,13 @@ public sealed partial class WeekCalendarControl : UserControl
         }
         card.CapturePointer(e.Pointer);
         e.Handled = true;
+    }
+
+    private static string GetEntryId(BlockTag t)
+    {
+        if (t.Entry is JiraWorklog j) return $"{j.IssueKey}/{j.Id}";
+        if (t.Entry is ClockifyEntry c) return c.Id;
+        return "?";
     }
 
     private void OnBlockMoved(ContentPresenter card, BlockTag tag, PointerRoutedEventArgs e)
@@ -686,6 +700,7 @@ public sealed partial class WeekCalendarControl : UserControl
         if (tag.Mode == 1)
         {
             if (!tag.Dragged && Math.Abs(dx) < 4 && Math.Abs(dy) < 4) return;
+            if (!tag.Dragged) FileLogger.Log("drag", $"DRAG-START kind={(tag.IsJira ? "jira" : "clk")} dx={dx:F1} dy={dy:F1}");
             tag.Dragged = true;
             double colW = canvas.ActualWidth;
             double snappedDx = colW > 0 ? Math.Round(dx / colW) * colW : 0;
@@ -723,7 +738,7 @@ public sealed partial class WeekCalendarControl : UserControl
     private void OnBlockReleased(ContentPresenter card, BlockTag tag, PointerRoutedEventArgs e)
     {
         var canvas = card.Parent as Canvas;
-        if (canvas == null) return;
+        if (canvas == null) { FileLogger.Log("drag", "RELEASED canvas==null — skip"); return; }
         card.ReleasePointerCapture(e.Pointer);
         int mode = tag.Mode;
         bool dragged = tag.Dragged;
@@ -731,9 +746,15 @@ public sealed partial class WeekCalendarControl : UserControl
         Canvas.SetZIndex(card, 0);
         Canvas.SetZIndex(canvas, 0);
 
+        FileLogger.Log("drag", $"RELEASED mode={mode} dragged={dragged} " +
+            $"GetLeft={Canvas.GetLeft(card):F1} GetTop={Canvas.GetTop(card):F1} " +
+            $"OrigLeft={tag.OrigLeft:F1} OrigTop={tag.OrigTop:F1} " +
+            $"ActualH={card.ActualHeight:F1} OrigH={tag.OrigHeight:F1} " +
+            $"colW={canvas.ActualWidth:F1}");
+
         if (!dragged)
         {
-            // Plain click → edit.
+            FileLogger.Log("drag", "RELEASED → click→edit (not dragged)");
             if (tag.IsJira) EditJiraRequested?.Invoke((JiraWorklog)tag.Entry);
             else EditClockifyRequested?.Invoke((ClockifyEntry)tag.Entry);
             return;
@@ -748,13 +769,20 @@ public sealed partial class WeekCalendarControl : UserControl
         {
             int days = colW > 0 ? (int)Math.Round(dx / colW) : 0;
             int stepMin = PxToSnappedMin(dy, fine);
-            if (days == 0 && stepMin == 0) { Refresh(); return; }
+            FileLogger.Log("drag", $"RELEASED move dx={dx:F1} dy={dy:F1} days={days} stepMin={stepMin} fine={fine}");
+            if (days == 0 && stepMin == 0)
+            {
+                FileLogger.Log("drag", "RELEASED → Refresh() (no movement)");
+                Refresh(); return;
+            }
             long newStart = tag.StartedMs + days * 86400000L + stepMin * 60_000L;
+            FileLogger.Log("drag", $"RELEASED → EmitChange newStart={newStart} dur={tag.DurationSec}");
             EmitChange(tag, newStart, tag.DurationSec);
         }
         else if (mode == 2)
         {
             int stepMin = PxToSnappedMin(dy, fine);
+            FileLogger.Log("drag", $"RELEASED resize-top dy={dy:F1} stepMin={stepMin}");
             if (stepMin == 0) { Refresh(); return; }
             long newStart = tag.StartedMs + stepMin * 60_000L;
             int newDur = tag.DurationSec - stepMin * 60;
@@ -763,6 +791,7 @@ public sealed partial class WeekCalendarControl : UserControl
         else if (mode == 3)
         {
             int stepMin = PxToSnappedMin(dh, fine);
+            FileLogger.Log("drag", $"RELEASED resize-bottom dh={dh:F1} stepMin={stepMin}");
             if (stepMin == 0) { Refresh(); return; }
             int newDur = tag.DurationSec + stepMin * 60;
             EmitChange(tag, tag.StartedMs, newDur);
@@ -802,10 +831,19 @@ public sealed partial class WeekCalendarControl : UserControl
         long wsMs = ToMs(WeekStart);
         long weMs = ToMs(WeekStart.AddDays(7));
         long durMs = newDurationSec * 1000L;
+        long origStart = newStartMs;
         if (newStartMs < wsMs) newStartMs = wsMs;
         if (newStartMs + durMs > weMs) newStartMs = weMs - durMs;
-        if (newDurationSec < 600) newDurationSec = 600;   // 10-min floor
-        if (newStartMs == tag.StartedMs && newDurationSec == tag.DurationSec) { Refresh(); return; }
+        if (newDurationSec < 600) newDurationSec = 600;
+        FileLogger.Log("emit", $"EmitChange origStart={origStart} clampedStart={newStartMs} dur={newDurationSec} " +
+            $"tag.StartedMs={tag.StartedMs} tag.DurationSec={tag.DurationSec} " +
+            $"hasJiraListener={MoveJiraRequested != null} hasClkListener={MoveClockifyRequested != null}");
+        if (newStartMs == tag.StartedMs && newDurationSec == tag.DurationSec)
+        {
+            FileLogger.Log("emit", "EmitChange → Refresh() (no net change after clamp)");
+            Refresh();
+            return;
+        }
         if (tag.IsJira) MoveJiraRequested?.Invoke((JiraWorklog)tag.Entry, newStartMs, newDurationSec);
         else MoveClockifyRequested?.Invoke((ClockifyEntry)tag.Entry, newStartMs, newDurationSec);
     }

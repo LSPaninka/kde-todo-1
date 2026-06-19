@@ -37,6 +37,8 @@ public partial class App : Application
     {
         try
         {
+            FileLogger.Section($"App start {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+            FileLogger.Log("app", $"BaseDir={AppContext.BaseDirectory}");
             Settings = SettingsService.Load();
             Jira = new JiraWorklogStore(Settings);
             Clockify = new ClockifyStore(Settings);

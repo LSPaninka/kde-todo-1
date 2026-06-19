@@ -111,10 +111,18 @@ public sealed partial class MainWindow : Window
             Calendar.Refresh();
             await RefreshAsync();
         };
-        DiagBtn.Click += async (s, e) =>
+        DiagOpenMenu.Click += async (s, e) =>
         {
             var d = new DiagnosticsDialog(_jira, _clockify) { XamlRoot = Content.XamlRoot };
             await d.ShowAsync();
+        };
+        OpenLogFileMenu.Click += (s, e) => OpenLogFile();
+        OpenLogFolderMenu.Click += (s, e) => OpenLogFolder();
+        ClearLogMenu.Click += (s, e) =>
+        {
+            try { System.IO.File.WriteAllText(FileLogger.LogPath, ""); }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine("clear log: " + ex.Message); }
+            SetStatus("worklog.log limpiado.", false);
         };
         SettingsBtn.Click += async (s, e) => await OpenSettingsAsync();
 
@@ -258,17 +266,18 @@ public sealed partial class MainWindow : Window
 
     private async Task RefreshAsync()
     {
+        FileLogger.Log("refresh", $"RefreshAsync ENTER worklogsCount={_jira.Worklogs.Count} entriesCount={_clockify.Entries.Count}");
         UpdateHeaderLabels();
         Calendar.WeekStart = _weekStart;
         Calendar.Refresh();
+        FileLogger.Log("refresh", "RefreshAsync first Calendar.Refresh done; starting fetches");
         var tasks = new List<Task>();
         if (Calendar.ShowJira) tasks.Add(_jira.FetchWeekAsync(_weekStart));
         if (Calendar.ShowClockify) tasks.Add(_clockify.FetchWeekAsync(_weekStart));
-        // Only the rings need a synchronous sprint-info fetch; the
-        // subtask table + heatmap fetch their own data on view switch.
         if (ShowBottomPanel && BottomIsRings) tasks.Add(_jira.FetchSprintInfoAsync());
         try { await Task.WhenAll(tasks); }
-        catch (Exception ex) { System.Diagnostics.Debug.WriteLine("Refresh error: " + ex); }
+        catch (Exception ex) { FileLogger.Log("refresh", "fetch error: " + ex); }
+        FileLogger.Log("refresh", $"RefreshAsync post-fetch worklogsCount={_jira.Worklogs.Count} entriesCount={_clockify.Entries.Count}");
         if (ShowBottomPanel && BottomIsRings) Gauges.StartFillAnimation();
         if (ShowBottomPanel && BottomIsSubtasks) _ = Subtasks.Refresh();
         if (ShowBottomPanel && BottomIsHeatmap) _ = Heatmap.Refresh();
@@ -540,6 +549,37 @@ public sealed partial class MainWindow : Window
         await dlg.ShowAsync();
     }
 
+    private void OpenLogFile()
+    {
+        try
+        {
+            if (!System.IO.File.Exists(FileLogger.LogPath))
+                System.IO.File.WriteAllText(FileLogger.LogPath, "");
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "notepad.exe",
+                Arguments = $"\"{FileLogger.LogPath}\"",
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine("open log: " + ex.Message); }
+    }
+
+    private void OpenLogFolder()
+    {
+        try
+        {
+            System.IO.Directory.CreateDirectory(SettingsService.ConfigDir);
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"\"{SettingsService.ConfigDir}\"",
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine("open log folder: " + ex.Message); }
+    }
+
     private async Task OpenSettingsAsync()
     {
         var dlg = new SettingsDialog(_settings) { XamlRoot = Content.XamlRoot };
@@ -606,33 +646,35 @@ public sealed partial class MainWindow : Window
 
     private async Task MoveJiraAsync(JiraWorklog w, long newStartMs, int newDur)
     {
+        FileLogger.Log("move", $"MoveJiraAsync ENTER issue={w.IssueKey} id={w.Id} oldStart={w.StartedUnixMs} oldDur={w.DurationSec} → newStart={newStartMs} newDur={newDur}");
         SetStatus("Actualizando worklog Jira…", false);
         var start = DateTimeOffset.FromUnixTimeMilliseconds(newStartMs).LocalDateTime;
         var (ok, err) = await _jira.UpdateWorklogAsync(w.IssueKey, w.Id, start, newDur, w.Comment ?? "");
+        FileLogger.Log("move", $"MoveJiraAsync UpdateWorklogAsync returned ok={ok} err={err}");
         if (ok)
         {
-            // Optimistic: patch the local list NOW so the upcoming Refresh
-            // (and the post-refetch Refresh) paints the block at the new
-            // slot. Without this, the block briefly snaps back to its old
-            // position while FetchWeekAsync is still in flight — and stays
-            // there if Jira's response hasn't propagated yet.
             _jira.UpdateLocalWorklog(w.Id, start, newDur);
+            FileLogger.Log("move", $"MoveJiraAsync UpdateLocalWorklog done; calling RefreshAsync");
             await RefreshAsync();
+            FileLogger.Log("move", $"MoveJiraAsync RefreshAsync returned");
         }
         else SetStatus($"Jira: no se pudo guardar — {err}", true);
     }
 
     private async Task MoveClockifyAsync(ClockifyEntry c, long newStartMs, int newDur)
     {
+        FileLogger.Log("move", $"MoveClockifyAsync ENTER id={c.Id} oldStart={c.StartedUnixMs} oldDur={c.DurationSec} → newStart={newStartMs} newDur={newDur}");
         SetStatus("Actualizando entrada Clockify…", false);
         var start = DateTimeOffset.FromUnixTimeMilliseconds(newStartMs).LocalDateTime;
         var end = start.AddSeconds(newDur);
         var (ok, err) = await _clockify.UpdateEntryAsync(c.Id, start, end, c.Description ?? "",
                                                          string.IsNullOrEmpty(c.ProjectId) ? null : c.ProjectId,
                                                          c.TagIds, c.Billable);
+        FileLogger.Log("move", $"MoveClockifyAsync UpdateEntryAsync returned ok={ok} err={err}");
         if (ok)
         {
             _clockify.UpdateLocalEntry(c.Id, start, newDur);
+            FileLogger.Log("move", $"MoveClockifyAsync UpdateLocalEntry done; calling RefreshAsync");
             await RefreshAsync();
         }
         else SetStatus($"Clockify: no se pudo guardar — {err}", true);
