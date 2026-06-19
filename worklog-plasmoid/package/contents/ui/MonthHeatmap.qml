@@ -127,6 +127,24 @@ Item {
         return h.toFixed(1);
     }
 
+    // Month totals (seconds) for the visible month, month-guarded like the
+    // per-day lookups so a late response from another month can't leak in.
+    function _sumDict(dict) {
+        var s = 0;
+        for (var k in dict) s += dict[k] || 0;
+        return s;
+    }
+    function _monthClkSec()  { return clockifyKey === _curKey() ? _sumDict(clockifyTotals) : 0; }
+    function _monthJiraSec() { return jiraKey     === _curKey() ? _sumDict(jiraTotals)     : 0; }
+    function _fmtHM(sec) {
+        if (!sec || sec <= 0) return "0h";
+        var h = Math.floor(sec / 3600);
+        var m = Math.floor((sec % 3600) / 60);
+        if (h > 0 && m > 0) return h + "h " + m + "m";
+        if (h > 0)          return h + "h";
+        return m + "m";
+    }
+
     function _lerp(a, b, t) {
         return Qt.rgba(a.r + (b.r - a.r) * t,
                        a.g + (b.g - a.g) * t,
@@ -296,6 +314,42 @@ Item {
                     HoursCell { day: parent.day; hours: (heat._v, heat._clkHours(parent.day)) }
                     HoursCell { day: parent.day; hours: (heat._v, heat._jiraHours(parent.day)) }
                 }
+            }
+        }
+
+        // Footer: total hours consumed in the visible month, per source.
+        // Bottom-left, with small source icons. Re-binds on heat._v.
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.topMargin: 2
+            spacing: PlasmaCore.Units.smallSpacing
+
+            PlasmaCore.IconItem {
+                source: "chronometer"
+                Layout.preferredWidth: 14
+                Layout.preferredHeight: 14
+            }
+            PlasmaComponents3.Label {
+                text: (heat._v, heat._fmtHM(heat._monthClkSec()))
+                font.bold: true
+                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+            }
+            Item { Layout.preferredWidth: PlasmaCore.Units.smallSpacing }
+            PlasmaCore.IconItem {
+                source: "view-task"
+                Layout.preferredWidth: 14
+                Layout.preferredHeight: 14
+            }
+            PlasmaComponents3.Label {
+                text: (heat._v, heat._fmtHM(heat._monthJiraSec()))
+                font.bold: true
+                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+            }
+            Item { Layout.fillWidth: true }
+            PlasmaComponents3.Label {
+                text: i18n("Total del mes")
+                opacity: 0.55
+                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
             }
         }
     }

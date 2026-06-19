@@ -201,6 +201,11 @@ Item {
         var m = minutes % 60;
         return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
     }
+    function _fmtClock(ms) {
+        var d = new Date(ms);
+        function p(n) { return n < 10 ? "0" + n : "" + n; }
+        return p(d.getHours()) + ":" + p(d.getMinutes());
+    }
     function _msAtSlot(dayIdx, slot) {
         return _dayMs(dayIdx) + (startHour * 3600 + slot * 1800) * 1000;
     }
@@ -394,6 +399,26 @@ Item {
                                        PlasmaCore.Theme.highlightColor.b, 0.30)
                         border.color: PlasmaCore.Theme.highlightColor
                         border.width: 1
+
+                        // Live time-range readout, centered, on a dark pill
+                        // so it's readable over any theme highlight color.
+                        // Updates as the drag grows/shrinks.
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: dragLabel.implicitWidth + 8
+                            height: dragLabel.implicitHeight + 4
+                            radius: 3
+                            color: Qt.rgba(0, 0, 0, 0.6)
+                            PlasmaComponents3.Label {
+                                id: dragLabel
+                                anchors.centerIn: parent
+                                text: cal._fmtClock(dragMouse._pxToMs(dragMouse._snappedTop)) + " - " +
+                                      cal._fmtClock(dragMouse._pxToMs(dragMouse._snappedBottom))
+                                color: "white"
+                                font.bold: true
+                                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                            }
+                        }
                     }
 
                     MouseArea {
