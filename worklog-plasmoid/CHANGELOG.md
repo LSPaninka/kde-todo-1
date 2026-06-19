@@ -1,5 +1,19 @@
 # Changelog — Jira / Clockify Worklog Calendar
 
+## 0.9.1 — Live drag time readout + monthly totals on the heatmap
+
+- **Drag-to-create shows the time range.** While dragging the blue
+  selection over the calendar, a centered dark pill shows the live
+  start–end times (`10:00 - 10:30`, `10:00 - 11:00`, …) and updates as
+  the selection grows/shrinks. Honors the 30-min / Shift-10-min snap.
+- **Monthly totals on the heatmap.** A footer at the bottom-left of the
+  heatmap section sums the hours consumed in the *visible* month for
+  Clockify (chronometer icon) and Jira (task icon). Month-guarded like
+  the per-day cells, so a late response from another month can't leak
+  in; re-binds on every refresh.
+
+Bumped metadata 0.9.0 → 0.9.1.
+
 ## 0.9.0 — Overlap-based Jira→Clockify sync + overlap outlines
 
 - **Jira → Clockify sync no longer duplicates resized blocks.** Dedup
