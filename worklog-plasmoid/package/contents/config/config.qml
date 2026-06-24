@@ -17,4 +17,9 @@ ConfigModel {
         icon: "chronometer"
         source: "configClockify.qml"
     }
+    ConfigCategory {
+        name: i18n("Google Calendar")
+        icon: "view-calendar"
+        source: "configGoogle.qml"
+    }
 }
