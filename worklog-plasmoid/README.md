@@ -123,6 +123,22 @@ Después del sync se refresca automáticamente la semana.
 
 ---
 
+## Google Calendar (solo lectura)
+
+Botón de **tilde arriba a la derecha** del popup: prende/apaga la vista de
+los eventos de Google Calendar como **bloques rojos translúcidos detrás**
+del worklog. Son **inamovibles** y **no seleccionables**; quedan por
+detrás, así que podés cargar horas "encima". En modo **Jira/Clockify** el
+bloque ocupa el **ancho completo** de la columna (las dos mitades como uno
+solo).
+
+Auth por OAuth de dispositivo (sin servidor local): se autoriza una sola
+vez con un código corto y se guarda un refresh token. Paso a paso de cómo
+crear el cliente OAuth en Google Cloud (plan gratuito) y elegir el
+calendario en **[docs/GOOGLE_CALENDAR.md](docs/GOOGLE_CALENDAR.md)**.
+
+---
+
 ## Drag-to-create
 
 - En modos puros (Jira o Clockify): drag vertical → modal de la fuente

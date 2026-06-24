@@ -22,10 +22,16 @@ Item {
 
     property var jiraStore
     property var clockifyStore
+    property var googleStore
 
     property date currentWeekStart: _sundayOf(new Date())
     readonly property int _vJira: jiraStore ? jiraStore.version : 0
     readonly property int _vClockify: clockifyStore ? clockifyStore.version : 0
+    readonly property int _vGoogle: googleStore ? googleStore.version : 0
+
+    // Whether Google Calendar event blocks are shown on the grid.
+    readonly property bool _showGoogleEvents:
+        plasmoid.configuration.googleCalEnabled === true
 
     readonly property string source: plasmoid.configuration.worklogSource || "jira"
     readonly property bool _isCombined: source === "jira-clockify"
@@ -154,6 +160,7 @@ Item {
     function syncNow() {
         if (_showJira     && jiraStore)     jiraStore.fetchWeek(currentWeekStart);
         if (_showClockify && clockifyStore) clockifyStore.fetchWeek(currentWeekStart);
+        if (_showGoogleEvents && googleStore) googleStore.fetchWeek(currentWeekStart);
         _refreshCurrentBottomView();
     }
 
@@ -256,6 +263,18 @@ Item {
                 PlasmaComponents3.ToolTip.visible: hovered
                 PlasmaComponents3.ToolTip.delay: 500
             }
+            // Google Calendar events toggle — shows/hides the red
+            // background event blocks. Checkable; persists to kcfg.
+            PlasmaComponents3.ToolButton {
+                id: googleToggle
+                icon.name: "view-calendar"
+                checkable: true
+                checked: full._showGoogleEvents
+                onClicked: plasmoid.configuration.googleCalEnabled = !plasmoid.configuration.googleCalEnabled
+                PlasmaComponents3.ToolTip.text: i18n("Mostrar / ocultar eventos de Google Calendar")
+                PlasmaComponents3.ToolTip.visible: hovered
+                PlasmaComponents3.ToolTip.delay: 500
+            }
             // Pin button — keeps the popup open until toggled off.
             PlasmaComponents3.ToolButton {
                 id: pinBtn
@@ -310,6 +329,7 @@ Item {
             Layout.fillHeight: true
             jiraStore: full.jiraStore
             clockifyStore: full.clockifyStore
+            googleStore: full.googleStore
             weekStart: full.currentWeekStart
             source: full.source
             onCreateJiraRequested:     jiraEditDialog.openCreate(dayMs, startMs, endMs)
@@ -767,6 +787,7 @@ Item {
                         onClicked: {
                             if (jiraStore && jiraStore.hasDebugLog) jiraStore.clearDebugLog();
                             if (clockifyStore && clockifyStore.hasDebugLog) clockifyStore.clearDebugLog();
+                            if (googleStore && googleStore.hasDebugLog) googleStore.clearDebugLog();
                         }
                     }
                     PlasmaComponents3.ToolButton {
@@ -789,10 +810,12 @@ Item {
                         text: {
                             var j = (jiraStore && jiraStore.hasDebugLog) ? jiraStore.lastDebugLog : "";
                             var c = (clockifyStore && clockifyStore.hasDebugLog) ? clockifyStore.lastDebugLog : "";
-                            var _ = (full._vJira, full._vClockify);
-                            if (!j && !c) return i18n("Sin datos. Pulsá ↻ para sincronizar.");
+                            var g = (googleStore && googleStore.hasDebugLog) ? googleStore.lastDebugLog : "";
+                            var _ = (full._vJira, full._vClockify, full._vGoogle);
+                            if (!j && !c && !g) return i18n("Sin datos. Pulsá ↻ para sincronizar.");
                             return "---- JIRA ----\n" + (j || "(vacío)") +
-                                   "\n\n---- CLOCKIFY ----\n" + (c || "(vacío)");
+                                   "\n\n---- CLOCKIFY ----\n" + (c || "(vacío)") +
+                                   "\n\n---- GOOGLE ----\n" + (g || "(vacío)");
                         }
                     }
                 }
@@ -805,7 +828,20 @@ Item {
         _displayBottomView = _bottomView;
         if (jiraStore && jiraStore.lastFetchedAt === 0 && _showJira) jiraStore.fetchWeek(currentWeekStart);
         if (clockifyStore && clockifyStore.lastFetchedAt === 0 && _showClockify) clockifyStore.fetchWeek(currentWeekStart);
+        if (googleStore && googleStore.lastFetchedAt === 0 && _showGoogleEvents) googleStore.fetchWeek(currentWeekStart);
         full._refreshCurrentBottomView();
+    }
+
+    // Fetch (or clear-and-fetch) Google events when the toggle flips on,
+    // and refetch when the chosen calendar changes while enabled.
+    Connections {
+        target: plasmoid.configuration
+        function onGoogleCalEnabledChanged() {
+            if (full._showGoogleEvents && googleStore) googleStore.fetchWeek(full.currentWeekStart);
+        }
+        function onGoogleCalendarIdChanged() {
+            if (full._showGoogleEvents && googleStore) googleStore.fetchWeek(full.currentWeekStart);
+        }
     }
 
     // Animate the bottom-panel switch whenever the view changes (from the

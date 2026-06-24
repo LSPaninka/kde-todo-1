@@ -26,6 +26,7 @@ Item {
 
     property var jiraStore
     property var clockifyStore
+    property var googleStore
     property date weekStart: new Date()
     property string source: "jira"   // "jira" | "clockify" | "jira-clockify"
 
@@ -101,10 +102,17 @@ Item {
 
     readonly property int _vJira: jiraStore ? jiraStore.version : 0
     readonly property int _vClockify: clockifyStore ? clockifyStore.version : 0
+    readonly property int _vGoogle: googleStore ? googleStore.version : 0
+
+    // Google Calendar event blocks — immovable, non-interactive, drawn
+    // behind the Jira/Clockify entries. Shown only when the toggle is on.
+    readonly property bool _showGoogle:
+        plasmoid.configuration.googleCalEnabled === true && !!googleStore
 
     // Buckets per day for both sources.
     property var _jiraByDay:     cal._rebuild(_vJira,     weekStart, jiraStore ? jiraStore.worklogs : [])
     property var _clockifyByDay: cal._rebuild(_vClockify, weekStart, clockifyStore ? clockifyStore.entries : [])
+    property var _googleByDay:   cal._rebuild(_vGoogle,   weekStart, googleStore ? googleStore.events : [])
 
     // Per-source overlap maps {entryId: true}. Two entries on the same
     // day overlap if their [started, started+duration) intervals share
@@ -372,6 +380,38 @@ Item {
                                 color: index % 2 === 0 ? Qt.rgba(1,1,1,0.03) : Qt.rgba(1,1,1,0.0)
                                 border.width: 1
                                 border.color: Qt.rgba(1, 1, 1, 0.06)
+                            }
+                        }
+                    }
+
+                    // Google Calendar event blocks. Declared before the
+                    // drag overlay + the Jira/Clockify entry Repeaters, so
+                    // they sit BEHIND everything: the drag-to-create input
+                    // (dragMouse) lands on top of them, and any Jira/Clockify
+                    // block covers them. They carry no MouseArea, so they're
+                    // immovable and can't be selected. In combined mode the
+                    // block spans the FULL column width (both halves) as one.
+                    Repeater {
+                        model: cal._showGoogle ? (cal._vGoogle, cal._googleByDay[dayCol.dayIndex] || []) : []
+                        delegate: Rectangle {
+                            x: 2
+                            y: cal._yForEntry(modelData, dayCol.dayIndex)
+                            width: dayCol.width - 4
+                            height: cal._heightForEntry(modelData)
+                            radius: 3
+                            color: Qt.rgba(231/255, 76/255, 60/255, 0.18)   // transparent red
+                            border.color: Qt.rgba(231/255, 76/255, 60/255, 0.45)
+                            border.width: 1
+                            PlasmaComponents3.Label {
+                                anchors.fill: parent
+                                anchors.margins: 3
+                                text: modelData.summary || ""
+                                color: "white"
+                                opacity: 0.85
+                                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                                elide: Text.ElideRight
+                                wrapMode: Text.NoWrap
+                                verticalAlignment: Text.AlignTop
                             }
                         }
                     }

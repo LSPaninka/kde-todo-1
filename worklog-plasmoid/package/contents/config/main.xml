@@ -157,5 +157,37 @@
             <label>Log every Clockify request to plasmashell stdout.</label>
             <default>true</default>
         </entry>
+
+        <!-- Google Calendar integration (read-only). Auth is OAuth 2.0 via
+             the "TV and Limited Input devices" client type, which needs no
+             redirect URI / local web server: the user authorises once with
+             a device code and we keep a refresh token. The plasmoid then
+             exchanges that refresh token for short-lived access tokens at
+             runtime. Only calendar.readonly scope is requested. See
+             docs/GOOGLE_CALENDAR.md. -->
+        <entry name="googleCalEnabled" type="Bool">
+            <label>Show Google Calendar events as immovable background blocks on the calendar. Toggled by the check button on the top-right of the popup header.</label>
+            <default>false</default>
+        </entry>
+        <entry name="googleClientId" type="String">
+            <label>Google OAuth client id (type "TV and Limited Input devices").</label>
+            <default></default>
+        </entry>
+        <entry name="googleClientSecret" type="String">
+            <label>Google OAuth client secret paired with googleClientId.</label>
+            <default></default>
+        </entry>
+        <entry name="googleRefreshToken" type="String">
+            <label>OAuth refresh token obtained from the one-time device-code authorization. Exchanged for access tokens at runtime.</label>
+            <default></default>
+        </entry>
+        <entry name="googleCalendarId" type="String">
+            <label>Calendar id to read events from. "primary" is the account's main calendar; secondary calendars use an address-like id from Calendar settings, Integrate calendar, Calendar ID.</label>
+            <default>primary</default>
+        </entry>
+        <entry name="googleCalDebug" type="Bool">
+            <label>Log every Google Calendar request to plasmashell stdout.</label>
+            <default>true</default>
+        </entry>
     </group>
 </kcfg>

@@ -24,6 +24,7 @@ Item {
     Plasmoid.fullRepresentation: FullRepresentation {
         jiraStore: _jira
         clockifyStore: _clockify
+        googleStore: _google
         Layout.minimumWidth: plasmoid.configuration.worklogPopupWidth
         Layout.minimumHeight: plasmoid.configuration.worklogPopupHeight
         Layout.preferredWidth: plasmoid.configuration.worklogPopupWidth
@@ -60,12 +61,18 @@ Item {
         id: _clockify
         plasmoidApi: plasmoid
     }
+    GoogleCalendarStore {
+        id: _google
+        plasmoidApi: plasmoid
+    }
 
     Component.onCompleted: {
         _jira.plasmoidApi     = plasmoid;
         _clockify.plasmoidApi = plasmoid;
+        _google.plasmoidApi   = plasmoid;
         _jira.init();
         _clockify.init();
+        _google.init();
         // Apply the pinned state on startup.
         plasmoid.hideOnWindowDeactivate = !root.pinned;
     }

@@ -1,5 +1,34 @@
 # Changelog — Jira / Clockify Worklog Calendar
 
+## 0.10.0 — Google Calendar integration (read-only background events)
+
+- **Google Calendar events as background blocks.** A new check button on
+  the top-right of the popup header toggles a read-only view of your
+  Google Calendar events, drawn as **transparent-red, immovable,
+  non-selectable** blocks **behind** the Jira/Clockify worklog blocks —
+  so you can log time "over" a meeting and the event stays in the
+  background. In **jira-clockify** mode each event spans the **full
+  column width** (both halves) as a single block. Timed events only
+  (all-day events are skipped).
+- **OAuth without a local server.** Auth uses Google's "TV and Limited
+  Input devices" (device-code) flow: authorise once with a short code,
+  keep a refresh token, exchange it for access tokens at runtime. Only
+  `calendar.readonly` is requested; the plasmoid never writes to Google
+  and never sees your password. New `GoogleCalendarStore.qml`.
+- **Config tab.** Configurar → Google Calendar: paste Client ID +
+  Secret, "Conectar con Google" runs the device flow (opens
+  google.com/device, polls for approval, fills the refresh token), then
+  "Cargar mis calendarios" lists your calendars to pick one. New
+  `configGoogle.qml`.
+- **Docs.** `docs/GOOGLE_CALENDAR.md` walks through creating the free
+  OAuth client in Google Cloud and choosing the calendar.
+- **kcfg:** `googleCalEnabled` (Bool, default false), `googleClientId`,
+  `googleClientSecret`, `googleRefreshToken`, `googleCalendarId`
+  (default `primary`), `googleCalDebug`. The ⓘ diagnostic overlay now
+  includes a GOOGLE section.
+
+Bumped metadata 0.9.1 → 0.10.0.
+
 ## 0.9.1 — Live drag time readout + monthly totals on the heatmap
 
 - **Drag-to-create shows the time range.** While dragging the blue

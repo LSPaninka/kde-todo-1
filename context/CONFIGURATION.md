@@ -130,6 +130,23 @@ value after a Plasma reload.
 | `clockifyBillableDefault` | Bool   | `true`  | |
 | `clockifyDebug`        | Bool   | `true`  | |
 
+### Google Calendar (read-only)
+
+OAuth 2.0 via the "TV and Limited Input devices" (device-code) flow — no
+redirect URI / local server. The config tab runs the one-time device
+authorization and the calendar-list fetch; the runtime
+`GoogleCalendarStore` exchanges the refresh token for access tokens. See
+`worklog-plasmoid/docs/GOOGLE_CALENDAR.md`.
+
+| Entry                  | Type   | Default   | Notes |
+| ---------------------- | ------ | --------- | ----- |
+| `googleCalEnabled`     | Bool   | `false`   | Show event blocks; toggled by the top-right check button |
+| `googleClientId`       | String | `""`      | OAuth client id (type "TV and Limited Input devices") |
+| `googleClientSecret`   | String | `""`      | OAuth client secret |
+| `googleRefreshToken`   | String | `""`      | Set by the device-code authorization in the config tab |
+| `googleCalendarId`     | String | `primary` | `primary` or a secondary calendar's address-like id |
+| `googleCalDebug`       | Bool   | `true`    | |
+
 ## How config dialogs map to KCfg
 
 Each `configXxx.qml` file declares `property alias cfg_someEntry:

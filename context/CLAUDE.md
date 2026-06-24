@@ -53,7 +53,7 @@ read from them and emit signals back.
 | Plasmoid                | Stores instantiated in main.qml                                                  |
 | ----------------------- | -------------------------------------------------------------------------------- |
 | Categorized ToDo        | `Database`, `TaskStore`, `JiraStore`, `GhStore`, `NotionStore`                   |
-| Worklog Calendar        | `JiraWorklogStore`, `ClockifyStore`                                              |
+| Worklog Calendar        | `JiraWorklogStore`, `ClockifyStore`, `GoogleCalendarStore`                       |
 
 Patterns shared by **every** store:
 
@@ -318,6 +318,10 @@ Less to say — most of the architecture is the same. Specifics:
 | `ClockifyEditDialog.qml`      | Clockify modal: time + project + tags + billable + description |
 | `JiraWorklogStore.qml`        | Jira REST client: week fetch, sprint discovery (3 strategies), create/update/delete |
 | `ClockifyStore.qml`           | Clockify REST client: workspace + projects + tags + entries + Jira sync |
+| `GoogleCalendarStore.qml`     | Google Calendar v3 read-only client: OAuth device-flow refresh→access token, week events |
+| `configGoogle.qml`            | Google config tab: device-code authorization + calendar-list picker |
+| `SubtaskTable.qml` / `SubtaskDetailDialog.qml` | Subtask bottom-panel view + detail modal |
+| `MonthHeatmap.qml`            | Monthly hours heatmap (bottom-panel view) |
 | `RingGauge.qml`               | Canvas-based donut with fill animation + optional color-fade loop |
 | `SprintGauges.qml`            | The two-ring section |
 | `configGeneral.qml` etc.      | KCM-style config tabs |
