@@ -127,10 +127,18 @@ Item {
         var c = _googleColorMap[calId];
         return (c && c.length > 0) ? c : _googleDefaultColor;
     }
-    // Always render the chosen color translucent (per the spec).
+    // Always render the chosen color translucent (per the spec). The hex
+    // is parsed by hand — there's no Qt.color() in QML, and feeding a
+    // string straight to Qt.rgba() / a thrown binding leaves the block at
+    // the Rectangle default (opaque white), which is the bug this fixes.
     function _translucent(base, a) {
-        var c = (base && base.length > 0) ? Qt.color(base) : Qt.color(cal._googleDefaultColor);
-        return Qt.rgba(c.r, c.g, c.b, a);
+        var h = ("" + (base || "")).trim();
+        if (h.charAt(0) !== "#" || h.length < 7) h = cal._googleDefaultColor;
+        var r = parseInt(h.substr(1, 2), 16);
+        var g = parseInt(h.substr(3, 2), 16);
+        var b = parseInt(h.substr(5, 2), 16);
+        if (isNaN(r) || isNaN(g) || isNaN(b)) { r = 231; g = 76; b = 60; }
+        return Qt.rgba(r / 255, g / 255, b / 255, a);
     }
     // A Google block is "covered" if any Jira/Clockify entry shown on the
     // same day overlaps it in time — used to hide its label so the text

@@ -1,5 +1,13 @@
 # Changelog — Jira / Clockify Worklog Calendar
 
+## 0.11.1 — Fix: calendar blocks rendered opaque white
+
+- The 0.11.0 per-calendar color path used `Qt.color(base)` to read the
+  hex's r/g/b — but QML has no `Qt.color()`, so the binding threw and the
+  block fell back to the `Rectangle` default (opaque white). `_translucent`
+  now parses the `#rrggbb` string by hand (with a red fallback on bad
+  input), restoring the translucent fill/border.
+
 ## 0.11.0 — Up to 3 calendars with per-calendar colors + covered-text hide
 
 - **Up to 3 calendars at once.** The Google config tab now has three
