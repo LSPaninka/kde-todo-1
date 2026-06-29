@@ -76,15 +76,19 @@ Calendar no tiene costo para este uso.
      (app, no segura)**. Es tu propia app en modo testing; es esperable.
 5. Al aprobar, el plasmoide completa solo el **Refresh token**. Listo.
 
-## Paso 5 — Elegir el calendario
+## Paso 5 — Elegir los calendarios (hasta 3)
 
-- Tocá **Cargar mis calendarios** y elegí el que quieras del desplegable.
-  Eso setea el **Calendar ID**.
-- O escribí el **Calendar ID** a mano:
+- Tocá **Cargar mis calendarios** y elegí hasta **3** en las filas del
+  desplegable. Podés mezclar el principal y secundarios.
   - `primary` = tu calendario principal.
-  - Para uno secundario: en Google Calendar (web), **Configuración** del
-    calendario → **Integrar calendario** → **ID del calendario** (suele
-    verse como una dirección `...@group.calendar.google.com`).
+  - Un calendario secundario aparece con su nombre; si lo querés a mano, su
+    **Calendar ID** está en Google Calendar (web) → **Configuración** del
+    calendario → **Integrar calendario** → **ID del calendario** (algo como
+    `...@group.calendar.google.com`).
+- **Color por calendario:** al lado de cada fila hay un cuadradito de
+  color. El color por defecto es el **rojo translúcido** de siempre; podés
+  cambiarlo eligiendo otro de la paleta. El bloque siempre se dibuja en
+  **tono translúcido** detrás del worklog, sin importar el color elegido.
 
 ## Paso 6 — Activar la vista
 
@@ -105,7 +109,9 @@ que el resto de la config del plasmoide (kcfg):
 | `googleClientId`      | Client ID del cliente OAuth de dispositivo |
 | `googleClientSecret`  | Client secret |
 | `googleRefreshToken`  | Refresh token obtenido al autorizar |
-| `googleCalendarId`    | Calendar ID a leer (`primary` por defecto) |
+| `googleCalendarId`    | Calendar ID legacy (solo migración; usá la lista) |
+| `googleCalendarIds`   | Hasta 3 Calendar IDs a leer (lista) |
+| `googleCalendarColors`| Color base por calendario (hex), dibujado translúcido |
 | `googleCalDebug`      | Loggear las llamadas a Google en stdout |
 
 El plasmoide **nunca** ve tu contraseña de Google y **solo** pide el scope
@@ -119,6 +125,9 @@ acceso cuando quieras desde
 
 - Se muestran solo eventos **con hora** (los de "todo el día" se omiten,
   no mapean a un bloque horario).
+- Si un bloque de Jira/Clockify queda **encima** de un evento, el bloque
+  de calendario se mantiene translúcido por detrás pero **oculta su
+  texto**, para que no se solapen las letras.
 - Los eventos fuera de la franja visible (modo 9h) quedan recortados
   arriba/abajo; pasá a modo 24h para verlos completos.
 - La sincronización es **manual** (botón ↻) o automática al cambiar de

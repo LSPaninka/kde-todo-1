@@ -30,8 +30,13 @@ ColumnLayout {
     property alias cfg_googleClientId:      clientIdField.text
     property alias cfg_googleClientSecret:  clientSecretField.text
     property alias cfg_googleRefreshToken:  refreshTokenField.text
-    property alias cfg_googleCalendarId:    calendarIdField.text
     property alias cfg_googleCalDebug:      debugCheck.checked
+    // Legacy single id, kept so a previously-set calendar migrates into
+    // the multi-list below on first open.
+    property string cfg_googleCalendarId: "primary"
+    // Up-to-3 calendars, parallel lists: id + base color (hex).
+    property var cfg_googleCalendarIds: []
+    property var cfg_googleCalendarColors: []
 
     // ---- device-flow state ----
     property string _deviceCode: ""
@@ -41,6 +46,60 @@ ColumnLayout {
 
     // ---- loaded calendar list ----
     property var _calendars: []
+    property int _colorTargetRow: 0
+
+    // Translucent-friendly palette the swatch picker offers.
+    readonly property var _palette: ["#e74c3c", "#e67e22", "#f1c40f", "#2ecc71",
+                                     "#1abc9c", "#3498db", "#9b59b6", "#e84393", "#95a5a6"]
+
+    // The rows read the cfg lists DIRECTLY (not a working copy) so they
+    // pick up the stored values whenever the config system loads them —
+    // Component.onCompleted can run before the cfg_* arrays are injected,
+    // so a snapshot there would miss them. Row 0 falls back to the legacy
+    // single id for migration; the first edit writes the explicit list.
+    function _idAt(i) {
+        var a = cfg_googleCalendarIds || [];
+        if ((!a || a.length === 0) && i === 0 &&
+            cfg_googleCalendarId && ("" + cfg_googleCalendarId).trim().length > 0) {
+            return ("" + cfg_googleCalendarId).trim();
+        }
+        return (a[i] !== undefined && a[i] !== null) ? ("" + a[i]) : "";
+    }
+    function _colorAt(i) {
+        var c = cfg_googleCalendarColors || [];
+        return (c[i] !== undefined && c[i] !== null && ("" + c[i]).length > 0)
+               ? ("" + c[i]) : "#e74c3c";
+    }
+    // Writes keep all three slots (empties included) so id↔color stay
+    // aligned by index; the store skips blank ids.
+    function _setId(i, v) {
+        var a = [_idAt(0), _idAt(1), _idAt(2)];
+        a[i] = v || "";
+        cfg_googleCalendarIds = a;
+    }
+    function _setColor(i, v) {
+        var c = [_colorAt(0), _colorAt(1), _colorAt(2)];
+        c[i] = v;
+        cfg_googleCalendarColors = c;
+    }
+
+    // Options for a row's calendar combo: "(ninguno)" + loaded calendars +
+    // any already-stored id that isn't in the loaded list (so it's never
+    // silently dropped when the list hasn't been loaded yet).
+    function _calOptions() {
+        var out = [{ id: "", label: i18n("(ninguno)") }];
+        var seen = {};
+        for (var i = 0; i < _calendars.length; i++) { out.push(_calendars[i]); seen[_calendars[i].id] = true; }
+        for (var j = 0; j < 3; j++) {
+            var id = _idAt(j);
+            if (id && !seen[id]) { out.push({ id: id, label: id }); seen[id] = true; }
+        }
+        return out;
+    }
+    function _optIndexOf(opts, id) {
+        for (var i = 0; i < opts.length; i++) if (opts[i].id === id) return i;
+        return 0;
+    }
 
     Label {
         Layout.fillWidth: true
@@ -90,13 +149,6 @@ ColumnLayout {
                 inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhSensitiveData
             }
             CheckBox { id: showTokenCheck; text: i18n("Ver") }
-        }
-        TextField {
-            id: calendarIdField
-            Kirigami.FormData.label: i18n("Calendar ID:")
-            Layout.fillWidth: true
-            placeholderText: "primary"
-            inputMethodHints: Qt.ImhNoPredictiveText
         }
     }
 
@@ -156,10 +208,10 @@ ColumnLayout {
         }
     }
 
-    // -------- Calendar picker --------
+    // -------- Calendars (up to 3) --------
     GroupBox {
         Layout.fillWidth: true
-        title: i18n("Calendario")
+        title: i18n("Calendarios (hasta 3)")
 
         ColumnLayout {
             anchors.fill: parent
@@ -175,26 +227,91 @@ ColumnLayout {
                              clientSecretField.text.length > 0
                     onClicked: page._loadCalendars()
                 }
-                ComboBox {
-                    id: calendarCombo
+                Item { Layout.fillWidth: true }
+                Label {
+                    id: calStatus
+                    text: ""
+                    wrapMode: Text.WordWrap
+                    Layout.maximumWidth: 280
+                }
+            }
+
+            // Three calendar rows: pick a calendar + a (translucent) color.
+            Repeater {
+                model: 3
+                delegate: RowLayout {
                     Layout.fillWidth: true
-                    visible: page._calendars.length > 0
-                    textRole: "label"
-                    model: page._calendars
-                    onActivated: function(idx) {
-                        if (page._calendars[idx])
-                            calendarIdField.text = page._calendars[idx].id;
+                    spacing: Kirigami.Units.smallSpacing
+                    property int row: index
+
+                    Label {
+                        text: i18n("%1.", index + 1)
+                        opacity: 0.6
+                    }
+                    ComboBox {
+                        Layout.fillWidth: true
+                        textRole: "label"
+                        model: page._calOptions()
+                        currentIndex: page._optIndexOf(page._calOptions(), page._idAt(row))
+                        onActivated: function(idx) {
+                            var opts = page._calOptions();
+                            page._setId(row, opts[idx] ? opts[idx].id : "");
+                        }
+                    }
+                    // Color swatch — opens the palette popup for this row.
+                    Rectangle {
+                        Layout.preferredWidth: 34
+                        Layout.preferredHeight: 22
+                        radius: 3
+                        color: page._colorAt(row)
+                        border.width: 1
+                        border.color: Qt.rgba(1, 1, 1, 0.4)
+                        opacity: page._idAt(row).length > 0 ? 1.0 : 0.35
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: { page._colorTargetRow = row; colorPopup.open(); }
+                        }
                     }
                 }
             }
+
             Label {
-                id: calStatus
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 opacity: 0.8
-                text: i18n("«primary» es tu calendario principal. Para uno secundario, elegilo "
-                         + "de la lista o pegá su Calendar ID (Configuración del calendario → "
-                         + "Integrar calendario → ID del calendario).")
+                text: i18n("Elegí hasta 3 calendarios. El color por defecto es el rojo translúcido; "
+                         + "podés cambiarlo por calendario (siempre se dibuja translúcido detrás del "
+                         + "worklog). «primary» es tu calendario principal; para uno secundario, "
+                         + "cargá la lista o usá su Calendar ID.")
+            }
+        }
+    }
+
+    // Shared palette popup for picking a row's color.
+    Popup {
+        id: colorPopup
+        modal: true
+        focus: true
+        padding: 8
+        Grid {
+            columns: 5
+            spacing: 6
+            Repeater {
+                model: page._palette
+                delegate: Rectangle {
+                    width: 28; height: 28
+                    radius: 4
+                    color: modelData
+                    border.width: page._colorAt(page._colorTargetRow) === modelData ? 2 : 1
+                    border.color: page._colorAt(page._colorTargetRow) === modelData
+                                  ? Kirigami.Theme.highlightColor : Qt.rgba(1, 1, 1, 0.4)
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: { page._setColor(page._colorTargetRow, modelData); colorPopup.close(); }
+                    }
+                }
             }
         }
     }
@@ -371,10 +488,7 @@ ColumnLayout {
                     calStatus.text = i18np("%1 calendario encontrado.",
                                            "%1 calendarios encontrados.", out.length);
                     calStatus.color = Kirigami.Theme.textColor;
-                    // Preselect the currently-configured calendar.
-                    for (var j = 0; j < out.length; j++) {
-                        if (out[j].id === calendarIdField.text) { calendarCombo.currentIndex = j; break; }
-                    }
+                    // The row combos rebuild from _calOptions() automatically.
                 } catch (e) {
                     calStatus.text = i18n("Respuesta inválida: %1", e);
                     calStatus.color = "#e74c3c";

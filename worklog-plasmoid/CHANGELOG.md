@@ -1,5 +1,24 @@
 # Changelog — Jira / Clockify Worklog Calendar
 
+## 0.11.0 — Up to 3 calendars with per-calendar colors + covered-text hide
+
+- **Up to 3 calendars at once.** The Google config tab now has three
+  calendar rows; events from all of them are fetched and shown together.
+  New `googleCalendarIds` / `googleCalendarColors` StringList kcfgs
+  (parallel); the old single `googleCalendarId` migrates into the list on
+  first open. Each event carries its `calendarId`.
+- **Per-calendar color.** Each row has a color swatch (palette popup).
+  The default stays the translucent red we've been using; any chosen
+  color is **always drawn translucent** behind the worklog (fill α≈0.18,
+  border α≈0.45). Color changes apply **live** — the calendar resolves
+  `calendarId → color` from config, so editing a color doesn't refetch.
+- **No text bleed-through.** When a Jira/Clockify block sits on top of a
+  calendar event (time overlap on the same day), the event keeps its
+  translucent block but **hides its label**, so the meeting title no
+  longer collides with the worklog text on top.
+
+Bumped metadata 0.10.0 → 0.11.0.
+
 ## 0.10.0 — Google Calendar integration (read-only background events)
 
 - **Google Calendar events as background blocks.** A new check button on

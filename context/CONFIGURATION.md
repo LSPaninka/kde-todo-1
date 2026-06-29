@@ -144,7 +144,9 @@ authorization and the calendar-list fetch; the runtime
 | `googleClientId`       | String | `""`      | OAuth client id (type "TV and Limited Input devices") |
 | `googleClientSecret`   | String | `""`      | OAuth client secret |
 | `googleRefreshToken`   | String | `""`      | Set by the device-code authorization in the config tab |
-| `googleCalendarId`     | String | `primary` | `primary` or a secondary calendar's address-like id |
+| `googleCalendarId`     | String | `primary` | Legacy single id; migrated into `googleCalendarIds` |
+| `googleCalendarIds`    | StringList | `[]`  | Up to 3 calendar ids to read (parallel to colors) |
+| `googleCalendarColors` | StringList | `[]`  | Base hex color per calendar; always drawn translucent |
 | `googleCalDebug`       | Bool   | `true`    | |
 
 ## How config dialogs map to KCfg

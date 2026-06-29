@@ -842,6 +842,11 @@ Item {
         function onGoogleCalendarIdChanged() {
             if (full._showGoogleEvents && googleStore) googleStore.fetchWeek(full.currentWeekStart);
         }
+        // The multi-calendar list changed — refetch (a color-only change
+        // re-renders live via the color map, no fetch needed).
+        function onGoogleCalendarIdsChanged() {
+            if (full._showGoogleEvents && googleStore) googleStore.fetchWeek(full.currentWeekStart);
+        }
     }
 
     // Animate the bottom-panel switch whenever the view changes (from the

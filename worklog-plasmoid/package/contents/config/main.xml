@@ -182,8 +182,16 @@
             <default></default>
         </entry>
         <entry name="googleCalendarId" type="String">
-            <label>Calendar id to read events from. "primary" is the account's main calendar; secondary calendars use an address-like id from Calendar settings, Integrate calendar, Calendar ID.</label>
+            <label>Legacy single calendar id (kept for migration). Use googleCalendarIds for the up-to-3 multi-calendar list.</label>
             <default>primary</default>
+        </entry>
+        <entry name="googleCalendarIds" type="StringList">
+            <label>Up to 3 calendar ids to read events from, parallel to googleCalendarColors. When empty, falls back to googleCalendarId.</label>
+            <default></default>
+        </entry>
+        <entry name="googleCalendarColors" type="StringList">
+            <label>Base block color (hex, e.g. #e74c3c) for each calendar in googleCalendarIds. Always rendered translucent. Missing entries default to a translucent red.</label>
+            <default></default>
         </entry>
         <entry name="googleCalDebug" type="Bool">
             <label>Log every Google Calendar request to plasmashell stdout.</label>

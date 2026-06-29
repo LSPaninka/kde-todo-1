@@ -109,6 +109,49 @@ Item {
     readonly property bool _showGoogle:
         plasmoid.configuration.googleCalEnabled === true && !!googleStore
 
+    // calendarId → base color (hex). Re-evaluates when the config lists
+    // change so color edits apply live without a refetch. Missing ids
+    // fall back to the translucent red we've always used.
+    readonly property string _googleDefaultColor: "#e74c3c"
+    readonly property var _googleColorMap: {
+        var m = {};
+        var ids = plasmoid.configuration.googleCalendarIds || [];
+        var cols = plasmoid.configuration.googleCalendarColors || [];
+        for (var i = 0; i < ids.length; i++) {
+            var id = ("" + (ids[i] || "")).trim();
+            if (id) m[id] = ("" + (cols[i] || "")).trim() || cal._googleDefaultColor;
+        }
+        return m;
+    }
+    function _googleBase(calId) {
+        var c = _googleColorMap[calId];
+        return (c && c.length > 0) ? c : _googleDefaultColor;
+    }
+    // Always render the chosen color translucent (per the spec).
+    function _translucent(base, a) {
+        var c = (base && base.length > 0) ? Qt.color(base) : Qt.color(cal._googleDefaultColor);
+        return Qt.rgba(c.r, c.g, c.b, a);
+    }
+    // A Google block is "covered" if any Jira/Clockify entry shown on the
+    // same day overlaps it in time — used to hide its label so the text
+    // doesn't bleed through the worklog block on top (the translucent
+    // block itself stays).
+    function _googleCovered(ev, dayIdx) {
+        var s = ev.started, e = ev.started + ev.durationSec * 1000;
+        var lists = [];
+        if (_showJira)     lists.push(_jiraByDay[dayIdx] || []);
+        if (_showClockify) lists.push(_clockifyByDay[dayIdx] || []);
+        for (var l = 0; l < lists.length; l++) {
+            var arr = lists[l];
+            for (var i = 0; i < arr.length; i++) {
+                var a = arr[i];
+                var aEnd = a.started + a.durationSec * 1000;
+                if (s < aEnd && a.started < e) return true;
+            }
+        }
+        return false;
+    }
+
     // Buckets per day for both sources.
     property var _jiraByDay:     cal._rebuild(_vJira,     weekStart, jiraStore ? jiraStore.worklogs : [])
     property var _clockifyByDay: cal._rebuild(_vClockify, weekStart, clockifyStore ? clockifyStore.entries : [])
@@ -394,13 +437,14 @@ Item {
                     Repeater {
                         model: cal._showGoogle ? (cal._vGoogle, cal._googleByDay[dayCol.dayIndex] || []) : []
                         delegate: Rectangle {
+                            readonly property string _base: cal._googleBase(modelData.calendarId)
                             x: 2
                             y: cal._yForEntry(modelData, dayCol.dayIndex)
                             width: dayCol.width - 4
                             height: cal._heightForEntry(modelData)
                             radius: 3
-                            color: Qt.rgba(231/255, 76/255, 60/255, 0.18)   // transparent red
-                            border.color: Qt.rgba(231/255, 76/255, 60/255, 0.45)
+                            color: cal._translucent(_base, 0.18)
+                            border.color: cal._translucent(_base, 0.45)
                             border.width: 1
                             PlasmaComponents3.Label {
                                 anchors.fill: parent
@@ -412,6 +456,11 @@ Item {
                                 elide: Text.ElideRight
                                 wrapMode: Text.NoWrap
                                 verticalAlignment: Text.AlignTop
+                                // Hide the text when a Jira/Clockify block sits
+                                // on top, so the letters don't overlap; the
+                                // translucent block behind stays visible.
+                                visible: (cal._vJira, cal._vClockify,
+                                          !cal._googleCovered(modelData, dayCol.dayIndex))
                             }
                         }
                     }

@@ -27,7 +27,7 @@ QtObject {
 
     property var plasmoidApi: null
 
-    property var events: []          // [{id, summary, started (ms), durationSec}]
+    property var events: []          // [{id, summary, started (ms), durationSec, calendarId}]
 
     property bool loading: false
     property string lastError: ""
@@ -151,43 +151,86 @@ QtObject {
             }
             var startMs = _startOfDay(new Date(weekStartDate.getTime())).getTime();
             var endMs   = startMs + 7 * 24 * 60 * 60 * 1000;
-            var calId = (plasmoidApi.configuration.googleCalendarId || "primary").trim() || "primary";
-            var url = "https://www.googleapis.com/calendar/v3/calendars/" +
-                      encodeURIComponent(calId) + "/events" +
-                      "?timeMin=" + encodeURIComponent(new Date(startMs).toISOString()) +
-                      "&timeMax=" + encodeURIComponent(new Date(endMs).toISOString()) +
-                      "&singleEvents=true&orderBy=startTime&maxResults=250";
-            _log("GET " + url);
-            var xhr = new XMLHttpRequest();
-            xhr.open("GET", url, true);
-            xhr.setRequestHeader("Authorization", "Bearer " + token);
-            xhr.setRequestHeader("Accept", "application/json");
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState !== XMLHttpRequest.DONE) return;
-                if (xhr.status !== 200) {
-                    store.loading = false;
-                    store.lastError = qsTr("HTTP %1 al traer eventos de Google.").arg(xhr.status);
-                    _warn("events exit=" + xhr.status + ": " +
-                          (xhr.responseText || "").substring(0, 240));
-                    store._bump();
-                    store.fetchFinished(false);
-                    return;
-                }
-                store._processEvents(xhr.responseText, startMs, endMs);
-            };
-            try { xhr.send(); }
-            catch (e) {
-                _warn("events xhr.send threw: " + e);
-                store.loading = false; store._bump(); store.fetchFinished(false);
+            var calIds = store._calendarIds();
+            if (calIds.length === 0) {
+                store.events = [];
+                store.lastFetchedAt = Date.now();
+                store.loading = false;
+                store._bump();
+                store.fetchFinished(true);
+                return;
+            }
+            // Fetch every configured calendar, accumulate, set events once.
+            var pending = calIds.length;
+            var acc = [];
+            var anyOk = false;
+            for (var i = 0; i < calIds.length; i++) {
+                store._fetchOne(token, calIds[i], startMs, endMs, function(okOne, evs) {
+                    if (okOne) { anyOk = true; acc = acc.concat(evs); }
+                    if (--pending === 0) {
+                        acc.sort(function(a, b) { return a.started - b.started; });
+                        store.events = acc;
+                        store.lastFetchedAt = Date.now();
+                        store.loading = false;
+                        store._bump();
+                        _log("Eventos totales: " + acc.length + " (" + calIds.length + " calendario(s)).");
+                        store.fetchFinished(anyOk);
+                    }
+                });
             }
         });
     }
 
-    function _processEvents(body, weekStartMs, weekEndMs) {
+    // Up to 3 calendar ids from googleCalendarIds; falls back to the legacy
+    // single googleCalendarId when the list is empty.
+    function _calendarIds() {
+        var pc = plasmoidApi ? plasmoidApi.configuration : null;
+        if (!pc) return [];
+        var ids = pc.googleCalendarIds || [];
+        if (!ids || ids.length === 0) {
+            var legacy = (pc.googleCalendarId || "").trim();
+            ids = legacy ? [legacy] : [];
+        }
+        var out = [];
+        for (var i = 0; i < ids.length && out.length < 3; i++) {
+            var id = ("" + (ids[i] || "")).trim();
+            if (id) out.push(id);
+        }
+        return out;
+    }
+
+    function _fetchOne(token, calId, weekStartMs, weekEndMs, callback) {
+        var url = "https://www.googleapis.com/calendar/v3/calendars/" +
+                  encodeURIComponent(calId) + "/events" +
+                  "?timeMin=" + encodeURIComponent(new Date(weekStartMs).toISOString()) +
+                  "&timeMax=" + encodeURIComponent(new Date(weekEndMs).toISOString()) +
+                  "&singleEvents=true&orderBy=startTime&maxResults=250";
+        _log("GET " + url);
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", url, true);
+        xhr.setRequestHeader("Authorization", "Bearer " + token);
+        xhr.setRequestHeader("Accept", "application/json");
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE) return;
+            if (xhr.status !== 200) {
+                store.lastError = qsTr("HTTP %1 al traer eventos de Google (%2).")
+                                  .arg(xhr.status).arg(calId);
+                _warn("events[" + calId + "] exit=" + xhr.status + ": " +
+                      (xhr.responseText || "").substring(0, 240));
+                callback(false, []);
+                return;
+            }
+            callback(true, store._parseEvents(xhr.responseText, calId, weekStartMs, weekEndMs));
+        };
+        try { xhr.send(); }
+        catch (e) { _warn("events xhr.send threw: " + e); callback(false, []); }
+    }
+
+    function _parseEvents(body, calId, weekStartMs, weekEndMs) {
+        var out = [];
         try {
             var data = JSON.parse(body);
             var items = data.items || [];
-            var out = [];
             for (var i = 0; i < items.length; i++) {
                 var ev = items[i];
                 if (ev.status === "cancelled") continue;
@@ -199,35 +242,20 @@ QtObject {
                 var startMs = new Date(s.dateTime).getTime();
                 var endMs   = new Date(e.dateTime).getTime();
                 if (isNaN(startMs) || isNaN(endMs) || endMs <= startMs) continue;
-                // Keep anything overlapping the week window.
                 if (endMs <= weekStartMs || startMs >= weekEndMs) continue;
                 out.push({
-                    id: "" + (ev.id || ""),
+                    id: calId + ":" + (ev.id || ""),
                     summary: ev.summary || qsTr("(sin título)"),
                     started: startMs,
-                    durationSec: Math.round((endMs - startMs) / 1000)
+                    durationSec: Math.round((endMs - startMs) / 1000),
+                    calendarId: calId
                 });
             }
-            out.sort(function(a, b) { return a.started - b.started; });
-            store.events = out;
-            store.lastFetchedAt = Date.now();
-            store.loading = false;
-            store._bump();
-            _log("Eventos: " + out.length + ".");
-            for (var k = 0; k < Math.min(out.length, 20); k++) {
-                var w = out[k];
-                _log("  - " + new Date(w.started).toISOString().substring(0, 16) +
-                     " (" + Math.round(w.durationSec / 60) + "m) " +
-                     (w.summary || "").substring(0, 50));
-            }
-            store.fetchFinished(true);
+            _log("Eventos[" + calId + "]: " + out.length + ".");
         } catch (e) {
-            store.loading = false;
-            store.lastError = qsTr("Error parseando la respuesta de Google: ") + e;
-            _warn("parse events: " + e);
-            store._bump();
-            store.fetchFinished(false);
+            _warn("parse events[" + calId + "]: " + e);
         }
+        return out;
     }
 
     // ------------------------------------------------------------------
