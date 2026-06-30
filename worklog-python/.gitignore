@@ -1,0 +1,14 @@
+# Meson build output
+/build/
+
+# Local dev schema cache
+/_schemas/
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Editor / OS noise
+*.swp
+*~
+.DS_Store
