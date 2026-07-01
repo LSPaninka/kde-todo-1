@@ -80,6 +80,49 @@ Luego buscá **Worklog Calendar** en el menú de aplicaciones, o ejecutá
 
 ---
 
+## Xfce / Xubuntu
+
+La app es **GTK 4 + libadwaita**, librerías independientes del escritorio, así
+que **corre igual en Xfce** (Xubuntu, Linux Mint XFCE, etc.). Xubuntu 24.04 usa
+la misma base que Ubuntu 24.04, con los mismos repos.
+
+Hay un instalador dedicado que **no** trae dependencias de GNOME y en su lugar
+configura la bandeja del panel de Xfce:
+
+```bash
+cd worklog-gtk
+./install-xfce.sh --deps   # deps de compilación + plugin SNI del panel Xfce
+./install-xfce.sh --run    # compila, instala en ~/.local y lanza
+```
+
+> Usá `install-xfce.sh` en Xfce en vez de `install.sh --deps`: este último
+> instala `gnome-shell-extension-appindicator`, que en Xfce no sirve.
+
+**El reloj de la barra funciona de forma nativa en Xfce** (soporte
+StatusNotifierItem del panel), sin la extensión de GNOME. Solo asegurate de
+tener el plugin en el panel:
+
+1. Instalalo (lo hace `install-xfce.sh --deps`), o a mano:
+   ```bash
+   apt search statusnotifier            # ver el paquete exacto
+   sudo apt install xfce4-statusnotifier-plugin
+   ```
+   En Xubuntu 24.04 el `xfce4-panel` (4.18) suele traer soporte SNI, así que
+   puede que ni haga falta instalar nada extra.
+2. Agregalo al panel: clic derecho en el panel → **Panel → Agregar nuevos
+   elementos…** → **"Status Notifier Plugin"** (o *Área de notificación*).
+
+Ventaja de Xfce: el host de la bandeja respeta bien la diferencia
+**izquierda/derecha**, así que el comportamiento es el diseñado —
+**clic izquierdo → ventanita flotante**, **clic derecho → menú con Salir**
+(en GNOME esa distinción es más caprichosa).
+
+**Nota estética:** libadwaita usa decoración del lado del cliente (barra de
+título integrada, estilo GNOME), así que la ventana se verá un poco distinta al
+resto de tus apps Xfce. Es puramente visual; la funcionalidad es idéntica.
+
+---
+
 ## Primer uso
 
 1. Abrí la app → menú hamburguesa (↗ arriba a la derecha) → **Preferencias**
