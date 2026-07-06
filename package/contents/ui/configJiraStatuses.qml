@@ -17,26 +17,28 @@ ColumnLayout {
     id: page
     spacing: Kirigami.Units.largeSpacing
 
-    property var cfg_jiraStatusNames: []
-    property var cfg_jiraStatusColors: []
-
+    // Read/write plasmoid.configuration directly — reassigning a standalone
+    // `var` StringList does not persist reliably through Apply (Plasma quirk).
     readonly property int _slots: 10
     readonly property string _defaultColor: "#3498db"
+    property int _rev: 0
 
-    function _name(i)  { var v = (cfg_jiraStatusNames  || [])[i]; return v !== undefined ? v : ""; }
-    function _color(i) { var v = (cfg_jiraStatusColors || [])[i]; return (v !== undefined && v !== "") ? v : _defaultColor; }
+    function _name(i)  { var v = (page._rev, plasmoid.configuration.jiraStatusNames  || [])[i]; return v !== undefined ? v : ""; }
+    function _color(i) { var v = (page._rev, plasmoid.configuration.jiraStatusColors || [])[i]; return (v !== undefined && v !== "") ? v : _defaultColor; }
 
     function _setName(i, value) {
-        var arr = (cfg_jiraStatusNames || []).slice();
+        var arr = (plasmoid.configuration.jiraStatusNames || []).slice();
         while (arr.length < _slots) arr.push("");
         arr[i] = value;
-        cfg_jiraStatusNames = arr;
+        plasmoid.configuration.jiraStatusNames = arr;
+        page._rev++;
     }
     function _setColor(i, value) {
-        var arr = (cfg_jiraStatusColors || []).slice();
+        var arr = (plasmoid.configuration.jiraStatusColors || []).slice();
         while (arr.length < _slots) arr.push("");
         arr[i] = value;
-        cfg_jiraStatusColors = arr;
+        plasmoid.configuration.jiraStatusColors = arr;
+        page._rev++;
     }
 
     Label {

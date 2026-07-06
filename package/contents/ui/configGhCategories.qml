@@ -22,11 +22,10 @@ ColumnLayout {
     id: page
     spacing: Kirigami.Units.largeSpacing
 
-    property var cfg_ghCategoryNames: []
-    property var cfg_ghCategoryColors: []
-    property var cfg_ghCategoryTextColors: []
-    property var cfg_ghCategoryFilterFields: []
-    property var cfg_ghCategoryFilterValues: []
+    // Read/write plasmoid.configuration directly — reassigning a standalone
+    // `var` StringList does not persist reliably through Apply (Plasma quirk).
+    readonly property int _slots: 4
+    property int _rev: 0
 
     readonly property var _defaultNames:        ["Todo", "In Progress", "Done", "Otras"]
     readonly property var _defaultColors:       ["#6e7681", "#d29922", "#238636", "#8957e5"]
@@ -42,17 +41,18 @@ ColumnLayout {
         { value: "repo",   label: i18n("Repositorio (owner/name)") }
     ]
 
-    function _name(i)          { var v = (cfg_ghCategoryNames        || [])[i]; return v !== undefined ? v : _defaultNames[i]; }
-    function _color(i)         { var v = (cfg_ghCategoryColors       || [])[i]; return v !== undefined ? v : _defaultColors[i]; }
-    function _textColor(i)     { var v = (cfg_ghCategoryTextColors   || [])[i]; return v !== undefined ? v : _defaultTextColors[i]; }
-    function _filterField(i)   { var v = (cfg_ghCategoryFilterFields || [])[i]; return v !== undefined ? v : _defaultFilterFields[i]; }
-    function _filterValue(i)   { var v = (cfg_ghCategoryFilterValues || [])[i]; return v !== undefined ? v : _defaultFilterValues[i]; }
+    function _name(i)          { var v = (page._rev, plasmoid.configuration.ghCategoryNames        || [])[i]; return v !== undefined ? v : _defaultNames[i]; }
+    function _color(i)         { var v = (page._rev, plasmoid.configuration.ghCategoryColors       || [])[i]; return v !== undefined ? v : _defaultColors[i]; }
+    function _textColor(i)     { var v = (page._rev, plasmoid.configuration.ghCategoryTextColors   || [])[i]; return v !== undefined ? v : _defaultTextColors[i]; }
+    function _filterField(i)   { var v = (page._rev, plasmoid.configuration.ghCategoryFilterFields || [])[i]; return v !== undefined ? v : _defaultFilterFields[i]; }
+    function _filterValue(i)   { var v = (page._rev, plasmoid.configuration.ghCategoryFilterValues || [])[i]; return v !== undefined ? v : _defaultFilterValues[i]; }
 
-    function _setListItem(getter, fallback, i, value) {
-        var arr = (getter() || []).slice();
-        while (arr.length < 4) arr.push(fallback[arr.length]);
+    function _persist(key, fallback, i, value) {
+        var arr = (plasmoid.configuration[key] || []).slice();
+        while (arr.length < page._slots) arr.push(fallback[arr.length] !== undefined ? fallback[arr.length] : "");
         arr[i] = value;
-        return arr;
+        plasmoid.configuration[key] = arr;
+        page._rev++;
     }
 
     function _optionIndexForField(f) {
@@ -91,11 +91,7 @@ ColumnLayout {
                     TextField {
                         Layout.fillWidth: true
                         text: page._name(index)
-                        onEditingFinished: {
-                            page.cfg_ghCategoryNames =
-                                page._setListItem(function() { return page.cfg_ghCategoryNames; },
-                                                  page._defaultNames, index, text);
-                        }
+                        onEditingFinished: page._persist("ghCategoryNames", page._defaultNames, index, text)
                     }
 
                     Rectangle {
@@ -129,21 +125,13 @@ ColumnLayout {
                         ButtonGroup.group: textGroup
                         text: i18n("Letra blanca")
                         checked: page._textColor(index) !== "black"
-                        onToggled: if (checked) {
-                            page.cfg_ghCategoryTextColors =
-                                page._setListItem(function() { return page.cfg_ghCategoryTextColors; },
-                                                  page._defaultTextColors, index, "white");
-                        }
+                        onToggled: if (checked) page._persist("ghCategoryTextColors", page._defaultTextColors, index, "white")
                     }
                     RadioButton {
                         ButtonGroup.group: textGroup
                         text: i18n("Negra")
                         checked: page._textColor(index) === "black"
-                        onToggled: if (checked) {
-                            page.cfg_ghCategoryTextColors =
-                                page._setListItem(function() { return page.cfg_ghCategoryTextColors; },
-                                                  page._defaultTextColors, index, "black");
-                        }
+                        onToggled: if (checked) page._persist("ghCategoryTextColors", page._defaultTextColors, index, "black")
                     }
                 }
 
@@ -163,9 +151,7 @@ ColumnLayout {
                         Component.onCompleted: currentIndex = page._optionIndexForField(page._filterField(index))
                         onActivated: {
                             var v = page._filterFieldOptions[currentIndex].value;
-                            page.cfg_ghCategoryFilterFields =
-                                page._setListItem(function() { return page.cfg_ghCategoryFilterFields; },
-                                                  page._defaultFilterFields, index, v);
+                            page._persist("ghCategoryFilterFields", page._defaultFilterFields, index, v);
                         }
                     }
 
@@ -183,11 +169,7 @@ ColumnLayout {
                             }
                             return i18n("(separá con ; para OR)");
                         }
-                        onEditingFinished: {
-                            page.cfg_ghCategoryFilterValues =
-                                page._setListItem(function() { return page.cfg_ghCategoryFilterValues; },
-                                                  page._defaultFilterValues, index, text);
-                        }
+                        onEditingFinished: page._persist("ghCategoryFilterValues", page._defaultFilterValues, index, text)
                     }
                 }
             }
@@ -200,10 +182,6 @@ ColumnLayout {
         id: colorDlg
         property int targetIndex: 0
         title: i18n("Pick a color")
-        onAccepted: {
-            page.cfg_ghCategoryColors =
-                page._setListItem(function() { return page.cfg_ghCategoryColors; },
-                                  page._defaultColors, targetIndex, color.toString());
-        }
+        onAccepted: page._persist("ghCategoryColors", page._defaultColors, targetIndex, color.toString())
     }
 }

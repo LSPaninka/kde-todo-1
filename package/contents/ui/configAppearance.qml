@@ -24,22 +24,26 @@ ColumnLayout {
     property alias  cfg_panelShowLabels: showLabelsCheck.checked
     property alias  cfg_panelShowZero:   showZeroCheck.checked
     property string cfg_panelCounterStyle: "right"
-    property var    cfg_panelCounterColors: []
     property alias  cfg_panelCounterScale: scaleSpin.value
+
+    // panelCounterColors is a StringList: read/write plasmoid.configuration
+    // directly (reassigning a `var` StringList doesn't persist reliably).
+    property int _rev: 0
 
     readonly property var _defaultCounterColors: ["white", "black", "white", "white", "white", "white", "white"]
     readonly property var _defaultNames:  ["Personal", "Trabajo", "Estudio", "Otros", "Salud", "Hogar", "Hobbies"]
     readonly property var _defaultColors: ["#2ecc71", "#f1c40f", "#3498db", "#e74c3c", "#9b59b6", "#1abc9c", "#e67e22"]
 
     function _counterColor(i) {
-        var v = (cfg_panelCounterColors || [])[i];
+        var v = (page._rev, plasmoid.configuration.panelCounterColors || [])[i];
         return (v === "black") ? "black" : "white";
     }
     function _setCounterColor(i, v) {
-        var arr = (cfg_panelCounterColors || []).slice();
+        var arr = (plasmoid.configuration.panelCounterColors || []).slice();
         while (arr.length < 7) arr.push(_defaultCounterColors[arr.length]);
         arr[i] = v;
-        cfg_panelCounterColors = arr;
+        plasmoid.configuration.panelCounterColors = arr;
+        page._rev++;
     }
     function _categoryName(i) {
         var arr = plasmoid.configuration.categoryNames || [];
@@ -126,8 +130,7 @@ ColumnLayout {
                         Text {
                             anchors.centerIn: parent
                             text: "9"
-                            color: ((page.cfg_panelCounterColors || [])[index] === "black")
-                                   ? "black" : "white"
+                            color: page._counterColor(index)
                             font.bold: true
                             font.pixelSize: 14
                         }
@@ -142,13 +145,13 @@ ColumnLayout {
                     RadioButton {
                         ButtonGroup.group: colorGroup
                         text: i18n("White")
-                        checked: ((page.cfg_panelCounterColors || [])[index] || "white") !== "black"
+                        checked: page._counterColor(index) !== "black"
                         onToggled: if (checked) page._setCounterColor(index, "white")
                     }
                     RadioButton {
                         ButtonGroup.group: colorGroup
                         text: i18n("Black")
-                        checked: ((page.cfg_panelCounterColors || [])[index] || "white") === "black"
+                        checked: page._counterColor(index) === "black"
                         onToggled: if (checked) page._setCounterColor(index, "black")
                     }
 

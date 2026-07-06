@@ -24,14 +24,31 @@ ColumnLayout {
     id: page
     spacing: Kirigami.Units.largeSpacing
 
-    // KCfg-bound StringLists.
-    property var cfg_jiraCategoryNames: []
-    property var cfg_jiraCategoryColors: []
-    property var cfg_jiraCategoryTextColors: []
-    property var cfg_jiraCategoryFilterFields: []
-    property var cfg_jiraCategoryFilterValues: []
+    // NOTE: we deliberately do NOT use `cfg_<key>` properties for these
+    // StringLists. Reassigning a standalone `var` StringList on a config page
+    // does not reliably persist through the Apply button (a well-known Plasma
+    // quirk). Instead we read from and write to plasmoid.configuration
+    // directly, which saves immediately and reliably.
 
     readonly property int _slots: 10
+
+    // Bump on every write so the function-based bindings below re-read.
+    property int _rev: 0
+
+    // Build a fresh 10-slot array with slot i set to value.
+    function _buildList(current, fallback, i, value) {
+        var arr = (current || []).slice();
+        while (arr.length < page._slots) arr.push(fallback[arr.length] !== undefined ? fallback[arr.length] : "");
+        arr[i] = value;
+        return arr;
+    }
+
+    // Persist a StringList straight to plasmoid.configuration.
+    function _persist(key, fallback, i, value) {
+        var arr = _buildList(plasmoid.configuration[key], fallback, i, value);
+        plasmoid.configuration[key] = arr;
+        page._rev++;
+    }
 
     readonly property var _defaultNames:        ["Por hacer", "En curso", "Hechas", "Otras", "Cat 5", "Cat 6", "Cat 7", "Cat 8", "Cat 9", "Cat 10"]
     readonly property var _defaultColors:       ["#42526e", "#f5a623", "#2ecc71", "#9b59b6", "#3498db", "#e67e22", "#1abc9c", "#e74c3c", "#34495e", "#16a085"]
@@ -49,24 +66,17 @@ ColumnLayout {
         { value: "priority",       label: i18n("Prioridad") }
     ]
 
-    function _name(i)          { var v = (cfg_jiraCategoryNames        || [])[i]; return v !== undefined ? v : _defaultNames[i]; }
-    function _color(i)         { var v = (cfg_jiraCategoryColors       || [])[i]; return v !== undefined ? v : _defaultColors[i]; }
-    function _textColor(i)     { var v = (cfg_jiraCategoryTextColors   || [])[i]; return v !== undefined ? v : _defaultTextColors[i]; }
-    function _filterField(i)   { var v = (cfg_jiraCategoryFilterFields || [])[i]; return v !== undefined ? v : _defaultFilterFields[i]; }
-    function _filterValue(i)   { var v = (cfg_jiraCategoryFilterValues || [])[i]; return v !== undefined ? v : _defaultFilterValues[i]; }
+    function _name(i)          { var v = (page._rev, plasmoid.configuration.jiraCategoryNames        || [])[i]; return v !== undefined ? v : _defaultNames[i]; }
+    function _color(i)         { var v = (page._rev, plasmoid.configuration.jiraCategoryColors       || [])[i]; return v !== undefined ? v : _defaultColors[i]; }
+    function _textColor(i)     { var v = (page._rev, plasmoid.configuration.jiraCategoryTextColors   || [])[i]; return v !== undefined ? v : _defaultTextColors[i]; }
+    function _filterField(i)   { var v = (page._rev, plasmoid.configuration.jiraCategoryFilterFields || [])[i]; return v !== undefined ? v : _defaultFilterFields[i]; }
+    function _filterValue(i)   { var v = (page._rev, plasmoid.configuration.jiraCategoryFilterValues || [])[i]; return v !== undefined ? v : _defaultFilterValues[i]; }
 
     function _optionIndexForField(f) {
         for (var k = 0; k < _filterFieldOptions.length; k++) {
             if (_filterFieldOptions[k].value === f) return k;
         }
         return 0;
-    }
-
-    function _setListItem(getter, fallback, i, value) {
-        var arr = (getter() || []).slice();
-        while (arr.length < page._slots) arr.push(fallback[arr.length]);
-        arr[i] = value;
-        return arr;
     }
 
     Label {
@@ -100,11 +110,7 @@ ColumnLayout {
                         id: nameField
                         Layout.fillWidth: true
                         text: page._name(index)
-                        onEditingFinished: {
-                            page.cfg_jiraCategoryNames =
-                                page._setListItem(function() { return page.cfg_jiraCategoryNames; },
-                                                  page._defaultNames, index, text);
-                        }
+                        onEditingFinished: page._persist("jiraCategoryNames", page._defaultNames, index, text)
                     }
 
                     Rectangle {
@@ -138,21 +144,13 @@ ColumnLayout {
                         ButtonGroup.group: textGroup
                         text: i18n("Letra blanca")
                         checked: page._textColor(index) !== "black"
-                        onToggled: if (checked) {
-                            page.cfg_jiraCategoryTextColors =
-                                page._setListItem(function() { return page.cfg_jiraCategoryTextColors; },
-                                                  page._defaultTextColors, index, "white");
-                        }
+                        onToggled: if (checked) page._persist("jiraCategoryTextColors", page._defaultTextColors, index, "white")
                     }
                     RadioButton {
                         ButtonGroup.group: textGroup
                         text: i18n("Negra")
                         checked: page._textColor(index) === "black"
-                        onToggled: if (checked) {
-                            page.cfg_jiraCategoryTextColors =
-                                page._setListItem(function() { return page.cfg_jiraCategoryTextColors; },
-                                                  page._defaultTextColors, index, "black");
-                        }
+                        onToggled: if (checked) page._persist("jiraCategoryTextColors", page._defaultTextColors, index, "black")
                     }
                 }
 
@@ -175,9 +173,7 @@ ColumnLayout {
                         Component.onCompleted: currentIndex = page._optionIndexForField(page._filterField(index))
                         onActivated: {
                             var v = page._filterFieldOptions[currentIndex].value;
-                            page.cfg_jiraCategoryFilterFields =
-                                page._setListItem(function() { return page.cfg_jiraCategoryFilterFields; },
-                                                  page._defaultFilterFields, index, v);
+                            page._persist("jiraCategoryFilterFields", page._defaultFilterFields, index, v);
                         }
                     }
 
@@ -195,11 +191,7 @@ ColumnLayout {
                             }
                             return i18n("(separá con ; para OR)");
                         }
-                        onEditingFinished: {
-                            page.cfg_jiraCategoryFilterValues =
-                                page._setListItem(function() { return page.cfg_jiraCategoryFilterValues; },
-                                                  page._defaultFilterValues, index, text);
-                        }
+                        onEditingFinished: page._persist("jiraCategoryFilterValues", page._defaultFilterValues, index, text)
                     }
                 }
             }
@@ -212,10 +204,6 @@ ColumnLayout {
         id: colorDlg
         property int targetIndex: 0
         title: i18n("Pick a color")
-        onAccepted: {
-            page.cfg_jiraCategoryColors =
-                page._setListItem(function() { return page.cfg_jiraCategoryColors; },
-                                  page._defaultColors, targetIndex, color.toString());
-        }
+        onAccepted: page._persist("jiraCategoryColors", page._defaultColors, targetIndex, color.toString())
     }
 }
