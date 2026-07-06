@@ -55,6 +55,13 @@ ColumnLayout {
         return arr;
     }
 
+    function _optionIndexForField(f) {
+        for (var k = 0; k < _filterFieldOptions.length; k++) {
+            if (_filterFieldOptions[k].value === f) return k;
+        }
+        return 0;
+    }
+
     Label {
         Layout.fillWidth: true
         Layout.preferredWidth: 600
@@ -151,13 +158,9 @@ ColumnLayout {
                         textRole: "label"
                         valueRole: "value"
                         model: page._filterFieldOptions
-                        currentIndex: {
-                            var f = page._filterField(index);
-                            for (var k = 0; k < page._filterFieldOptions.length; k++) {
-                                if (page._filterFieldOptions[k].value === f) return k;
-                            }
-                            return 0;
-                        }
+                        // Initialise once from config; no reactive binding on
+                        // currentIndex (it would fight the user's selection).
+                        Component.onCompleted: currentIndex = page._optionIndexForField(page._filterField(index))
                         onActivated: {
                             var v = page._filterFieldOptions[currentIndex].value;
                             page.cfg_ghCategoryFilterFields =

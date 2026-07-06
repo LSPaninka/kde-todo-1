@@ -147,8 +147,8 @@
              "priority"       (Highest/High/Medium/Low/Lowest),
              ""               (no filter -> matches all issues). -->
         <entry name="jiraCategoryFilterFields" type="StringList">
-            <label>Field that each Jira category filters on (up to 10)</label>
-            <default>statusCategory,statusCategory,statusCategory,,,,,,,</default>
+            <label>Field that each Jira category filters on (up to 10). Default: status (exact status name).</label>
+            <default>status,status,status,status,status,status,status,status,status,status</default>
         </entry>
         <!-- Filter value per category. Comma-separated values inside a
              single entry mean "match any of these" — but since this list
@@ -156,7 +156,7 @@
              intra-entry separator. -->
         <entry name="jiraCategoryFilterValues" type="StringList">
             <label>Value to match for each Jira category (use ';' for OR, up to 10)</label>
-            <default>new,indeterminate,done,,,,,,,</default>
+            <default>,,,,,,,,,</default>
         </entry>
 
         <!-- Per-status label colors (Jira mode). Parallel lists: the color

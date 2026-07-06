@@ -2,14 +2,15 @@
  * configJiraCategories.qml - "Categorías Jira" tab of the configuration
  * dialog.
  *
- * For each of the up-to-4 categories the user can pick:
+ * For each of the up-to-10 categories the user can pick:
  *   - name (display label)
  *   - color (with native ColorDialog)
  *   - text color for the panel swatch (white | black)
- *   - filter: a Jira field (issuetype / statusCategory / status / priority)
- *             plus a value (semicolon-separated for OR matching).
+ *   - filter: a Jira field (status / statusCategory / issuetype / priority),
+ *             default "status" (exact status name), plus a value
+ *             (semicolon-separated for OR matching, e.g. "Test QA; Done").
  *
- * The active count is configured separately in the General tab. All 4
+ * The active count is configured separately in the General tab. All 10
  * slots are kept in storage so changing the count doesn't lose data.
  */
 
@@ -35,8 +36,9 @@ ColumnLayout {
     readonly property var _defaultNames:        ["Por hacer", "En curso", "Hechas", "Otras", "Cat 5", "Cat 6", "Cat 7", "Cat 8", "Cat 9", "Cat 10"]
     readonly property var _defaultColors:       ["#42526e", "#f5a623", "#2ecc71", "#9b59b6", "#3498db", "#e67e22", "#1abc9c", "#e74c3c", "#34495e", "#16a085"]
     readonly property var _defaultTextColors:   ["white", "white", "white", "white", "white", "white", "white", "white", "white", "white"]
-    readonly property var _defaultFilterFields: ["statusCategory", "statusCategory", "statusCategory", "", "", "", "", "", "", ""]
-    readonly property var _defaultFilterValues: ["new", "indeterminate", "done", "", "", "", "", "", "", ""]
+    // Default filter is "status" (Estado — nombre exacto) for every slot.
+    readonly property var _defaultFilterFields: ["status", "status", "status", "status", "status", "status", "status", "status", "status", "status"]
+    readonly property var _defaultFilterValues: ["", "", "", "", "", "", "", "", "", ""]
 
     // The dropdown options. Internal value vs. display label.
     readonly property var _filterFieldOptions: [
@@ -52,6 +54,13 @@ ColumnLayout {
     function _textColor(i)     { var v = (cfg_jiraCategoryTextColors   || [])[i]; return v !== undefined ? v : _defaultTextColors[i]; }
     function _filterField(i)   { var v = (cfg_jiraCategoryFilterFields || [])[i]; return v !== undefined ? v : _defaultFilterFields[i]; }
     function _filterValue(i)   { var v = (cfg_jiraCategoryFilterValues || [])[i]; return v !== undefined ? v : _defaultFilterValues[i]; }
+
+    function _optionIndexForField(f) {
+        for (var k = 0; k < _filterFieldOptions.length; k++) {
+            if (_filterFieldOptions[k].value === f) return k;
+        }
+        return 0;
+    }
 
     function _setListItem(getter, fallback, i, value) {
         var arr = (getter() || []).slice();
@@ -159,13 +168,11 @@ ColumnLayout {
                         textRole: "label"
                         valueRole: "value"
                         model: page._filterFieldOptions
-                        currentIndex: {
-                            var f = page._filterField(index);
-                            for (var k = 0; k < page._filterFieldOptions.length; k++) {
-                                if (page._filterFieldOptions[k].value === f) return k;
-                            }
-                            return 0;
-                        }
+                        // Initialise once from config; do NOT keep a reactive
+                        // binding on currentIndex — that would fight the user's
+                        // selection (onActivated writes config, which would then
+                        // recompute the binding and snap the combo back).
+                        Component.onCompleted: currentIndex = page._optionIndexForField(page._filterField(index))
                         onActivated: {
                             var v = page._filterFieldOptions[currentIndex].value;
                             page.cfg_jiraCategoryFilterFields =
