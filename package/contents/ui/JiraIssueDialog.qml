@@ -229,7 +229,7 @@ QQC2.Dialog {
                     Layout.fillWidth: true
                     Layout.leftMargin: PlasmaCore.Units.smallSpacing * 2
                     Layout.rightMargin: PlasmaCore.Units.smallSpacing * 2
-                    Layout.preferredHeight: Math.min(160, Math.max(48, descLbl.implicitHeight + 16))
+                    Layout.preferredHeight: Math.min(240, Math.max(120, descLbl.implicitHeight + 16))
                     radius: 4
                     color: Qt.rgba(1, 1, 1, 0.04)
                     border.color: Qt.rgba(1, 1, 1, 0.08)
@@ -238,10 +238,13 @@ QQC2.Dialog {
                         anchors.fill: parent
                         anchors.margins: 8
                         clip: true
+                        QQC2.ScrollBar.horizontal.policy: QQC2.ScrollBar.AlwaysOff
                         PlasmaComponents3.Label {
                             id: descLbl
                             width: dlg.availableWidth - PlasmaCore.Units.smallSpacing * 4 - 16
                             wrapMode: Text.WordWrap
+                            // Same type/size as the comment bodies below.
+                            font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize + 1
                             text: {
                                 if (dlg.loadingDetail) return i18n("Cargando…");
                                 if (dlg.detailError) return dlg.detailError;

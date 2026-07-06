@@ -20,6 +20,8 @@ Item {
     readonly property int _v: jira ? jira.version : 0
     readonly property int categoryCount:
         Math.min(10, Math.max(1, plasmoid.configuration.jiraCategoryCount | 0 || 3))
+    // Each tab gets a 1/N share of the bar so they always fill the width.
+    readonly property real _tabWidth: tabs.width / Math.max(1, categoryCount)
 
     function _formatDate(ms) {
         if (!ms) return "";
@@ -110,6 +112,7 @@ Item {
                 model: view.categoryCount
                 QQC2.TabButton {
                     id: tabBtn
+                    width: view._tabWidth
                     leftPadding: 8
                     rightPadding: 8
                     property int catCount: (view._v, jira ? jira.countByJiraCategory(index) : 0)

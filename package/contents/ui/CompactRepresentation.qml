@@ -192,10 +192,15 @@ Item {
                 // Hover shows the codes + names of this category's issues.
                 tooltipBody: (compact._vJira, jira ? jira.issueTitlesForCategory(index) : "")
                 onHoverChanged: function(isHov, m, s) { compact.hoverChanged(isHov, m, s); }
-                // Click opens the popup on this exact category tab.
+                // Click opens the popup on this exact category tab; clicking
+                // again while open closes it (regardless of category).
                 onClicked: {
-                    if (jira) jira.requestCategory(index);
-                    plasmoid.expanded = true;
+                    if (plasmoid.expanded) {
+                        plasmoid.expanded = false;
+                    } else {
+                        if (jira) jira.requestCategory(index);
+                        plasmoid.expanded = true;
+                    }
                 }
             }
         }
