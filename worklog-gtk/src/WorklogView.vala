@@ -161,7 +161,7 @@ namespace Worklog {
 
         private void build_bottom_panel() {
             bottom_panel = new Gtk.Box(Gtk.Orientation.HORIZONTAL, 6);
-            bottom_panel.set_size_request(-1, 210);
+            bottom_panel.set_size_request(-1, 105);
 
             bottom_stack = new Gtk.Stack();
             bottom_stack.set_transition_type(Gtk.StackTransitionType.SLIDE_UP_DOWN);

@@ -147,7 +147,11 @@ La documentación detallada está en [`docs/`](docs/):
 - Cerrar la ventana (✕ o desde el dock) **la oculta**; la app sigue viva en la
   barra superior. Esto se controla con la preferencia *Seguir en segundo plano
   al cerrar* (por defecto **on**).
-- **Clic en el reloj blanco** → abre la ventanita flotante.
+- **Clic en el reloj blanco** → abre la **ventanita flotante**, un panel sin
+  barra de título que aparece momentáneamente como un widget (estilo del
+  calendario de la barra de GNOME). Se **cierra solo** al hacer clic afuera
+  (pierde el foco) o con **Escape**; si abrís el editor de worklog desde
+  adentro, la ventanita se queda abierta hasta que cerrás el editor.
 - **Clic derecho en el reloj** → menú con *Mostrar reloj*, *Abrir aplicación*
   y **Salir**.
 - *Salir* (o `Ctrl+Q`, o el menú de la app) cierra el proceso de verdad.
