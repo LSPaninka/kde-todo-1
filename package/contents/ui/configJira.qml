@@ -91,7 +91,7 @@ ColumnLayout {
             id: catCountSpin
             Kirigami.FormData.label: i18n("Categorías Jira (pestañas):")
             from: 1
-            to: 4
+            to: 10
             stepSize: 1
         }
 

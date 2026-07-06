@@ -60,6 +60,13 @@
             <default>white,black,white,white,white,white,white</default>
         </entry>
 
+        <entry name="panelCounterScale" type="Int">
+            <label>Scale (%) of the "inside" counter swatch: 100 = current size, down to 50 = half size (square, number and spacing all shrink).</label>
+            <default>100</default>
+            <min>50</min>
+            <max>100</max>
+        </entry>
+
         <entry name="popupWidth" type="Int">
             <label>Popup width in pixels</label>
             <default>700</default>
@@ -119,19 +126,19 @@
             <label>Number of Jira categories (tabs)</label>
             <default>3</default>
             <min>1</min>
-            <max>4</max>
+            <max>10</max>
         </entry>
         <entry name="jiraCategoryNames" type="StringList">
-            <label>Display name of each Jira category</label>
-            <default>Por hacer,En curso,Hechas,Otras</default>
+            <label>Display name of each Jira category (up to 10)</label>
+            <default>Por hacer,En curso,Hechas,Otras,Cat 5,Cat 6,Cat 7,Cat 8,Cat 9,Cat 10</default>
         </entry>
         <entry name="jiraCategoryColors" type="StringList">
-            <label>Hex color of each Jira category</label>
-            <default>#42526e,#f5a623,#2ecc71,#9b59b6</default>
+            <label>Hex color of each Jira category (up to 10)</label>
+            <default>#42526e,#f5a623,#2ecc71,#9b59b6,#3498db,#e67e22,#1abc9c,#e74c3c,#34495e,#16a085</default>
         </entry>
         <entry name="jiraCategoryTextColors" type="StringList">
-            <label>"white" or "black" text color for each Jira category swatch</label>
-            <default>white,white,white,white</default>
+            <label>"white" or "black" text color for each Jira category swatch (up to 10)</label>
+            <default>white,white,white,white,white,white,white,white,white,white</default>
         </entry>
         <!-- Filter field per category: one of
              "statusCategory" (new/indeterminate/done),
@@ -140,16 +147,29 @@
              "priority"       (Highest/High/Medium/Low/Lowest),
              ""               (no filter -> matches all issues). -->
         <entry name="jiraCategoryFilterFields" type="StringList">
-            <label>Field that each Jira category filters on</label>
-            <default>statusCategory,statusCategory,statusCategory,</default>
+            <label>Field that each Jira category filters on (up to 10)</label>
+            <default>statusCategory,statusCategory,statusCategory,,,,,,,</default>
         </entry>
         <!-- Filter value per category. Comma-separated values inside a
              single entry mean "match any of these" — but since this list
              itself is comma-separated (StringList), use ';' as the
              intra-entry separator. -->
         <entry name="jiraCategoryFilterValues" type="StringList">
-            <label>Value to match for each Jira category (use ';' for OR)</label>
-            <default>new,indeterminate,done,</default>
+            <label>Value to match for each Jira category (use ';' for OR, up to 10)</label>
+            <default>new,indeterminate,done,,,,,,,</default>
+        </entry>
+
+        <!-- Per-status label colors (Jira mode). Parallel lists: the color
+             of the status chip on the right of each issue can be overridden
+             by status name. Empty by default (falls back to Jira's own
+             colorName). Up to 10 name→color pairs. -->
+        <entry name="jiraStatusNames" type="StringList">
+            <label>Status names whose chip color is overridden</label>
+            <default></default>
+        </entry>
+        <entry name="jiraStatusColors" type="StringList">
+            <label>Hex color for each overridden status name</label>
+            <default></default>
         </entry>
 
         <entry name="jiraDebug" type="Bool">
@@ -269,6 +289,26 @@
         </entry>
         <entry name="notionDebug" type="Bool">
             <label>Log Notion fetch / parse details to plasmashell stdout</label>
+            <default>true</default>
+        </entry>
+
+        <!-- Notion API integration for the ToDo mode (two-way sync). Uses the
+             official HTTP API with an internal integration token. Distinct
+             from the (now disabled) `ntn` CLI mode above. See docs/NOTION.md. -->
+        <entry name="notionApiToken" type="String">
+            <label>Notion internal integration token (secret_… / ntn_…). Stored in plain text under ~/.config.</label>
+            <default></default>
+        </entry>
+        <entry name="notionParentPageId" type="String">
+            <label>ID of the Notion page under which the ToDo database is created (first-time setup).</label>
+            <default></default>
+        </entry>
+        <entry name="notionDatabaseId" type="String">
+            <label>ID of the Notion database the ToDo tasks sync into (set automatically after creation).</label>
+            <default></default>
+        </entry>
+        <entry name="notionSyncOnOpen" type="Bool">
+            <label>Sync the ToDo list with Notion every time the plasmoid opens.</label>
             <default>true</default>
         </entry>
     </group>

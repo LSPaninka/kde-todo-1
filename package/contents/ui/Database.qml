@@ -112,6 +112,28 @@ QtObject {
                 tx.executeSql("UPDATE schema_version SET v=2");
                 v = 2;
             }
+            if (v < 3) {
+                // Notion two-way sync bookkeeping (clock-safe newest-wins):
+                //   notion_page_id    : the Notion page this task maps to
+                //   updated_at        : local clock, bumped on every user edit
+                //   notion_last_edited: the page.last_edited_time string we last
+                //                       saw (exact remote-change detection, no
+                //                       clock math)
+                //   notion_synced_at  : local clock at the last reconcile (so
+                //                       "updated_at > notion_synced_at" means the
+                //                       user edited since we last synced)
+                // Older DBs get the columns via ALTER TABLE.
+                tx.executeSql(
+                    "ALTER TABLE tasks ADD COLUMN notion_page_id TEXT NOT NULL DEFAULT ''");
+                tx.executeSql(
+                    "ALTER TABLE tasks ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0");
+                tx.executeSql(
+                    "ALTER TABLE tasks ADD COLUMN notion_last_edited TEXT NOT NULL DEFAULT ''");
+                tx.executeSql(
+                    "ALTER TABLE tasks ADD COLUMN notion_synced_at INTEGER NOT NULL DEFAULT 0");
+                tx.executeSql("UPDATE schema_version SET v=3");
+                v = 3;
+            }
             // Future migrations: bump v and add ALTER TABLE / new tables.
         });
     }
@@ -188,6 +210,10 @@ QtObject {
             done: row.done !== 0,
             archivedAt: row.archived_at | 0,
             createdAt: row.created_at | 0,
+            notionPageId: row.notion_page_id || "",
+            updatedAt: row.updated_at | 0,
+            notionLastEdited: row.notion_last_edited || "",
+            notionSyncedAt: row.notion_synced_at | 0,
             subtasks: []
         };
     }
@@ -199,8 +225,8 @@ QtObject {
         _conn.transaction(function(tx) {
             tx.executeSql(
                 "INSERT OR REPLACE INTO tasks " +
-                "(id, title, description, category, priority, done, archived, created_at, archived_at) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "(id, title, description, category, priority, done, archived, created_at, archived_at, notion_page_id, updated_at, notion_last_edited, notion_synced_at) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 [
                     t.id,
                     t.title || "",
@@ -210,7 +236,11 @@ QtObject {
                     t.done ? 1 : 0,
                     isArchived ? 1 : 0,
                     t.createdAt | 0,
-                    t.archivedAt | 0
+                    t.archivedAt | 0,
+                    t.notionPageId || "",
+                    t.updatedAt | 0,
+                    t.notionLastEdited || "",
+                    t.notionSyncedAt | 0
                 ]);
             tx.executeSql("DELETE FROM subtasks WHERE task_id=?", [t.id]);
             var subs = t.subtasks || [];

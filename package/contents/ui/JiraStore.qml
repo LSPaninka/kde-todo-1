@@ -29,6 +29,10 @@ QtObject {
     property real lastFetchedAt: 0
     property int version: 0
 
+    // Which category tab the popup should show. Bumped by requestCategory()
+    // when the user clicks a panel swatch so the popup jumps to that tab.
+    property int selectedCategory: 0
+
     // Plain-text accumulator for the in-UI debug dialog. Always populated
     // (independent of the jiraDebug console toggle).
     property string lastDebugLog: ""
@@ -36,6 +40,8 @@ QtObject {
 
     signal changed()
     signal fetchFinished(bool ok)
+    // Emitted by requestCategory(); JiraView listens and switches tabs.
+    signal categoryRequested(int index)
 
     property var _refreshTimer: Timer {
         repeat: true
@@ -383,6 +389,121 @@ QtObject {
     }
 
     // ------------------------------------------------------------------
+    // Issue detail (for the click-to-open modal): a single-issue GET that
+    // pulls the richer fields the list call skips (assignee, description,
+    // timetracking, comments). cb(ok, detail, err).
+    // ------------------------------------------------------------------
+
+    function fetchIssueDetail(key, cb) {
+        if (!plasmoidApi) { cb(false, null, qsTr("Sin configuración.")); return; }
+        var pc = plasmoidApi.configuration;
+        var site  = (pc.jiraSite || "").trim().replace(/\/+$/, "");
+        var email = (pc.jiraEmail || "").trim();
+        var token = (pc.jiraToken || "").trim();
+        if (!site || !email || !token) { cb(false, null, qsTr("Faltan credenciales.")); return; }
+
+        var fields = "summary,status,priority,issuetype,parent,assignee,description," +
+                     "timetracking,created,updated,comment";
+        var url = site + "/rest/api/3/issue/" + encodeURIComponent(key) + "?fields=" + fields;
+
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", url, true);
+        xhr.setRequestHeader("Authorization", "Basic " + Qt.btoa(email + ":" + token));
+        xhr.setRequestHeader("Accept", "application/json");
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE) return;
+            if (xhr.status === 200) {
+                try {
+                    var d = JSON.parse(xhr.responseText);
+                    cb(true, store._normalizeDetail(d, site), "");
+                } catch (e) {
+                    cb(false, null, qsTr("Error al parsear la respuesta: ") + e);
+                }
+            } else {
+                cb(false, null, qsTr("HTTP %1: %2").arg(xhr.status)
+                                    .arg(store._extractErrorMessage(xhr.responseText)));
+            }
+        };
+        try { xhr.send(); }
+        catch (e) { cb(false, null, qsTr("Error de red: ") + e); }
+    }
+
+    function _normalizeDetail(raw, site) {
+        var f = raw.fields || {};
+        var status = f.status || {};
+        var sc = status.statusCategory || {};
+        var prio = f.priority || {};
+        var it = f.issuetype || {};
+        var parent = f.parent || null;
+        var assignee = f.assignee || null;
+        var tt = f.timetracking || {};
+        var commentsRaw = (f.comment && f.comment.comments) || [];
+        var comments = [];
+        for (var i = 0; i < commentsRaw.length; i++) {
+            var c = commentsRaw[i];
+            comments.push({
+                author: (c.author && c.author.displayName) || qsTr("(desconocido)"),
+                created: c.created || "",
+                body: _adfToText(c.body)
+            });
+        }
+        return {
+            key: raw.key || "",
+            summary: f.summary || "",
+            statusName: status.name || "",
+            statusColor: sc.colorName || "",
+            statusCat: sc.key || "",
+            issuetype: it.name || "",
+            isSubtask: !!it.subtask,
+            priority: prio.name || "",
+            parentKey: parent ? (parent.key || "") : "",
+            parentSummary: (parent && parent.fields) ? (parent.fields.summary || "") : "",
+            assignee: assignee ? (assignee.displayName || "") : "",
+            description: _adfToText(f.description),
+            originalEstimate: _fmtSeconds(tt.originalEstimateSeconds),
+            timeSpent: _fmtSeconds(tt.timeSpentSeconds),
+            remaining: _fmtSeconds(tt.remainingEstimateSeconds),
+            hasTime: !!(tt.originalEstimateSeconds || tt.timeSpentSeconds || tt.remainingEstimateSeconds),
+            created: f.created || "",
+            updated: f.updated || "",
+            comments: comments,
+            url: site + "/browse/" + (raw.key || "")
+        };
+    }
+
+    // Flatten an Atlassian Document Format (ADF) node tree to plain text.
+    function _adfToText(node) {
+        if (!node) return "";
+        if (typeof node === "string") return node;
+        var out = "";
+        function walk(n) {
+            if (!n) return;
+            if (n.type === "text") { out += n.text || ""; return; }
+            if (n.type === "hardBreak") { out += "\n"; return; }
+            var children = n.content || [];
+            for (var i = 0; i < children.length; i++) walk(children[i]);
+            if (n.type === "paragraph" || n.type === "heading" ||
+                n.type === "listItem" || n.type === "blockquote") {
+                out += "\n";
+            }
+        }
+        walk(node);
+        return out.replace(/\n{3,}/g, "\n\n").replace(/[ \t]+\n/g, "\n").trim();
+    }
+
+    // Seconds → "1h 30m" style (workday-agnostic, matches Jira's raw hours).
+    function _fmtSeconds(s) {
+        s = s | 0;
+        if (s <= 0) return "0h";
+        var hh = Math.floor(s / 3600);
+        var mm = Math.floor((s % 3600) / 60);
+        var parts = [];
+        if (hh > 0) parts.push(hh + "h");
+        if (mm > 0) parts.push(mm + "m");
+        return parts.length ? parts.join(" ") : "0h";
+    }
+
+    // ------------------------------------------------------------------
     // Configurable category filtering
     // ------------------------------------------------------------------
 
@@ -401,6 +522,30 @@ QtObject {
             if (matchesJiraCategory(issues[i], catIndex)) c++;
         }
         return c;
+    }
+
+    // Multi-line "KEY — summary" list for a category, for the panel tooltip.
+    // Capped so a huge category doesn't produce an unwieldy tooltip.
+    function issueTitlesForCategory(catIndex) {
+        var lines = [];
+        var max = 12;
+        for (var i = 0; i < issues.length && lines.length < max; i++) {
+            if (!matchesJiraCategory(issues[i], catIndex)) continue;
+            var it = issues[i];
+            var sm = (it.summary || "").trim();
+            if (sm.length > 60) sm = sm.substring(0, 57) + "…";
+            lines.push((it.key || "?") + " — " + sm);
+        }
+        var total = countByJiraCategory(catIndex);
+        if (total === 0) return qsTr("Sin incidencias en esta categoría.");
+        if (total > lines.length) lines.push(qsTr("…y %1 más.").arg(total - lines.length));
+        return lines.join("\n");
+    }
+
+    // Ask the popup to open a specific category tab (from a panel swatch click).
+    function requestCategory(index) {
+        selectedCategory = index;
+        categoryRequested(index);
     }
 
     function matchesJiraCategory(issue, catIndex) {
@@ -490,7 +635,7 @@ QtObject {
 
     function _logCategoryCounts() {
         if (!plasmoidApi) return;
-        var n = Math.min(4, Math.max(1, plasmoidApi.configuration.jiraCategoryCount | 0 || 3));
+        var n = Math.min(10, Math.max(1, plasmoidApi.configuration.jiraCategoryCount | 0 || 3));
         var names  = plasmoidApi.configuration.jiraCategoryNames        || [];
         var fields = plasmoidApi.configuration.jiraCategoryFilterFields || [];
         var values = plasmoidApi.configuration.jiraCategoryFilterValues || [];

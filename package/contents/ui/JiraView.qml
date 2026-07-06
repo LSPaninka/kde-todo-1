@@ -19,7 +19,7 @@ Item {
 
     readonly property int _v: jira ? jira.version : 0
     readonly property int categoryCount:
-        Math.min(4, Math.max(1, plasmoid.configuration.jiraCategoryCount | 0 || 3))
+        Math.min(10, Math.max(1, plasmoid.configuration.jiraCategoryCount | 0 || 3))
 
     function _formatDate(ms) {
         if (!ms) return "";
@@ -32,6 +32,19 @@ Item {
     function _categoryColor(i) {
         var arr = plasmoid.configuration.jiraCategoryColors || [];
         return arr[i] || "#7f8c8d";
+    }
+
+    // Jump to the tab requested from a panel swatch click.
+    Connections {
+        target: jira || null
+        function onCategoryRequested(index) {
+            if (index >= 0 && index < view.categoryCount) tabs.currentIndex = index;
+        }
+    }
+    // On (re)open, honour the last requested category.
+    Component.onCompleted: {
+        if (jira && jira.selectedCategory >= 0 && jira.selectedCategory < view.categoryCount)
+            tabs.currentIndex = jira.selectedCategory;
     }
 
     ColumnLayout {
@@ -147,6 +160,7 @@ Item {
                             delegate: JiraIssueItem {
                                 width: list.width
                                 issue: modelData
+                                onActivated: function(iss) { issueDialog.openFor(iss); }
                             }
 
                             PlasmaComponents3.Label {
@@ -196,6 +210,12 @@ Item {
                 onClicked: plasmoid.action("configure").trigger()
             }
         }
+    }
+
+    // -------- Issue detail modal (opened from an issue click) --------
+    JiraIssueDialog {
+        id: issueDialog
+        jira: view.jira
     }
 
     // -------- Debug overlay (in-popup modal showing last fetch log) --------

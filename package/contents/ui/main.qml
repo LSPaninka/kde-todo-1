@@ -36,6 +36,7 @@ Item {
         jira: _jira
         gh: _gh
         notion: _notion
+        notionSync: _notionSync
         Layout.minimumWidth: plasmoid.configuration.popupWidth
         Layout.minimumHeight: plasmoid.configuration.popupHeight
         Layout.preferredWidth: plasmoid.configuration.popupWidth
@@ -109,24 +110,53 @@ Item {
         plasmoidApi: plasmoid
     }
 
+    // HTTP Notion API sync for the ToDo mode (two-way). Distinct from the
+    // legacy `ntn` CLI NotionStore above (whose "notion" mode is disabled).
+    NotionSyncStore {
+        id: _notionSync
+        plasmoidApi: plasmoid
+        database: _db
+        tasks: _store
+    }
+
+    // Sync the local ToDo list with Notion if it's configured. Called on
+    // startup and whenever the popup is opened (see below).
+    function _maybeNotionSync() {
+        if (!plasmoid.configuration.notionSyncOnOpen) return;
+        if (!_notionSync.isConfigured()) return;
+        if (_notionSync.loading) return;
+        _notionSync.sync(null);
+    }
+
     Component.onCompleted: {
         // Belt-and-suspenders: re-assign plasmoidApi explicitly in case the
         // declarative binding above didn't fire for some reason.
-        _jira.plasmoidApi   = plasmoid;
-        _gh.plasmoidApi     = plasmoid;
-        _notion.plasmoidApi = plasmoid;
+        _jira.plasmoidApi       = plasmoid;
+        _gh.plasmoidApi         = plasmoid;
+        _notion.plasmoidApi     = plasmoid;
+        _notionSync.plasmoidApi = plasmoid;
+        _notionSync.database    = _db;
+        _notionSync.tasks       = _store;
 
         _db.init();
         _store.load();
         _jira.init();
         _gh.init();
         _notion.init();
+        _notionSync.init();
+
+        // The `ntn` CLI Notion mode is disabled for now; migrate anyone who
+        // was left in it back to the ToDo list.
+        if (plasmoid.configuration.mode === "notion") {
+            plasmoid.configuration.mode = "todo";
+        }
 
         // The init() above may have written restored credentials back
         // into Plasmoid.configuration; mirror them straight back into
         // SQLite so the two layers stay in sync.
         _jira.persistCredentials();
         _gh.persistCredentials();
+        _notionSync.persistCredentials();
 
         if (root.mode === "jira" && _jira.lastFetchedAt === 0) {
             _jira.fetch();
@@ -134,8 +164,16 @@ Item {
         if (root.mode === "gh" && _gh.lastFetchedAt === 0) {
             _gh.fetch();
         }
-        if (root.mode === "notion" && _notion.lastFetchedAt === 0) {
-            _notion.fetch();
+
+        // Sync ToDo ↔ Notion once at startup.
+        _maybeNotionSync();
+    }
+
+    // Also sync each time the popup is opened.
+    Connections {
+        target: plasmoid
+        function onExpandedChanged() {
+            if (plasmoid.expanded) root._maybeNotionSync();
         }
     }
 
@@ -165,8 +203,21 @@ Item {
         function onGhOwnerChanged() { _gh.persistCredentials(); }
         function onGhRefreshMinutesChanged() { _gh.applyRefreshSchedule(); }
 
-        // Notion has no credentials in config (ntn login does the work).
-        function onNotionRefreshMinutesChanged() { _notion.applyRefreshSchedule(); }
+        // Legacy CLI Notion mode has no credentials in config.
+        function onNotionRefreshMinutesChanged() {
+            _notion.applyRefreshSchedule();
+            _notionSync.applyRefreshSchedule();
+        }
+
+        // Notion API sync credentials: mirror to SQLite + reschedule.
+        function onNotionApiTokenChanged() {
+            _notionSync.persistCredentials();
+            _notionSync.applyRefreshSchedule();
+        }
+        function onNotionDatabaseIdChanged() {
+            _notionSync.persistCredentials();
+            _notionSync.applyRefreshSchedule();
+        }
 
         function onModeChanged() {
             if (root.mode === "jira" && _jira.lastFetchedAt === 0 && !_jira.loading) {

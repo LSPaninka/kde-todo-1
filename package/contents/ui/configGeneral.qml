@@ -45,12 +45,6 @@ Kirigami.FormLayout {
             checked: page.cfg_mode === "gh"
             onToggled: if (checked) page.cfg_mode = "gh"
         }
-        RadioButton {
-            ButtonGroup.group: modeGroup
-            text: i18n("Notion")
-            checked: page.cfg_mode === "notion"
-            onToggled: if (checked) page.cfg_mode = "notion"
-        }
     }
 
     Label {
@@ -58,10 +52,10 @@ Kirigami.FormLayout {
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
         opacity: 0.65
-        text: i18n("ToDo: lista de tareas local. Jira: incidencias asignadas en Jira Cloud. "
-                 + "GitHub Projects: ítems de un proyecto V2 (pestaña «GitHub»). Notion: páginas "
-                 + "buscadas vía el CLI `ntn` (pestaña «Notion»). Desde la vista minimalista podés "
-                 + "cambiar de modo con la rueda del mouse.")
+        text: i18n("ToDo: lista de tareas local (con sincronización opcional a Notion, "
+                 + "pestaña «Notion»). Jira: incidencias asignadas en Jira Cloud. "
+                 + "GitHub Projects: ítems de un proyecto V2 (pestaña «GitHub»). Desde la vista "
+                 + "minimalista podés cambiar de modo con la rueda del mouse.")
     }
 
     Item { Kirigami.FormData.isSection: true }

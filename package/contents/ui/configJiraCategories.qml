@@ -30,11 +30,13 @@ ColumnLayout {
     property var cfg_jiraCategoryFilterFields: []
     property var cfg_jiraCategoryFilterValues: []
 
-    readonly property var _defaultNames:        ["Por hacer", "En curso", "Hechas", "Otras"]
-    readonly property var _defaultColors:       ["#42526e", "#f5a623", "#2ecc71", "#9b59b6"]
-    readonly property var _defaultTextColors:   ["white", "white", "white", "white"]
-    readonly property var _defaultFilterFields: ["statusCategory", "statusCategory", "statusCategory", ""]
-    readonly property var _defaultFilterValues: ["new", "indeterminate", "done", ""]
+    readonly property int _slots: 10
+
+    readonly property var _defaultNames:        ["Por hacer", "En curso", "Hechas", "Otras", "Cat 5", "Cat 6", "Cat 7", "Cat 8", "Cat 9", "Cat 10"]
+    readonly property var _defaultColors:       ["#42526e", "#f5a623", "#2ecc71", "#9b59b6", "#3498db", "#e67e22", "#1abc9c", "#e74c3c", "#34495e", "#16a085"]
+    readonly property var _defaultTextColors:   ["white", "white", "white", "white", "white", "white", "white", "white", "white", "white"]
+    readonly property var _defaultFilterFields: ["statusCategory", "statusCategory", "statusCategory", "", "", "", "", "", "", ""]
+    readonly property var _defaultFilterValues: ["new", "indeterminate", "done", "", "", "", "", "", "", ""]
 
     // The dropdown options. Internal value vs. display label.
     readonly property var _filterFieldOptions: [
@@ -53,7 +55,7 @@ ColumnLayout {
 
     function _setListItem(getter, fallback, i, value) {
         var arr = (getter() || []).slice();
-        while (arr.length < 4) arr.push(fallback[arr.length]);
+        while (arr.length < page._slots) arr.push(fallback[arr.length]);
         arr[i] = value;
         return arr;
     }
@@ -70,7 +72,7 @@ ColumnLayout {
     }
 
     Repeater {
-        model: 4
+        model: page._slots
         delegate: GroupBox {
             Layout.fillWidth: true
             title: i18n("Categoría #%1", index + 1)

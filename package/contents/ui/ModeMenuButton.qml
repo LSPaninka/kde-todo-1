@@ -46,12 +46,7 @@ PlasmaComponents3.ToolButton {
             checked: plasmoid.configuration.mode === "gh"
             onTriggered: plasmoid.configuration.mode = "gh"
         }
-        QQC2.MenuItem {
-            text: i18n("Notion")
-            icon.name: "notes"
-            checkable: true
-            checked: plasmoid.configuration.mode === "notion"
-            onTriggered: plasmoid.configuration.mode = "notion"
-        }
+        // The standalone Notion (ntn CLI) mode is disabled for now; Notion is
+        // integrated into the ToDo mode as a two-way sync instead.
     }
 }

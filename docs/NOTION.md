@@ -1,10 +1,58 @@
 # Integración con Notion
 
-El modo **Notion** del plasmoide consulta y edita páginas en
+> **Novedad (v1.3):** ahora el **modo ToDo** puede sincronizarse de ida y
+> vuelta con una base de datos de Notion vía la **API HTTP oficial** (ver la
+> sección siguiente). El **modo Notion por CLI** (`ntn`) descrito más abajo
+> queda **deshabilitado momentáneamente** — el código sigue en el repo pero no
+> es seleccionable como modo.
+
+## Sincronización ToDo ↔ Notion (API HTTP)
+
+El modo ToDo local (tareas en SQLite) puede espejarse contra una base de datos
+de Notion. La sincronización es **de doble vía con «gana el más reciente»**:
+
+- Lo nuevo en cualquier lado se crea en el otro.
+- Si una tarea cambió en ambos lados desde la última sincronización, gana la
+  edición más reciente.
+- **No se borran tareas automáticamente** (una tarea borrada de un lado no se
+  borra del otro). El estado *archivado* sí viaja (checkbox `Archived`).
+- Las subtareas viajan como JSON en una propiedad `Subtasks` (rich_text).
+
+### Puesta en marcha
+
+1. Creá una **integración interna** en
+   <https://www.notion.so/my-integrations> y copiá su *Internal Integration
+   Secret* (`secret_…` / `ntn_…`).
+2. Creá (o elegí) una página en Notion y **compartila con la integración**
+   (menú `•••` → *Connections* → tu integración). Copiá su URL o ID.
+3. En el plasmoide → *Configurar… → Notion*:
+   - Pegá el **token** y la **página padre** (URL o ID).
+   - Pulsá **«Probar token»** y luego **«Crear base de datos»** una sola vez.
+     Se crea la base *Categorized ToDo* con el esquema: `Name (title)`,
+     `Description`, `Category (number)`, `Priority (select)`, `Done`,
+     `Archived`, `Subtasks (JSON)`, `LocalId (number)`.
+   - **Aplicá** para guardar el `notionDatabaseId` resultante.
+4. A partir de ahí la lista se sincroniza **al abrir el plasmoide** (si está
+   activado *Sincronizar al abrir*), con el botón **«Notion»** del pie del
+   popup, y automáticamente cada *Auto-sync (min)*.
+
+### Notas de seguridad
+
+- El token se guarda en texto plano en
+  `~/.config/plasma-org.kde.plasma.desktop-appletsrc` y, como respaldo, en la
+  base SQLite local. No se sube a ningún servicio salvo `api.notion.com`.
+- La integración sólo ve las páginas/bases que le compartas explícitamente.
+
+---
+
+## (Deshabilitado) Modo Notion por CLI
+
+El modo **Notion** por CLI del plasmoide consulta y edita páginas en
 [Notion](https://www.notion.com/) usando el CLI oficial
 [`ntn`](https://developers.notion.com/cli/get-started/overview) (presentado el
 13 de mayo de 2026 como parte de la *Notion Developer Platform*). Toda la
-autenticación queda **fuera** del plasmoide: el CLI se encarga.
+autenticación queda **fuera** del plasmoide: el CLI se encarga. Este modo está
+deshabilitado por ahora; se documenta por completitud.
 
 ---
 

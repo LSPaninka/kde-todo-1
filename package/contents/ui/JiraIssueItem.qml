@@ -9,6 +9,7 @@
 
 import QtQuick 2.15
 import QtQuick.Layouts 1.15
+import org.kde.plasma.plasmoid 2.0
 import org.kde.plasma.core 2.0 as PlasmaCore
 import org.kde.plasma.components 3.0 as PlasmaComponents3
 
@@ -17,6 +18,9 @@ Rectangle {
 
     property var issue        // normalized issue from JiraStore
 
+    // Emitted on click; JiraView opens the detail modal.
+    signal activated(var issue)
+
     width: parent ? parent.width : 0
     implicitHeight: col.implicitHeight + PlasmaCore.Units.smallSpacing * 2
     radius: 4
@@ -24,7 +28,26 @@ Rectangle {
     border.width: 1
     border.color: Qt.rgba(1, 1, 1, 0.08)
 
+    // A user-configured color for this exact status name (case-insensitive)
+    // wins over Jira's own colorName mapping. Returns "" if none is set.
+    function _configuredStatusColor(statusName) {
+        var s = (statusName || "").trim().toLowerCase();
+        if (!s) return "";
+        var names  = plasmoid.configuration.jiraStatusNames  || [];
+        var colors = plasmoid.configuration.jiraStatusColors || [];
+        for (var i = 0; i < names.length; i++) {
+            if ((names[i] || "").trim().toLowerCase() === s) {
+                var c = (colors[i] || "").trim();
+                if (c.length > 0) return c;
+            }
+        }
+        return "";
+    }
+
     function _statusColor(name) {
+        // A per-status override configured by the user takes precedence.
+        var cfg = _configuredStatusColor(issue ? issue.statusName : "");
+        if (cfg) return cfg;
         // Map Jira's named colorName to a real RGB. Jira returns names
         // like "blue-gray", "yellow", "green", "warm-red", etc.
         switch ((name || "").toLowerCase()) {
@@ -71,9 +94,7 @@ Rectangle {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        onClicked: {
-            if (issue && issue.url) Qt.openUrlExternally(issue.url);
-        }
+        onClicked: item.activated(issue)
     }
 
     ColumnLayout {

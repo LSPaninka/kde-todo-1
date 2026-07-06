@@ -26,6 +26,12 @@ Item {
     property int smallSwatch: 12
     property int bigSwatch: 22
 
+    // Scale (percent, 50..100) applied to the "inside" style only: the
+    // swatch, its number and the inner spacing all shrink together.
+    property int scalePercent: 100
+    readonly property real _scale: Math.max(50, Math.min(100, scalePercent)) / 100
+    readonly property int _effBig: insideMode ? Math.max(10, Math.round(bigSwatch * _scale)) : bigSwatch
+
     // Tooltip payload. We don't render a QQC2 tooltip ourselves anymore;
     // the parent forwards these to Plasmoid.toolTipMainText/SubText so the
     // native Plasma tooltip (the one that sits above the panel) is reused.
@@ -36,9 +42,24 @@ Item {
     // listens and pipes the values up to main.qml's tooltip override.
     signal hoverChanged(bool isHovered, string mainText, string subText)
 
+    // Emitted on a left click on this specific swatch (carries its index).
+    signal clicked(int catIndex)
+
     HoverHandler {
         id: _hover
         onHoveredChanged: badge.hoverChanged(hovered, badge.tooltipTitle, badge.tooltipBody)
+    }
+
+    // Per-swatch click handling. Sits above CompactRepresentation's global
+    // MouseArea so a click here opens the matching category. Wheel events are
+    // explicitly passed through (accepted = false) so mode-cycling by wheel
+    // still works while hovering a swatch.
+    MouseArea {
+        anchors.fill: parent
+        acceptedButtons: Qt.LeftButton
+        cursorShape: Qt.PointingHandCursor
+        onClicked: badge.clicked(badge.catIndex)
+        onWheel: wheel.accepted = false
     }
 
     visible: showZero || count > 0
@@ -81,13 +102,13 @@ Item {
     RowLayout {
         id: insideRow
         visible: badge.insideMode
-        spacing: PlasmaCore.Units.smallSpacing
+        spacing: Math.max(2, Math.round(PlasmaCore.Units.smallSpacing * badge._scale))
 
         Rectangle {
             id: bigSwatchRect
             property bool wide: badge.count >= 10
-            Layout.preferredWidth: wide ? badge.bigSwatch + 8 : badge.bigSwatch
-            Layout.preferredHeight: badge.bigSwatch
+            Layout.preferredWidth: wide ? badge._effBig + Math.round(8 * badge._scale) : badge._effBig
+            Layout.preferredHeight: badge._effBig
             radius: 3
             color: badge.color
             border.width: 1
@@ -99,8 +120,8 @@ Item {
                 color: badge.textColor
                 font.bold: true
                 font.pixelSize: Math.max(
-                    PlasmaCore.Theme.smallestFont.pixelSize,
-                    Math.round(badge.bigSwatch * 0.6))
+                    Math.round(PlasmaCore.Theme.smallestFont.pixelSize * badge._scale),
+                    Math.round(badge._effBig * 0.6))
             }
         }
 

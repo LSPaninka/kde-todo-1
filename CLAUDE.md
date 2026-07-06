@@ -34,16 +34,20 @@ There is **no test suite, no linter, no build step** — `package/` is the deliv
 
 ## Architecture
 
-### Four operating modes, one widget
+### Operating modes, one widget
 
 `main.qml` is a thin dispatcher. `plasmoid.configuration.mode` selects between:
 
-- **`todo`** — local list (`TodoView.qml`) backed by `TaskStore` + SQLite. Up to **7** user-defined categories (`Math.min(7, …)` clamp everywhere) plus an always-on "Global" tab (`GlobalView.qml`) that lists every task across categories using TaskItem's color stripe. The compact view shows hover tooltips with each category's pending titles.
-- **`jira`** — read-only (`JiraView.qml`) of issues from Jira Cloud REST v3, backed by `JiraStore` + SQLite cache.
-- **`gh`** — read-only (`GhView.qml`) of items from a GitHub Projects (V2) project, fetched via GraphQL v4 and backed by `GhStore` + SQLite cache (`gh_cache` table, schema v2).
-- **`notion`** — list + inline-edit (`NotionView.qml`) of Notion pages via the `ntn` CLI. `NotionStore.qml` shells out via `PlasmaCore.DataSource { engine: "executable" }` (wrapping every command in `sh -c '<cmd>'` with POSIX single-quote escaping for shell safety) and parses JSON/Markdown from stdout. Auth is delegated to `ntn login` — the plasmoid never sees the token. See `docs/NOTION.md`.
+- **`todo`** — local list (`TodoView.qml`) backed by `TaskStore` + SQLite. Up to **7** user-defined categories (`Math.min(7, …)` clamp everywhere) plus an always-on "Global" tab (`GlobalView.qml`). The compact view shows hover tooltips with each category's pending titles. **Optionally syncs two-way with a Notion database** — see below.
+- **`jira`** — read-only (`JiraView.qml`) of issues from Jira Cloud REST v3 (`/rest/api/3/search/jql`), backed by `JiraStore` + SQLite cache. Up to **10** configurable categories. Clicking an issue opens `JiraIssueDialog.qml` (detail + comments, fetched via `JiraStore.fetchIssueDetail` → `/rest/api/3/issue/{key}`, ADF flattened by `_adfToText`). Status chip colors are overridable per status name via `jiraStatusNames`/`jiraStatusColors` (config tab "Estados Jira").
+- **`gh`** — read-only (`GhView.qml`) of items from a GitHub Projects (V2) project, fetched via GraphQL v4 and backed by `GhStore` + SQLite cache (`gh_cache` table).
+- **`notion`** (DISABLED for now) — the `ntn` CLI list/edit mode (`NotionView.qml` + `NotionStore.qml`). Files remain but the mode is not selectable (removed from the wheel cycle, `ModeMenuButton`, and `configGeneral`); `main.qml` migrates anyone left in it back to `todo`. Notion is now a **ToDo-mode sync** instead (`NotionSyncStore.qml`, HTTP API). See `docs/NOTION.md`.
 
-Both `FullRepresentation.qml` (popup) and `CompactRepresentation.qml` (panel) branch on `mode`. The compact view shows per-category swatches with counts in every mode (Notion is a single swatch — no native categorization); clicking opens the popup. **Mouse wheel over the compact view cycles `todo → jira → gh → notion → todo`** by writing to `plasmoid.configuration.mode` directly — implemented in `CompactRepresentation.qml` root `MouseArea.onWheel`.
+Both `FullRepresentation.qml` (popup) and `CompactRepresentation.qml` (panel) branch on `mode`. The compact view shows per-category swatches with counts in every mode; clicking a **specific swatch** opens the popup (and, in Jira, jumps to that category via `JiraStore.requestCategory`); hovering a Jira swatch lists that category's issue codes+names. **Mouse wheel over the compact view cycles `todo → jira → gh → todo`** (`_modeOrder` in `CompactRepresentation.qml`; per-swatch `SwatchBadge` MouseAreas pass wheel through with `wheel.accepted = false`).
+
+### Notion two-way sync (ToDo mode)
+
+`NotionSyncStore.qml` talks to `api.notion.com/v1` with an internal integration token (`notionApiToken`; database id `notionDatabaseId`, both mirrored to SQLite via `persistCredentials`). `createDatabase()` bootstraps the DB under `notionParentPageId`. `sync()` is **two-way, newest-wins, no deletions**: each task ↔ one page, keyed by `notionPageId`/`LocalId`. Clock-safe change detection uses per-task `updatedAt` (local clock, bumped by `TaskStore._touch` on every user edit), `notionSyncedAt` (local clock of last reconcile) and `notionLastEdited` (the page's `last_edited_time` string) — see `TaskStore.notionLocalChanged`, `applyRemoteUpsert`, `markPushed`. Sync runs on startup and on popup-open (`main.qml._maybeNotionSync`, gated by `notionSyncOnOpen`) and via the "Notion" button in `TodoView`'s footer. The counter "inside" style has a `panelCounterScale` (50–100%) applied by `SwatchBadge`.
 
 ### Stores own the state, views are dumb
 
@@ -51,7 +55,7 @@ Both `FullRepresentation.qml` (popup) and `CompactRepresentation.qml` (panel) br
 
 ### Persistence: SQLite via QtQuick.LocalStorage
 
-`Database.qml` wraps `QtQuick.LocalStorage 2.0` (synchronous, ACID, ships with Qt 5). The DB file lives at `~/.local/share/KDE/plasmashell/QML/OfflineStorage/Databases/<md5>.sqlite` (logical name `CategorizedToDo`). Tables: `tasks`, `subtasks`, `settings` (k/v fallback for credentials), `jira_cache`, `gh_cache`, `schema_version`. Schema migrations are gated on `schema_version.v` inside `_migrate()` — bump `v` and add a new `if (v < N)` block when changing schema.
+`Database.qml` wraps `QtQuick.LocalStorage 2.0` (synchronous, ACID, ships with Qt 5). The DB file lives at `~/.local/share/KDE/plasmashell/QML/OfflineStorage/Databases/<md5>.sqlite` (logical name `CategorizedToDo`). Tables: `tasks`, `subtasks`, `settings` (k/v fallback for credentials), `jira_cache`, `gh_cache`, `schema_version`. Schema migrations are gated on `schema_version.v` inside `_migrate()` — bump `v` and add a new `if (v < N)` block when changing schema. **Current schema is v3**: v3 adds the Notion-sync columns to `tasks` (`notion_page_id`, `updated_at`, `notion_last_edited`, `notion_synced_at`) via `ALTER TABLE`; `saveTask`/`_rowToTask` carry them.
 
 Every store mutation commits inside `Database.transaction(...)` immediately — there is no debounce, no `flushNow()` queue (the function exists only as an API-compat no-op). `TaskStore.load()` is called once from `Component.onCompleted` and rebuilds the in-memory arrays from SQLite. Do **not** add a separate JSON-file path: previous JSON-file and `Plasmoid.configuration.tasksJson` backends were removed because `KConfigPropertyMap` debouncing and the `executable` data engine proved unreliable on the target setup (see `docs/PERSISTENCE.md`).
 
@@ -65,7 +69,7 @@ Schema is in `package/contents/config/main.xml` (KConfig XML). Use it for **widg
 
 ### Configurable Jira / GitHub categories
 
-The Jira mode does not hardcode "To Do / In Progress / Done". Instead, parallel `StringList` entries in `main.xml` (`jiraCategoryNames`, `jiraCategoryColors`, `jiraCategoryTextColors`, `jiraCategoryFilterFields`, `jiraCategoryFilterValues`) drive up to 4 user-defined tabs/swatches. `jiraCategoryFilterFields[i]` is one of `statusCategory`, `issuetype`, `status`, `priority`, or empty (matches all). `jiraCategoryFilterValues[i]` uses `;` as the OR separator within an entry (because the outer list itself is comma-separated).
+The Jira mode does not hardcode "To Do / In Progress / Done". Instead, parallel `StringList` entries in `main.xml` (`jiraCategoryNames`, `jiraCategoryColors`, `jiraCategoryTextColors`, `jiraCategoryFilterFields`, `jiraCategoryFilterValues`) drive up to **10** user-defined tabs/swatches (`Math.min(10, …)` clamp in `JiraView`, `CompactRepresentation._jiraCount`, `JiraStore._logCategoryCounts`; `configJiraCategories.qml` renders `_slots = 10`). `jiraCategoryFilterFields[i]` is one of `statusCategory`, `issuetype`, `status`, `priority`, or empty (matches all). `jiraCategoryFilterValues[i]` uses `;` as the OR separator within an entry (because the outer list itself is comma-separated).
 
 The GitHub Projects mode mirrors this exactly with `ghCategory*` entries. Filter fields are `status` (the value of the project's `ghStatusField` single-select), `type` (`Issue`/`PullRequest`/`DraftIssue`), `state` (`OPEN`/`CLOSED`/`MERGED`/`DRAFT`), or `repo` (`owner/name`).
 

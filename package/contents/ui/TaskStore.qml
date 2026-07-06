@@ -81,6 +81,10 @@ QtObject {
             done: !!t.done,
             createdAt: t.createdAt || Date.now(),
             archivedAt: t.archivedAt || 0,
+            notionPageId: t.notionPageId || "",
+            updatedAt: t.updatedAt || 0,
+            notionLastEdited: t.notionLastEdited || "",
+            notionSyncedAt: t.notionSyncedAt || 0,
             subtasks: (t.subtasks || []).map(function(s) {
                 return {
                     id: s.id || 0,
@@ -90,6 +94,12 @@ QtObject {
                 };
             })
         };
+    }
+
+    // Stamp the local last-modified time. Called by every mutation so the
+    // Notion sync engine can do newest-wins conflict resolution.
+    function _touch(t) {
+        t.updatedAt = Date.now();
     }
 
     function _categoryName(i) {
@@ -134,6 +144,18 @@ QtObject {
         return (i >= 0) ? tasks[i] : null;
     }
 
+    // Search active + archived (used by the Notion sync push side).
+    function getAnyTask(id) {
+        var i = _indexOf(tasks, id);
+        if (i >= 0) return tasks[i];
+        var k = _indexOf(archived, id);
+        return (k >= 0) ? archived[k] : null;
+    }
+
+    function isArchived(id) {
+        return _indexOf(archived, id) >= 0;
+    }
+
     // ------------------------------------------------------------------
     // Mutations — each one writes to SQLite immediately.
     // ------------------------------------------------------------------
@@ -146,6 +168,7 @@ QtObject {
             priority: priority || "M",
             description: description || ""
         });
+        _touch(t);
         tasks.push(t);
         if (database) database.saveTask(t, false);
         _bump();
@@ -157,6 +180,7 @@ QtObject {
         if (i < 0) return;
         var t = tasks[i];
         for (var k in fields) if (fields.hasOwnProperty(k)) t[k] = fields[k];
+        _touch(t);
         tasks[i] = t;
         if (database) database.saveTask(t, false);
         _bump();
@@ -166,6 +190,7 @@ QtObject {
         var i = _indexOf(tasks, id);
         if (i < 0) return;
         tasks[i].done = !tasks[i].done;
+        _touch(tasks[i]);
         if (database) database.saveTask(tasks[i], false);
         _bump();
     }
@@ -179,6 +204,7 @@ QtObject {
             priority: priority || "M",
             done: false
         });
+        _touch(tasks[i]);
         if (database) database.saveTask(tasks[i], false);
         _bump();
     }
@@ -190,6 +216,7 @@ QtObject {
         for (var j = 0; j < subs.length; j++) {
             if (subs[j].id === subId) {
                 for (var k in fields) if (fields.hasOwnProperty(k)) subs[j][k] = fields[k];
+                _touch(tasks[i]);
                 if (database) database.saveTask(tasks[i], false);
                 _bump();
                 return;
@@ -204,6 +231,7 @@ QtObject {
         for (var j = 0; j < subs.length; j++) {
             if (subs[j].id === subId) {
                 subs[j].done = !subs[j].done;
+                _touch(tasks[i]);
                 if (database) database.saveTask(tasks[i], false);
                 _bump();
                 return;
@@ -218,6 +246,7 @@ QtObject {
         for (var j = 0; j < subs.length; j++) {
             if (subs[j].id === subId) {
                 subs.splice(j, 1);
+                _touch(tasks[i]);
                 if (database) database.saveTask(tasks[i], false);
                 _bump();
                 return;
@@ -231,6 +260,7 @@ QtObject {
         var t = tasks[i];
         t.archivedAt = Date.now();
         t.done = true;
+        _touch(t);
         archived.unshift(t);
         tasks.splice(i, 1);
         if (database) database.saveTask(t, true);
@@ -243,6 +273,7 @@ QtObject {
         var t = archived[i];
         t.archivedAt = 0;
         t.done = false;
+        _touch(t);
         tasks.push(t);
         archived.splice(i, 1);
         if (database) database.saveTask(t, false);
@@ -296,6 +327,8 @@ QtObject {
             t.id = _nextId++;
             t.category = catIndex;
             t.archivedAt = 0;
+            t.notionPageId = "";   // imported tasks are new to Notion
+            _touch(t);
             for (var j = 0; j < t.subtasks.length; j++) {
                 t.subtasks[j].id = _nextId++;
             }
@@ -333,4 +366,132 @@ QtObject {
     // Kept for API compatibility — was only used to rewrite filename
     // slugs in the old JSON-file backend.
     function notifyCategoryNamesChanged() { /* no-op for SQLite backend */ }
+
+    // ------------------------------------------------------------------
+    // Notion sync support
+    //
+    // The sync engine (NotionSyncStore) reads `tasks` / `archived` directly
+    // for the push side and calls these helpers for the pull side. Sync
+    // never bumps updatedAt on its own (that timestamp only tracks *user*
+    // edits) — it writes the remote timestamp so newest-wins converges.
+    // ------------------------------------------------------------------
+
+    function _findByNotion(pageId) {
+        if (!pageId) return null;
+        for (var i = 0; i < tasks.length; i++)
+            if (tasks[i].notionPageId === pageId) return { arr: tasks, i: i, archived: false };
+        for (var j = 0; j < archived.length; j++)
+            if (archived[j].notionPageId === pageId) return { arr: archived, i: j, archived: true };
+        return null;
+    }
+
+    function _ensureSubIds(t) {
+        var subs = t.subtasks || [];
+        for (var i = 0; i < subs.length; i++) {
+            if (!subs[i].id) subs[i].id = _nextId++;
+        }
+    }
+
+    // Snapshot of every task (active + archived) for the push side.
+    function allTasksForSync() {
+        var out = [];
+        for (var i = 0; i < tasks.length; i++)   out.push(tasks[i]);
+        for (var j = 0; j < archived.length; j++) out.push(archived[j]);
+        return out;
+    }
+
+    function _locById(taskId) {
+        var i = _indexOf(tasks, taskId);
+        if (i >= 0) return { arr: tasks, i: i, archived: false };
+        var k = _indexOf(archived, taskId);
+        if (k >= 0) return { arr: archived, i: k, archived: true };
+        return null;
+    }
+
+    // localChanged(task) == the user edited this task since the last sync.
+    // Uses two local-clock timestamps only, so it's immune to clock skew
+    // between this machine and Notion's servers.
+    function notionLocalChanged(t) {
+        return (t.updatedAt | 0) > (t.notionSyncedAt | 0);
+    }
+
+    // After a push (create or update), remember the page id + the remote
+    // last_edited_time we just produced, and stamp notionSyncedAt to now so
+    // the pair reads as "in sync" on the next round.
+    function markPushed(taskId, pageId, notionLastEdited) {
+        var loc = _locById(taskId);
+        if (!loc) return;
+        var t = loc.arr[loc.i];
+        if (pageId) t.notionPageId = pageId;
+        t.notionLastEdited = notionLastEdited || t.notionLastEdited;
+        t.notionSyncedAt = Date.now();
+        if (database) database.saveTask(t, loc.archived);
+        _bump();
+    }
+
+    // Upsert a task that came from Notion (pull side). `remote` fields:
+    //   notionPageId, notionLastEdited (string), title, description,
+    //   category, priority, done, archived (bool), subtasks[].
+    // Stamps notionSyncedAt/updatedAt so the pair reads as "in sync".
+    // Returns the local task id.
+    function applyRemoteUpsert(remote) {
+        var now = Date.now();
+        var loc = _findByNotion(remote.notionPageId);
+        var t;
+        if (loc) {
+            t = loc.arr[loc.i];
+            t.title       = remote.title;
+            t.description = remote.description;
+            t.category    = remote.category | 0;
+            t.priority    = remote.priority || "M";
+            t.done        = !!remote.done;
+            t.notionLastEdited = remote.notionLastEdited || "";
+            t.notionSyncedAt   = now;
+            t.updatedAt        = now;   // pulled state == synced state
+            t.subtasks    = (remote.subtasks || []).map(function(s) {
+                return { id: s.id || 0, title: s.title || "",
+                         priority: s.priority || "M", done: !!s.done };
+            });
+            _ensureSubIds(t);
+
+            var wantArchived = !!remote.archived;
+            if (wantArchived && !loc.archived) {
+                t.archivedAt = now;
+                tasks.splice(loc.i, 1);
+                archived.unshift(t);
+            } else if (!wantArchived && loc.archived) {
+                t.archivedAt = 0;
+                archived.splice(loc.i, 1);
+                tasks.push(t);
+            }
+            if (database) database.saveTask(t, wantArchived);
+            _bump();
+            return t.id;
+        }
+
+        // New page from Notion → create a local task.
+        t = _normalize({
+            id: _nextId++,
+            title: remote.title,
+            description: remote.description,
+            category: remote.category | 0,
+            priority: remote.priority || "M",
+            done: !!remote.done,
+            notionPageId: remote.notionPageId,
+            notionLastEdited: remote.notionLastEdited || "",
+            notionSyncedAt: now,
+            updatedAt: now,
+            subtasks: remote.subtasks || []
+        });
+        _ensureSubIds(t);
+        if (remote.archived) {
+            t.archivedAt = now;
+            archived.unshift(t);
+        } else {
+            tasks.push(t);
+        }
+        if (database) database.saveTask(t, !!remote.archived);
+        _bump();
+        return t.id;
+    }
 }

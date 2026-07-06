@@ -25,6 +25,7 @@ ColumnLayout {
     property alias  cfg_panelShowZero:   showZeroCheck.checked
     property string cfg_panelCounterStyle: "right"
     property var    cfg_panelCounterColors: []
+    property alias  cfg_panelCounterScale: scaleSpin.value
 
     readonly property var _defaultCounterColors: ["white", "black", "white", "white", "white", "white", "white"]
     readonly property var _defaultNames:  ["Personal", "Trabajo", "Estudio", "Otros", "Salud", "Hogar", "Hobbies"]
@@ -66,10 +67,34 @@ ColumnLayout {
                 onToggled: if (checked) page.cfg_panelCounterStyle = "right"
             }
             RadioButton {
+                id: insideRadio
                 ButtonGroup.group: styleGroup
                 text: i18n("Number inside the colored square (bigger swatch)")
                 checked: page.cfg_panelCounterStyle === "inside"
                 onToggled: if (checked) page.cfg_panelCounterStyle = "inside"
+            }
+
+            // Scale, only meaningful for the "inside" style.
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+                spacing: Kirigami.Units.smallSpacing
+                enabled: insideRadio.checked
+
+                Label { text: i18n("Escala del cuadrado:") }
+                SpinBox {
+                    id: scaleSpin
+                    from: 50
+                    to: 100
+                    stepSize: 5
+                    textFromValue: function(value) { return value + "%"; }
+                    valueFromText: function(text) { return parseInt(text); }
+                }
+                Label {
+                    text: i18n("(50% = mitad de tamaño; 100% = tamaño actual)")
+                    opacity: 0.65
+                }
+                Item { Layout.fillWidth: true }
             }
         }
     }

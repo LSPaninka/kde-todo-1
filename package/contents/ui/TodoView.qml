@@ -17,8 +17,24 @@ Item {
     id: todoView
 
     property var store
+    property var notionSync
+
+    readonly property int _nv: notionSync ? notionSync.version : 0
 
     CategoryHelper { id: cats }
+
+    Connections {
+        target: notionSync || null
+        function onSyncFinished(ok, pulled, pushed) {
+            if (ok) {
+                notionStatus.text = i18n("Notion: %1 ↓ / %2 ↑", pulled, pushed);
+                notionStatus.color = PlasmaCore.Theme.positiveTextColor;
+            } else {
+                notionStatus.text = notionSync.lastError || i18n("Error de sincronización");
+                notionStatus.color = PlasmaCore.Theme.negativeTextColor;
+            }
+        }
+    }
 
     // Global + N category tabs + Archive. Each tab is sized to a 1/N share
     // of the bar so they always fill the popup width.
@@ -168,13 +184,43 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             PlasmaComponents3.Label {
-                Layout.fillWidth: true
                 text: (store.version, i18np("%1 pending task in total",
                                              "%1 pending tasks in total",
                                              store.totalPending()))
                 opacity: 0.6
                 font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
             }
+
+            PlasmaComponents3.Label {
+                id: notionStatus
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignRight
+                elide: Text.ElideRight
+                opacity: 0.7
+                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                text: {
+                    if (!todoView.notionSync) return "";
+                    if ((todoView._nv, todoView.notionSync.loading)) return i18n("Sincronizando con Notion…");
+                    return "";
+                }
+            }
+
+            // Sync-with-Notion button (only useful once Notion is configured).
+            PlasmaComponents3.ToolButton {
+                icon.name: "view-refresh"
+                text: i18n("Notion")
+                visible: todoView.notionSync && todoView.notionSync.isConfigured()
+                enabled: todoView.notionSync && !(todoView._nv, todoView.notionSync.loading)
+                onClicked: {
+                    notionStatus.text = i18n("Sincronizando con Notion…");
+                    notionStatus.color = PlasmaCore.Theme.textColor;
+                    todoView.notionSync.sync(null);
+                }
+                PlasmaComponents3.ToolTip.text: i18n("Sincronizar la lista con Notion")
+                PlasmaComponents3.ToolTip.visible: hovered
+                PlasmaComponents3.ToolTip.delay: 500
+            }
+
             ModeMenuButton {}
             PlasmaComponents3.ToolButton {
                 icon.name: "configure"

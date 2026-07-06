@@ -17,6 +17,7 @@ Item {
     property var jira
     property var gh
     property var notion
+    property var notionSync
 
     readonly property string mode: plasmoid.configuration.mode || "todo"
 
@@ -33,6 +34,7 @@ Item {
 
         TodoView {
             store: full.store
+            notionSync: full.notionSync
         }
 
         JiraView {

@@ -12,31 +12,36 @@ que vienen con Plasma 5 y Qt 5.15 (`org.kde.plasma.*`, `org.kde.kirigami`,
 
 ## Modos
 
-El plasmoide soporta cuatro modos (configurable en la pestaña *General*
+El plasmoide soporta tres modos (configurable en la pestaña *General*
 del diálogo de configuración):
 
 - **ToDo** (por defecto): la lista local con hasta **7 categorías**,
   prioridades, subtareas, archivado, export/import JSON, y una pestaña
   **Global** que muestra todas las tareas con la franja de color de su
   categoría. En la vista compacta del panel, **hover sobre cada cuadrado**
-  muestra las tareas pendientes de esa categoría.
+  muestra las tareas pendientes de esa categoría. Ahora además puede
+  **sincronizarse de ida y vuelta con Notion** (API HTTP) — ver
+  [`docs/NOTION.md`](docs/NOTION.md).
 - **Jira**: vista de **solo lectura** de las incidencias asignadas a
-  tu usuario en Jira Cloud. Configurás sitio + email + API token y
-  listo. Detalles, JQL de ejemplo y notas de seguridad en
+  tu usuario en Jira Cloud, con hasta **10 categorías** configurables.
+  Click en una incidencia abre un **modal de detalle** (tipo, prioridad,
+  padre, asignado, tiempos, descripción y **comentarios**). El color de
+  cada etiqueta de estado es configurable (pestaña *Estados Jira*).
+  Detalles, JQL de ejemplo y notas de seguridad en
   [`docs/JIRA.md`](docs/JIRA.md).
 - **GitHub Projects**: vista de **solo lectura** de los ítems de un
   proyecto V2 (Issues, Pull Requests y Draft Issues). Configurás un
   Personal Access Token + el owner + el número de proyecto. Cada
   categoría filtra por *Status*, *Type*, *State* o *Repo*. Detalles en
   [`docs/GH_PROJECTS.md`](docs/GH_PROJECTS.md).
-- **Notion**: lista las páginas de tu workspace vía el CLI oficial
-  `ntn`, con edición inline de título y contenido Markdown y un botón
-  para abrir cada página en el navegador. Toda la autenticación queda
-  en `ntn` (corré `ntn login` una vez). Detalles en
-  [`docs/NOTION.md`](docs/NOTION.md).
+
+> El modo **Notion por CLI** (`ntn`) quedó **deshabilitado momentáneamente**;
+> Notion ahora se integra como sincronización dentro del modo ToDo.
 
 > Desde la **vista compacta** (panel), la **rueda del mouse** cambia de
-> modo: ToDo → Jira → GitHub Projects → Notion → ToDo. Clic abre el popup.
+> modo: ToDo → Jira → GitHub Projects → ToDo. **Click en un cuadrado de
+> color** abre el popup (en Jira, directamente en esa categoría); al pasar
+> el mouse por encima se ven los códigos y nombres de las incidencias.
 
 ---
 

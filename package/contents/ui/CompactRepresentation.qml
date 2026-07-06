@@ -33,7 +33,9 @@ Item {
     readonly property int _vGh:     gh     ? gh.version     : 0
     readonly property int _vNotion: notion ? notion.version : 0
 
-    readonly property var _modeOrder: ["todo", "jira", "gh", "notion"]
+    // The "notion" CLI mode is disabled for now, so the wheel only cycles
+    // todo → jira → gh. (Notion is a ToDo-mode sync, not a standalone mode.)
+    readonly property var _modeOrder: ["todo", "jira", "gh"]
 
     // Emitted whenever a swatch gains or loses hover. main.qml uses this
     // to swap Plasmoid.toolTipMainText / toolTipSubText so the *native*
@@ -45,6 +47,10 @@ Item {
 
     readonly property int _smallSwatch: Math.max(10, PlasmaCore.Units.iconSizes.small - 2)
     readonly property int _bigSwatch:   Math.max(18, PlasmaCore.Units.iconSizes.medium - 2)
+
+    readonly property bool _insideMode: plasmoid.configuration.panelCounterStyle === "inside"
+    readonly property int  _scalePct:
+        Math.max(50, Math.min(100, plasmoid.configuration.panelCounterScale | 0 || 100))
 
     function _todoTextColor(idx) {
         var arr = plasmoid.configuration.panelCounterColors || [];
@@ -89,7 +95,7 @@ Item {
         return arr[i] || "#7f8c8d";
     }
     function _jiraCount() {
-        return Math.min(4, Math.max(1, plasmoid.configuration.jiraCategoryCount | 0 || 3));
+        return Math.min(10, Math.max(1, plasmoid.configuration.jiraCategoryCount | 0 || 3));
     }
 
     function _ghTextColor(idx) {
@@ -140,7 +146,10 @@ Item {
     RowLayout {
         id: row
         anchors.centerIn: parent
-        spacing: PlasmaCore.Units.smallSpacing * 2
+        // Inside mode: the gap between swatches shrinks with the scale too.
+        spacing: compact._insideMode
+                 ? Math.max(2, Math.round(PlasmaCore.Units.smallSpacing * 2 * compact._scalePct / 100))
+                 : PlasmaCore.Units.smallSpacing * 2
 
         // -------- TODO mode --------
         Repeater {
@@ -154,11 +163,13 @@ Item {
                 showLabel: plasmoid.configuration.panelShowLabels
                 textColor: compact._todoTextColor(index)
                 insideMode: plasmoid.configuration.panelCounterStyle === "inside"
+                scalePercent: compact._scalePct
                 smallSwatch: compact._smallSwatch
                 bigSwatch: compact._bigSwatch
                 tooltipTitle: cats.name(index)
                 tooltipBody: (compact._vTodo, compact._todoTooltipBody(index))
                 onHoverChanged: function(isHov, m, s) { compact.hoverChanged(isHov, m, s); }
+                onClicked: plasmoid.expanded = !plasmoid.expanded
             }
         }
 
@@ -174,16 +185,18 @@ Item {
                 showLabel: plasmoid.configuration.panelShowLabels
                 textColor: compact._jiraTextColor(index)
                 insideMode: plasmoid.configuration.panelCounterStyle === "inside"
+                scalePercent: compact._scalePct
                 smallSwatch: compact._smallSwatch
                 bigSwatch: compact._bigSwatch
                 tooltipTitle: compact._jiraName(index)
-                tooltipBody: {
-                    if (!jira) return "";
-                    var c = (compact._vJira, jira.countByJiraCategory(index));
-                    return i18np("%1 incidencia en esta categoría.",
-                                 "%1 incidencias en esta categoría.", c);
-                }
+                // Hover shows the codes + names of this category's issues.
+                tooltipBody: (compact._vJira, jira ? jira.issueTitlesForCategory(index) : "")
                 onHoverChanged: function(isHov, m, s) { compact.hoverChanged(isHov, m, s); }
+                // Click opens the popup on this exact category tab.
+                onClicked: {
+                    if (jira) jira.requestCategory(index);
+                    plasmoid.expanded = true;
+                }
             }
         }
 
@@ -199,6 +212,7 @@ Item {
                 showLabel: plasmoid.configuration.panelShowLabels
                 textColor: compact._ghTextColor(index)
                 insideMode: plasmoid.configuration.panelCounterStyle === "inside"
+                scalePercent: compact._scalePct
                 smallSwatch: compact._smallSwatch
                 bigSwatch: compact._bigSwatch
                 tooltipTitle: compact._ghName(index)
@@ -209,6 +223,7 @@ Item {
                                  "%1 ítems en esta categoría.", c);
                 }
                 onHoverChanged: function(isHov, m, s) { compact.hoverChanged(isHov, m, s); }
+                onClicked: plasmoid.expanded = !plasmoid.expanded
             }
         }
 
@@ -225,6 +240,7 @@ Item {
             showLabel: plasmoid.configuration.panelShowLabels
             textColor: "white"
             insideMode: plasmoid.configuration.panelCounterStyle === "inside"
+            scalePercent: compact._scalePct
             smallSwatch: compact._smallSwatch
             bigSwatch: compact._bigSwatch
             tooltipTitle: i18n("Notion")
@@ -237,6 +253,7 @@ Item {
                              (compact._vNotion, notion.totalCount()));
             }
             onHoverChanged: function(isHov, m, s) { compact.hoverChanged(isHov, m, s); }
+            onClicked: plasmoid.expanded = !plasmoid.expanded
         }
     }
 }

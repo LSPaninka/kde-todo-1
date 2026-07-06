@@ -28,6 +28,11 @@ ConfigModel {
         source: "configJiraCategories.qml"
     }
     ConfigCategory {
+        name: i18n("Estados Jira")
+        icon: "preferences-desktop-color"
+        source: "configJiraStatuses.qml"
+    }
+    ConfigCategory {
         name: i18n("GitHub")
         icon: "applications-development"
         source: "configGh.qml"
