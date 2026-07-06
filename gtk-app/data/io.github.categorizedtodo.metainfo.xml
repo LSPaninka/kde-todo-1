@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.categorizedtodo</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Categorized ToDo</name>
+  <summary>Categorized tasks with Jira and GitHub Projects integration</summary>
+  <description>
+    <p>
+      A GTK 4 / libadwaita desktop task manager with three modes: a local
+      categorized ToDo list (optionally two-way synced with Notion), a
+      read-only Jira issues view, and a read-only GitHub Projects (V2) view.
+    </p>
+    <p>
+      It runs both as a full window and as a small tray popup opened from a
+      top-bar StatusNotifierItem icon. Closing the window keeps the app
+      running in the background; quit from the tray icon's right-click menu.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.categorizedtodo.desktop</launchable>
+  <provides>
+    <binary>categorized-todo</binary>
+  </provides>
+  <categories>
+    <category>Utility</category>
+    <category>Office</category>
+  </categories>
+  <content_rating type="oars-1.1"/>
+</component>

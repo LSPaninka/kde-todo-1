@@ -1,0 +1,8 @@
+# Meson / Ninja build output
+/build/
+_build/
+*.o
+*.p/
+
+# Vala-generated C (when compiling out-of-tree)
+*.c.o

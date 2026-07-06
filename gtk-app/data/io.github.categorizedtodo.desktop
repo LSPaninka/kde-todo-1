@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Categorized ToDo
+GenericName=Task manager
+Comment=Categorized tasks with Jira and GitHub Projects integration
+Icon=io.github.categorizedtodo
+Exec=categorized-todo
+Terminal=false
+Categories=Utility;GTK;ProjectManagement;Office;
+Keywords=todo;tasks;jira;github;notion;productivity;
+StartupNotify=true
+X-GNOME-UsesNotifications=true

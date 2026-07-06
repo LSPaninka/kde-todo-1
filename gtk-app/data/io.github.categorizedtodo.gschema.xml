@@ -1,0 +1,231 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="io.github.categorizedtodo" path="/io/github/categorizedtodo/">
+
+    <!-- ============================ General ============================ -->
+    <key name="mode" type="s">
+      <default>'todo'</default>
+      <summary>Operating mode</summary>
+      <description>"todo" (local task list), "jira" (Jira issues) or "gh" (GitHub Projects).</description>
+    </key>
+
+    <key name="category-count" type="i">
+      <range min="1" max="7"/>
+      <default>4</default>
+      <summary>Number of active ToDo categories (1..7)</summary>
+    </key>
+    <key name="category-names" type="as">
+      <default>['Personal','Trabajo','Estudio','Otros','Salud','Hogar','Hobbies']</default>
+      <summary>Names for each ToDo category</summary>
+    </key>
+    <key name="category-colors" type="as">
+      <default>['#2ecc71','#f1c40f','#3498db','#e74c3c','#9b59b6','#1abc9c','#e67e22']</default>
+      <summary>Hex colors for each ToDo category</summary>
+    </key>
+
+    <key name="show-priority-icons" type="b">
+      <default>true</default>
+      <summary>Show priority badges on tasks</summary>
+    </key>
+    <key name="confirm-delete" type="b">
+      <default>true</default>
+      <summary>Ask for confirmation before deleting archived tasks</summary>
+    </key>
+
+    <!-- ===================== Window / popup sizing ===================== -->
+    <key name="main-width" type="i">
+      <range min="600" max="4000"/>
+      <default>1280</default>
+      <summary>Main application window width</summary>
+    </key>
+    <key name="main-height" type="i">
+      <range min="400" max="3000"/>
+      <default>820</default>
+      <summary>Main application window height</summary>
+    </key>
+    <key name="popup-width" type="i">
+      <range min="480" max="2400"/>
+      <default>1000</default>
+      <summary>Tray popup window width (parametrizable)</summary>
+    </key>
+    <key name="popup-height" type="i">
+      <range min="360" max="1800"/>
+      <default>700</default>
+      <summary>Tray popup window height (parametrizable)</summary>
+    </key>
+    <key name="popup-scale" type="i">
+      <range min="70" max="130"/>
+      <default>100</default>
+      <summary>UI scale (%) applied inside the tray popup window</summary>
+    </key>
+
+    <!-- ===================== Background / tray ===================== -->
+    <key name="run-in-background" type="b">
+      <default>true</default>
+      <summary>Keep running in the background when the window is closed</summary>
+      <description>When enabled, closing the window from the dock hides it to the tray instead of quitting. Quit from the tray icon's right-click menu.</description>
+    </key>
+    <key name="show-tray-icon" type="b">
+      <default>true</default>
+      <summary>Show a StatusNotifierItem icon in the top bar</summary>
+    </key>
+    <key name="start-hidden" type="b">
+      <default>false</default>
+      <summary>Start with no window shown (background only)</summary>
+    </key>
+
+    <!-- ============================ Jira ============================ -->
+    <key name="jira-site" type="s">
+      <default>''</default>
+      <summary>Jira Cloud site, e.g. https://your-company.atlassian.net</summary>
+    </key>
+    <key name="jira-email" type="s">
+      <default>''</default>
+      <summary>Jira account email (username for API token auth)</summary>
+    </key>
+    <key name="jira-token" type="s">
+      <default>''</default>
+      <summary>Jira API token (NOT your password)</summary>
+    </key>
+    <key name="jira-jql" type="s">
+      <default>'assignee = currentUser() AND statusCategory != Done ORDER BY priority DESC, updated DESC'</default>
+      <summary>JQL query for the issues to display</summary>
+    </key>
+    <key name="jira-refresh-minutes" type="i">
+      <range min="0" max="1440"/>
+      <default>5</default>
+      <summary>Auto-refresh interval in minutes (0 = manual only)</summary>
+    </key>
+    <key name="jira-max-results" type="i">
+      <range min="10" max="200"/>
+      <default>50</default>
+      <summary>Maximum number of issues to fetch per call</summary>
+    </key>
+    <key name="jira-category-count" type="i">
+      <range min="1" max="10"/>
+      <default>3</default>
+      <summary>Number of Jira categories (tabs)</summary>
+    </key>
+    <key name="jira-category-names" type="as">
+      <default>['Por hacer','En curso','Hechas','Otras','Cat 5','Cat 6','Cat 7','Cat 8','Cat 9','Cat 10']</default>
+      <summary>Display name of each Jira category</summary>
+    </key>
+    <key name="jira-category-colors" type="as">
+      <default>['#42526e','#f5a623','#2ecc71','#9b59b6','#3498db','#e67e22','#1abc9c','#e74c3c','#34495e','#16a085']</default>
+      <summary>Hex color of each Jira category</summary>
+    </key>
+    <key name="jira-category-text-colors" type="as">
+      <default>['white','white','white','white','white','white','white','white','white','white']</default>
+      <summary>"white" or "black" text color of each Jira category swatch</summary>
+    </key>
+    <key name="jira-category-filter-fields" type="as">
+      <default>['status','status','status','status','status','status','status','status','status','status']</default>
+      <summary>Field each Jira category filters on: statusCategory/issuetype/status/priority/empty</summary>
+    </key>
+    <key name="jira-category-filter-values" type="as">
+      <default>['','','','','','','','','','']</default>
+      <summary>Value to match for each Jira category (use ';' for OR)</summary>
+    </key>
+    <key name="jira-status-names" type="as">
+      <default>[]</default>
+      <summary>Status names whose chip color is overridden</summary>
+    </key>
+    <key name="jira-status-colors" type="as">
+      <default>[]</default>
+      <summary>Hex color for each overridden status name</summary>
+    </key>
+    <key name="jira-debug" type="b">
+      <default>true</default>
+      <summary>Collect Jira fetch/parse debug traces</summary>
+    </key>
+
+    <!-- ======================= GitHub Projects ======================= -->
+    <key name="gh-token" type="s">
+      <default>''</default>
+      <summary>GitHub Personal Access Token</summary>
+    </key>
+    <key name="gh-owner" type="s">
+      <default>''</default>
+      <summary>GitHub login of the project owner (user or organization)</summary>
+    </key>
+    <key name="gh-owner-type" type="s">
+      <default>'user'</default>
+      <summary>"user" or "organization"</summary>
+    </key>
+    <key name="gh-project-number" type="i">
+      <range min="1" max="99999"/>
+      <default>1</default>
+      <summary>Project (V2) number as shown in the URL .../projects/N</summary>
+    </key>
+    <key name="gh-status-field" type="s">
+      <default>'Status'</default>
+      <summary>Name of the single-select field used as Status</summary>
+    </key>
+    <key name="gh-include-closed" type="b">
+      <default>true</default>
+      <summary>Include closed issues / merged PRs in the fetch</summary>
+    </key>
+    <key name="gh-refresh-minutes" type="i">
+      <range min="0" max="1440"/>
+      <default>5</default>
+      <summary>Auto-refresh interval in minutes (0 = manual only)</summary>
+    </key>
+    <key name="gh-max-results" type="i">
+      <range min="10" max="300"/>
+      <default>100</default>
+      <summary>Maximum number of project items to fetch per call</summary>
+    </key>
+    <key name="gh-category-count" type="i">
+      <range min="1" max="4"/>
+      <default>3</default>
+      <summary>Number of GitHub Projects categories (tabs)</summary>
+    </key>
+    <key name="gh-category-names" type="as">
+      <default>['Todo','In Progress','Done','Otras']</default>
+      <summary>Display name of each GitHub Projects category</summary>
+    </key>
+    <key name="gh-category-colors" type="as">
+      <default>['#6e7681','#d29922','#238636','#8957e5']</default>
+      <summary>Hex color of each GitHub Projects category</summary>
+    </key>
+    <key name="gh-category-text-colors" type="as">
+      <default>['white','white','white','white']</default>
+      <summary>"white" or "black" text color of each GitHub category swatch</summary>
+    </key>
+    <key name="gh-category-filter-fields" type="as">
+      <default>['status','status','status','']</default>
+      <summary>Field each GitHub category filters on: status/type/state/repo/empty</summary>
+    </key>
+    <key name="gh-category-filter-values" type="as">
+      <default>['Todo','In Progress','Done','']</default>
+      <summary>Value to match for each GitHub category (use ';' for OR)</summary>
+    </key>
+    <key name="gh-debug" type="b">
+      <default>true</default>
+      <summary>Collect GitHub fetch/parse debug traces</summary>
+    </key>
+
+    <!-- ===================== Notion two-way sync ===================== -->
+    <key name="notion-api-token" type="s">
+      <default>''</default>
+      <summary>Notion internal integration token (secret_… / ntn_…)</summary>
+    </key>
+    <key name="notion-parent-page-id" type="s">
+      <default>''</default>
+      <summary>ID of the Notion page under which the ToDo database is created</summary>
+    </key>
+    <key name="notion-database-id" type="s">
+      <default>''</default>
+      <summary>ID of the Notion database the ToDo tasks sync into</summary>
+    </key>
+    <key name="notion-sync-on-open" type="b">
+      <default>true</default>
+      <summary>Sync the ToDo list with Notion when the app / popup opens</summary>
+    </key>
+    <key name="notion-refresh-minutes" type="i">
+      <range min="0" max="1440"/>
+      <default>10</default>
+      <summary>Notion auto-sync interval in minutes (0 = manual only)</summary>
+    </key>
+  </schema>
+</schemalist>
