@@ -58,6 +58,15 @@
       <default>100</default>
       <summary>UI scale (%) applied inside the tray popup window</summary>
     </key>
+    <key name="popup-autohide" type="b">
+      <default>true</default>
+      <summary>Close the tray popup automatically when it loses focus</summary>
+      <description>Makes the popup behave like a momentary panel (e.g. the GNOME calendar): it closes as soon as you click outside it.</description>
+    </key>
+    <key name="popup-frameless" type="b">
+      <default>true</default>
+      <summary>Show the tray popup without a title bar (widget look)</summary>
+    </key>
 
     <!-- ===================== Background / tray ===================== -->
     <key name="run-in-background" type="b">

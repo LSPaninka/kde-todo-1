@@ -43,6 +43,17 @@ sigue siendo usable por ventana; podés abrir la ventanita con
 - **Arrancar oculto** (`start-hidden`) — útil para autostart.
 - **Tamaño** y **escala** de la ventanita (`popup-width`, `popup-height`,
   `popup-scale`).
+- **Cerrar al perder el foco** (`popup-autohide`) — la ventanita se comporta
+  como un **widget momentáneo** (como el panel del calendario de GNOME): se
+  cierra apenas hacés clic afuera.
+- **Sin barra de título** (`popup-frameless`) — aspecto de panel/widget.
+
+> Nota sobre Wayland (GNOME/Ubuntu por defecto): una app de terceros **no**
+> puede anclar su ventana justo debajo del icono de la barra (eso sólo lo hace
+> el propio *shell*). Por eso la ventanita se abre y se cierra momentáneamente y
+> se descarta al clickear afuera, pero es el compositor quien decide su posición
+> exacta en pantalla. En una sesión **Xorg** el gestor de ventanas suele
+> ubicarla de forma más predecible.
 
 ### Autostart en segundo plano
 

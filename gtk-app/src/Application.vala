@@ -174,6 +174,11 @@ namespace Ct {
             if (popup_window.visible) {
                 popup_window.set_visible (false);
             } else {
+                // If the popup was just auto-hidden by the same tray click that
+                // defocused it (< 300 ms ago), treat this as a dismiss, not a
+                // re-open — otherwise it would flicker back open.
+                int64 since = get_monotonic_time () - popup_window.last_hidden_us;
+                if (popup_window.last_hidden_us != 0 && since < 300000) return;
                 maybe_notion_sync ();
                 popup_window.present ();
             }

@@ -67,6 +67,13 @@ namespace Ct {
             gp.add (_spin ("popup-width", "Ancho (px)", 480, 2400, 20));
             gp.add (_spin ("popup-height", "Alto (px)", 360, 1800, 20));
             gp.add (_spin ("popup-scale", "Escala del contenido (%)", 70, 130, 5));
+            var autohide = new Adw.SwitchRow () { title = "Cerrar al perder el foco",
+                subtitle = "Se comporta como un widget momentáneo (se cierra al clickear afuera)" };
+            s.bind ("popup-autohide", autohide, "active", SettingsBindFlags.DEFAULT);
+            gp.add (autohide);
+            var frameless = new Adw.SwitchRow () { title = "Sin barra de título (aspecto de widget)" };
+            s.bind ("popup-frameless", frameless, "active", SettingsBindFlags.DEFAULT);
+            gp.add (frameless);
             page.add (gp);
 
             var gt = new Adw.PreferencesGroup () { title = "Bandeja y segundo plano" };

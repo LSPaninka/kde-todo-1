@@ -17,9 +17,11 @@ modos en una sola app:
 Se ejecuta de dos formas a la vez:
 
 1. Como **ventana de escritorio** completa (tamaño configurable).
-2. Como **ventanita** que se abre desde un **icono en la barra superior**
-   (bandeja / *StatusNotifierItem*). Por defecto mide **1000×700** y su tamaño
-   y escala son **parametrizables**. Incluye un botón para **abrir la app
+2. Como **ventanita** tipo *widget momentáneo* que se abre desde un **icono en
+   la barra superior** (bandeja / *StatusNotifierItem*): sin barra de título y
+   se **cierra sola al clickear afuera** (como el panel del calendario de
+   GNOME). Por defecto mide **1000×700** y su tamaño, escala, autocierre y
+   marco son **parametrizables**. Incluye un botón para **abrir la app
    completa**.
 
 La app **sigue corriendo en segundo plano** cuando cerrás la ventana desde el
