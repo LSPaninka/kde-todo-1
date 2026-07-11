@@ -69,7 +69,8 @@ namespace Ct {
                     notion_page_id TEXT NOT NULL DEFAULT '',
                     updated_at INTEGER NOT NULL DEFAULT 0,
                     notion_last_edited TEXT NOT NULL DEFAULT '',
-                    notion_synced_at INTEGER NOT NULL DEFAULT 0
+                    notion_synced_at INTEGER NOT NULL DEFAULT 0,
+                    jira_key TEXT NOT NULL DEFAULT ''
                 )""");
                 _exec ("""CREATE TABLE IF NOT EXISTS subtasks (
                     id INTEGER PRIMARY KEY,
@@ -88,8 +89,21 @@ namespace Ct {
                 if (had_row) _exec ("UPDATE schema_version SET v=1");
                 else _exec ("INSERT INTO schema_version (v) VALUES (1)");
             }
-            // Current schema is v1-complete (tasks table already carries the
-            // Notion columns). Future migrations: bump and ALTER here.
+            // Idempotent column upgrades for DBs created by an earlier build.
+            // (tasks already carries the Notion columns in the v1 CREATE.)
+            _ensure_column ("tasks", "jira_key", "TEXT NOT NULL DEFAULT ''");
+        }
+
+        // Add `col` to `table` only if it's missing (safe to call every start).
+        private void _ensure_column (string table, string col, string def_sql) {
+            Sqlite.Statement st;
+            if (db.prepare_v2 ("PRAGMA table_info(" + table + ")", -1, out st) != Sqlite.OK) return;
+            bool found = false;
+            while (st.step () == Sqlite.ROW) {
+                if (st.column_text (1) == col) { found = true; break; }
+            }
+            if (!found)
+                _exec ("ALTER TABLE %s ADD COLUMN %s %s".printf (table, col, def_sql));
         }
 
         // ---- helpers ----------------------------------------------------
@@ -154,6 +168,7 @@ namespace Ct {
                         case "updated_at": t.updated_at = st.column_int64 (c); break;
                         case "notion_last_edited": t.notion_last_edited = s (st, c); break;
                         case "notion_synced_at": t.notion_synced_at = st.column_int64 (c); break;
+                        case "jira_key": t.jira_key = s (st, c); break;
                     }
                 }
                 bool arch = false;
@@ -188,8 +203,8 @@ namespace Ct {
             Sqlite.Statement st;
             db.prepare_v2 (
                 "INSERT OR REPLACE INTO tasks " +
-                "(id, title, description, category, priority, done, archived, created_at, archived_at, notion_page_id, updated_at, notion_last_edited, notion_synced_at) " +
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", -1, out st);
+                "(id, title, description, category, priority, done, archived, created_at, archived_at, notion_page_id, updated_at, notion_last_edited, notion_synced_at, jira_key) " +
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", -1, out st);
             st.bind_int64 (1, t.id);
             st.bind_text (2, t.title);
             st.bind_text (3, t.description);
@@ -203,6 +218,7 @@ namespace Ct {
             st.bind_int64 (11, t.updated_at);
             st.bind_text (12, t.notion_last_edited);
             st.bind_int64 (13, t.notion_synced_at);
+            st.bind_text (14, t.jira_key);
             st.step ();
 
             Sqlite.Statement del;

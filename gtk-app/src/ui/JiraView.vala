@@ -120,6 +120,9 @@ namespace Ct {
             if (sub.len > 0) row.subtitle = sub.str;
             row.activatable = true;
 
+            var hb = Widgets.hours_bar (iss.spent_sec, iss.original_sec);
+            if (hb != null) row.add_suffix (hb);
+
             string color = jira.status_override_color (iss.status_name) ?? Widgets.jira_status_color (iss.status_color);
             if (iss.status_name.length > 0)
                 row.add_suffix (Widgets.status_chip (iss.status_name, color));
@@ -127,12 +130,94 @@ namespace Ct {
             open.add_css_class ("dim");
             row.add_suffix (open);
             row.activated.connect (() => open_detail (iss));
+
+            // Right-click → context menu (detalle / Jira / cambiar estado).
+            var rc = new Gtk.GestureClick () { button = Gdk.BUTTON_SECONDARY };
+            rc.pressed.connect ((n, x, y) => show_context_menu (row, iss, x, y));
+            row.add_controller (rc);
             return row;
         }
 
         private void open_detail (JiraIssue iss) {
             var dlg = new JiraDetailDialog (jira, iss);
             dlg.present (this);
+        }
+
+        private void show_context_menu (Gtk.Widget row, JiraIssue iss, double x, double y) {
+            var pop = new Gtk.Popover () { has_arrow = true, autohide = true };
+            pop.set_parent (row);
+            pop.set_pointing_to ({ (int) x, (int) y, 1, 1 });
+            pop.closed.connect (() => pop.unparent ());
+
+            var box = new Gtk.Box (Gtk.Orientation.VERTICAL, 2) {
+                margin_top = 6, margin_bottom = 6, margin_start = 6, margin_end = 6, width_request = 210
+            };
+            var detail = _menu_button ("Ver detalle", "view-reveal-symbolic");
+            detail.clicked.connect (() => { pop.popdown (); open_detail (iss); });
+            box.append (detail);
+            var web = _menu_button ("Ver en Jira", "web-browser-symbolic");
+            web.clicked.connect (() => {
+                pop.popdown ();
+                if (iss.url.length > 0) { try { AppInfo.launch_default_for_uri (iss.url, null); } catch (Error e) { } }
+            });
+            box.append (web);
+            box.append (new Gtk.Separator (Gtk.Orientation.HORIZONTAL) { margin_top = 4, margin_bottom = 4 });
+            var heading = new Gtk.Label ("Cambiar estado") { xalign = 0, margin_start = 6 };
+            heading.add_css_class ("caption-heading");
+            box.append (heading);
+            JiraUi.append_transitions (box, jira, iss.key, pop, () => { });
+            pop.set_child (box);
+            pop.popup ();
+        }
+
+        private Gtk.Button _menu_button (string label, string icon) {
+            var b = new Gtk.Button () { has_frame = false };
+            var h = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 8);
+            h.append (new Gtk.Image.from_icon_name (icon));
+            h.append (new Gtk.Label (label) { xalign = 0, hexpand = true });
+            b.child = h;
+            return b;
+        }
+    }
+
+    // Shared helper: fill a box with the workflow transitions for `key`,
+    // applying one on click (then refreshing the list). Used by the card
+    // context menu and the detail dialog's "Cambiar estado" button.
+    public delegate void AppliedFunc ();
+
+    namespace JiraUi {
+        public void append_transitions (Gtk.Box box, JiraStore jira, string key,
+                                        Gtk.Popover pop, owned AppliedFunc on_applied) {
+            var spinner = new Gtk.Spinner () { spinning = true, margin_top = 4, margin_bottom = 4 };
+            box.append (spinner);
+            jira.fetch_transitions.begin (key, (o, res) => {
+                var list = jira.fetch_transitions.end (res);
+                box.remove (spinner);
+                if (list.size == 0) {
+                    var e = new Gtk.Label ("Sin transiciones disponibles") { xalign = 0, margin_start = 6 };
+                    e.add_css_class ("dim");
+                    box.append (e);
+                    return;
+                }
+                foreach (var tr in list) {
+                    var name = tr.name.length > 0 ? tr.name : tr.to_status;
+                    var b = new Gtk.Button () { has_frame = false };
+                    var h = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 8);
+                    if (tr.to_status_color.length > 0)
+                        h.append (Widgets.color_dot (Widgets.jira_status_color (tr.to_status_color), 9));
+                    h.append (new Gtk.Label (name) { xalign = 0, hexpand = true });
+                    b.child = h;
+                    string tid = tr.id;
+                    b.clicked.connect (() => {
+                        pop.popdown ();
+                        jira.transition_issue.begin (key, tid, (o2, res2) => {
+                            string err; bool ok = jira.transition_issue.end (res2, out err);
+                            if (ok) { jira.fetch.begin (); on_applied (); }
+                        });
+                    });
+                    box.append (b);
+                }
+            });
         }
     }
 
@@ -141,10 +226,15 @@ namespace Ct {
         private JiraStore jira;
         private JiraIssue issue;
         private Gtk.Box body;
+        private int64 link_task_id;
+        private TaskStore? task_store;
 
-        public JiraDetailDialog (JiraStore jira, JiraIssue issue) {
+        public JiraDetailDialog (JiraStore jira, JiraIssue issue,
+                                 int64 link_task_id = 0, TaskStore? task_store = null) {
             this.jira = jira;
             this.issue = issue;
+            this.link_task_id = link_task_id;
+            this.task_store = task_store;
             content_width = 560;
             content_height = 640;
             title = issue.key;
@@ -155,6 +245,33 @@ namespace Ct {
         private void build () {
             var tv = new Adw.ToolbarView ();
             var header = new Adw.HeaderBar ();
+
+            var status_btn = new Gtk.Button.from_icon_name ("emblem-synchronizing-symbolic");
+            status_btn.tooltip_text = "Cambiar estado";
+            status_btn.clicked.connect (() => {
+                var pop = new Gtk.Popover () { autohide = true };
+                pop.set_parent (status_btn);
+                pop.closed.connect (() => pop.unparent ());
+                var box = new Gtk.Box (Gtk.Orientation.VERTICAL, 2) {
+                    margin_top = 6, margin_bottom = 6, margin_start = 6, margin_end = 6, width_request = 210
+                };
+                JiraUi.append_transitions (box, jira, issue.key, pop, () => load ());
+                pop.set_child (box);
+                pop.popup ();
+            });
+            header.pack_start (status_btn);
+
+            if (link_task_id > 0 && task_store != null) {
+                var repick = new Gtk.Button.from_icon_name ("document-edit-symbolic");
+                repick.tooltip_text = "Cambiar subtarea";
+                repick.clicked.connect (() => {
+                    var picker = new JiraSubtaskPicker (jira, link_task_id, issue.key);
+                    picker.picked.connect ((tid, key) => { task_store.set_jira_key (tid, key); close (); });
+                    picker.present (this);
+                });
+                header.pack_start (repick);
+            }
+
             var openweb = new Gtk.Button.from_icon_name ("web-browser-symbolic");
             openweb.tooltip_text = "Abrir en el navegador";
             openweb.clicked.connect (() => {
@@ -201,6 +318,13 @@ namespace Ct {
             var summ = new Gtk.Label (summary) { wrap = true, xalign = 0 };
             summ.add_css_class ("title-3");
             body.append (summ);
+
+            // Consumed-hours bar (from timetracking).
+            var tt = JiraStore._obj (f, "timetracking");
+            int orig = JiraStore._int (tt, "originalEstimateSeconds");
+            int spent = JiraStore._int (tt, "timeSpentSeconds");
+            var hb = Widgets.hours_bar (spent, orig);
+            if (hb != null) { hb.halign = Gtk.Align.START; body.append (hb); }
 
             var meta = new Adw.PreferencesGroup ();
             var status = JiraStore._obj (f, "status");

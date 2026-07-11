@@ -27,10 +27,28 @@ Hasta **10** categorías configurables. Cada una filtra por un **campo** y un
   (Highest/High/Medium/Low/Lowest), o vacío (todas).
 - **Valor**: usá `;` para separar varios valores (OR). Ej.: `To Do;In Progress`.
 
-Cada incidencia muestra su código (`KEY`), su resumen y un chip con el estado.
-Al hacer clic se abre el **detalle** (estado, tipo, prioridad, responsable,
-descripción y comentarios), con un botón para abrirla en el navegador. El texto
-de descripción/comentarios se aplana desde el formato ADF de Atlassian.
+Cada incidencia muestra su código (`KEY`), su resumen, una **barra de horas
+consumidas** (si tiene estimación: `min(gastado, estimado) / estimado`, nunca
+supera el 100%) y un chip con el estado. Al hacer clic se abre el **detalle**
+(estado, tipo, prioridad, responsable, descripción y comentarios), con la misma
+barra de horas y botones para **cambiar de estado** y abrirla en el navegador. El
+texto de descripción/comentarios se aplana desde el formato ADF de Atlassian.
+
+## Cambiar estado (transiciones)
+
+**Clic derecho** en una tarjeta abre un menú contextual con *Ver detalle*, *Ver
+en Jira* y **Cambiar estado** (las transiciones del flujo de trabajo, vía
+`GET`/`POST /rest/api/3/issue/{key}/transitions`). El detalle también trae un
+botón **Cambiar estado**. Al aplicar una transición se refresca la lista.
+
+## Anexar tareas ToDo a Jira
+
+Con **Preferencias → General → Anexar Jira** activado, cada tarea del modo ToDo
+muestra un botón: un guion `–` si no está anexada, o el código de la incidencia
+(`CP-123`) si lo está. Al hacer clic se abre el **selector de subtareas** de Jira
+(busca en las incidencias cargadas por tu JQL) o, si ya está anexada, el detalle
+de la incidencia con un botón **Cambiar subtarea**. El vínculo se guarda por tarea
+(columna `jira_key`, esquema SQLite v4).
 
 ## Errores frecuentes
 

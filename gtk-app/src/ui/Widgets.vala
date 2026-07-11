@@ -46,6 +46,9 @@ namespace Ct {
                 }
                 .mono { font-family: monospace; }
                 .card-pad { padding: 6px; }
+                progressbar.ct-hours trough { min-height: 5px; }
+                progressbar.ct-hours progress { min-height: 5px; background: #3498db; }
+                progressbar.ct-hours-full progress { background: #e74c3c; }
             """);
             Gtk.StyleContext.add_provider_for_display (
                 Gdk.Display.get_default (),
@@ -118,6 +121,27 @@ namespace Ct {
                 case "warm-red":      return "#e74c3c";
                 default:              return "#6e7681";
             }
+        }
+
+        // Compact consumed-hours bar: "spent / original" over a thin bar.
+        // Returns null when there's no estimate to show.
+        public Gtk.Widget? hours_bar (int spent_sec, int original_sec) {
+            double ratio = Ct.JiraStore.consumed_ratio (original_sec, spent_sec);
+            if (ratio < 0) return null;
+            var box = new Gtk.Box (Gtk.Orientation.VERTICAL, 1) { valign = Gtk.Align.CENTER, width_request = 92 };
+            var lbl = new Gtk.Label ("%s / %s".printf (
+                Ct.JiraStore.fmt_seconds (spent_sec), Ct.JiraStore.fmt_seconds (original_sec)));
+            lbl.add_css_class ("caption");
+            lbl.add_css_class ("dim");
+            lbl.halign = Gtk.Align.CENTER;
+            var bar = new Gtk.ProgressBar () { fraction = ratio };
+            bar.add_css_class ("ct-hours");
+            if (ratio >= 1.0) bar.add_css_class ("ct-hours-full");
+            box.append (lbl);
+            box.append (bar);
+            box.tooltip_text = "Consumido %s de %s".printf (
+                Ct.JiraStore.fmt_seconds (spent_sec), Ct.JiraStore.fmt_seconds (original_sec));
+            return box;
         }
 
         public string gh_state_color (string state) {

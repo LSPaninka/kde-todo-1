@@ -47,6 +47,10 @@ namespace Ct {
             var confirm = new Adw.SwitchRow () { title = "Confirmar al eliminar tareas archivadas" };
             s.bind ("confirm-delete", confirm, "active", SettingsBindFlags.DEFAULT);
             g2.add (confirm);
+            var jlink = new Adw.SwitchRow () { title = "Anexar Jira",
+                subtitle = "Mostrar en cada tarea un botón para anexar una subtarea de Jira" };
+            s.bind ("todo-jira-link", jlink, "active", SettingsBindFlags.DEFAULT);
+            g2.add (jlink);
             page.add (g2);
             return page;
         }

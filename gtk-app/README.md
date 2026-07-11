@@ -5,12 +5,14 @@ libadwaita** con **Vala**, el plasmoide de KDE *Categorized ToDo*. Combina tres
 modos en una sola app:
 
 - **ToDo** — lista de tareas local con hasta **7 categorías**, subtareas,
-  prioridades (XS/S/M/L/XL), archivo, e **importación/exportación** por
-  categoría. Opcionalmente **sincroniza en dos sentidos con Notion**.
+  prioridades (XS/S/M/L/XL), archivo, expandir/contraer todo, e
+  **importación/exportación** por categoría. Opcionalmente **sincroniza en dos
+  sentidos con Notion** y permite **anexar cada tarea a una subtarea de Jira**.
 - **Jira** — vista de solo lectura de las incidencias que devuelve tu consulta
   **JQL** (Jira Cloud REST v3), agrupadas en hasta **10 categorías**
-  configurables. Al hacer clic en una incidencia se abre su detalle
-  (descripción + comentarios).
+  configurables, con **barra de horas consumidas** por tarjeta y **cambio de
+  estado** (clic derecho → transiciones). Al hacer clic se abre su detalle
+  (descripción + comentarios + cambiar estado).
 - **GitHub Projects** — vista de solo lectura de un **Projects (V2)** vía la API
   GraphQL v4, agrupada en hasta **4 categorías** configurables.
 

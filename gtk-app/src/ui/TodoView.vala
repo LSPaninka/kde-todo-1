@@ -12,12 +12,14 @@ namespace Ct {
         private TaskStore store;
         private Config config;
         private NotionSyncStore notion_sync;
+        private JiraStore jira;
 
         private Adw.ViewStack stack;
         private Adw.ViewSwitcher switcher;
         private Gtk.Label notion_status;
         private Gtk.Button notion_btn;
         private TaskEditDialog? dialog = null;
+        private Gee.ArrayList<Adw.ExpanderRow> _expanders = new Gee.ArrayList<Adw.ExpanderRow> ();
 
         public TodoView (Application app) {
             Object (orientation: Gtk.Orientation.VERTICAL, spacing: 0);
@@ -25,11 +27,14 @@ namespace Ct {
             this.store = app.store;
             this.config = app.config;
             this.notion_sync = app.notion_sync;
+            this.jira = app.jira;
             build ();
             store.changed.connect (rebuild);
+            jira.changed.connect (() => { if (config.get_bool ("todo-jira-link")) rebuild (); });
             config.changed.connect ((key) => {
                 if (key == "category-count" || key == "category-names" ||
-                    key == "category-colors" || key == "show-priority-icons")
+                    key == "category-colors" || key == "show-priority-icons" ||
+                    key == "todo-jira-link")
                     rebuild ();
             });
             notion_sync.changed.connect (update_notion_footer);
@@ -98,6 +103,7 @@ namespace Ct {
 
         private void rebuild () {
             string? current = stack.visible_child_name;
+            _expanders.clear ();
             // Clear existing pages.
             var child = stack.get_first_child ();
             while (child != null) {
@@ -136,11 +142,23 @@ namespace Ct {
             var group = new Adw.PreferencesGroup ();
             group.title = config.category_name (cat);
 
+            var hdr = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 2);
+            var collapse = new Gtk.Button.from_icon_name ("view-restore-symbolic");
+            collapse.add_css_class ("flat");
+            collapse.tooltip_text = "Contraer todas las descripciones/subtareas";
+            collapse.clicked.connect (() => set_all_expanded (false));
+            var expand = new Gtk.Button.from_icon_name ("view-fullscreen-symbolic");
+            expand.add_css_class ("flat");
+            expand.tooltip_text = "Expandir todas las subtareas";
+            expand.clicked.connect (() => set_all_expanded (true));
             var add = new Gtk.Button.from_icon_name ("list-add-symbolic");
             add.add_css_class ("flat");
             add.tooltip_text = "Nueva tarea";
             add.clicked.connect (() => open_new (cat));
-            group.header_suffix = add;
+            hdr.append (collapse);
+            hdr.append (expand);
+            hdr.append (add);
+            group.header_suffix = hdr;
 
             var tasks = store.tasks_for_category (cat);
             _sort_tasks (tasks);
@@ -223,6 +241,7 @@ namespace Ct {
 
             if (t.subtasks.size > 0) {
                 exp = new Adw.ExpanderRow ();
+                _expanders.add (exp);
                 prow = exp;
             } else {
                 action = new Adw.ActionRow ();
@@ -241,6 +260,16 @@ namespace Ct {
             else action.add_prefix (_prefix_box (t, show_cat_dot, check));
 
             var suffix = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 6) { valign = Gtk.Align.CENTER };
+            if (config.get_bool ("todo-jira-link")) {
+                var jk = t.jira_key;
+                var linkb = new Gtk.Button.with_label (jk.length > 0 ? jk : "–") { valign = Gtk.Align.CENTER };
+                if (jk.length > 0) linkb.add_css_class ("accent");
+                linkb.tooltip_text = jk.length > 0
+                    ? "Jira: %s (clic para ver / cambiar)".printf (jk)
+                    : "Anexar subtarea de Jira";
+                linkb.clicked.connect (() => open_jira_link (t));
+                suffix.append (linkb);
+            }
             if (config.get_bool ("show-priority-icons"))
                 suffix.append (Widgets.priority_badge (t.priority));
             int pend = t.pending_subtasks ();
@@ -316,6 +345,31 @@ namespace Ct {
             return nl >= 0 ? s.substring (0, nl) : s;
         }
         private static string _escape (string s) { return Markup.escape_text (s); }
+
+        private void set_all_expanded (bool expanded) {
+            foreach (var e in _expanders) e.expanded = expanded;
+        }
+
+        private void open_jira_link (Task t) {
+            if (t.jira_key.length == 0) {
+                var picker = new JiraSubtaskPicker (jira, t.id, "");
+                picker.picked.connect ((tid, key) => store.set_jira_key (tid, key));
+                picker.present (this);
+                return;
+            }
+            JiraIssue? found = null;
+            foreach (var it in jira.issues)
+                if (it.key == t.jira_key) { found = it; break; }
+            if (found == null) {
+                found = new JiraIssue ();
+                found.key = t.jira_key;
+                string site = config.get_string ("jira-site").strip ();
+                while (site.has_suffix ("/")) site = site.substring (0, site.length - 1);
+                if (site.length > 0) found.url = site + "/browse/" + t.jira_key;
+            }
+            var dlg = new JiraDetailDialog (jira, found, t.id, store);
+            dlg.present (this);
+        }
 
         // ---- dialogs / actions ------------------------------------------
         private void open_new (int cat) {

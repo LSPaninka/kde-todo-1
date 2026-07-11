@@ -13,6 +13,7 @@ sources = files(
   'ui/Widgets.vala',
   'ui/TodoView.vala',
   'ui/JiraView.vala',
+  'ui/JiraSubtaskPicker.vala',
   'ui/GhView.vala',
   'ui/TaskEditDialog.vala',
   'ui/Preferences.vala',

@@ -52,6 +52,9 @@ namespace Ct {
         public string notion_last_edited { get; set; default = ""; }
         public int64 notion_synced_at { get; set; default = 0; }
 
+        // Optional link to a Jira issue/subtask ("" = not linked).
+        public string jira_key { get; set; default = ""; }
+
         public Gee.ArrayList<Subtask> subtasks { get; set; }
 
         construct {
@@ -82,6 +85,21 @@ namespace Ct {
         public string parent_summary { get; set; default = ""; }
         public string updated { get; set; default = ""; }
         public string url { get; set; default = ""; }
+        // Time tracking (seconds) for the per-card consumed-hours bar.
+        public int original_sec { get; set; default = 0; }
+        public int spent_sec { get; set; default = 0; }
+    }
+
+    // A workflow transition available for a Jira issue.
+    public class JiraTransition : Object {
+        public string id { get; set; default = ""; }
+        public string name { get; set; default = ""; }
+        public string to_status { get; set; default = ""; }
+        public string to_status_color { get; set; default = ""; }
+
+        public JiraTransition.with (string id, string name, string to_status, string color) {
+            this.id = id; this.name = name; this.to_status = to_status; this.to_status_color = color;
+        }
     }
 
     // A read-only GitHub Projects (V2) item.

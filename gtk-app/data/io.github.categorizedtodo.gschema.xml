@@ -31,6 +31,10 @@
       <default>true</default>
       <summary>Ask for confirmation before deleting archived tasks</summary>
     </key>
+    <key name="todo-jira-link" type="b">
+      <default>false</default>
+      <summary>Show a button on each ToDo task to link it to a Jira issue/subtask</summary>
+    </key>
 
     <!-- ===================== Window / popup sizing ===================== -->
     <key name="main-width" type="i">

@@ -134,6 +134,16 @@ namespace Ct {
             bump ();
         }
 
+        // Link (or unlink, with "") a task to a Jira issue/subtask key.
+        public void set_jira_key (int64 id, string key) {
+            var t = get_any_task (id);
+            if (t == null) return;
+            t.jira_key = key;
+            touch (t);
+            database.save_task (t, is_archived (t.id));
+            bump ();
+        }
+
         public void toggle_task_done (int64 id) {
             var t = get_task (id);
             if (t == null) return;

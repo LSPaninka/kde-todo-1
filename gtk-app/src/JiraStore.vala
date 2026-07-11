@@ -115,7 +115,7 @@ namespace Ct {
 
             loading = true; last_error = ""; bump ();
 
-            string fields = "summary,status,priority,issuetype,parent,updated";
+            string fields = "summary,status,priority,issuetype,parent,updated,timetracking";
             string url = site + "/rest/api/3/search/jql?jql=" + Uri.escape_string (jql, null, true)
                        + "&maxResults=%d&fields=%s".printf (max, fields);
             _append_debug ("GET " + url + "\n");
@@ -249,6 +249,83 @@ namespace Ct {
             }
         }
 
+        // ---- status transitions ----------------------------------------
+        //   GET  /rest/api/3/issue/{key}/transitions → available transitions
+        //   POST /rest/api/3/issue/{key}/transitions → apply one
+        public async Gee.ArrayList<JiraTransition> fetch_transitions (string key) {
+            var outl = new Gee.ArrayList<JiraTransition> ();
+            string site  = config.get_string ("jira-site").strip ();
+            while (site.has_suffix ("/")) site = site.substring (0, site.length - 1);
+            string email = config.get_string ("jira-email").strip ();
+            string token = config.get_string ("jira-token").strip ();
+            if (site.length == 0 || email.length == 0 || token.length == 0) return outl;
+            var msg = new Soup.Message ("GET",
+                site + "/rest/api/3/issue/" + Uri.escape_string (key, null, true) + "/transitions");
+            msg.request_headers.append ("Authorization", "Basic " + Base64.encode ((email + ":" + token).data));
+            msg.request_headers.append ("Accept", "application/json");
+            try {
+                var bytes = yield session.send_and_read_async (msg, Priority.DEFAULT, null);
+                if (msg.status_code != 200) return outl;
+                var p = new Json.Parser (); p.load_from_data ((string) bytes.get_data ());
+                var root = p.get_root ().get_object ();
+                if (!root.has_member ("transitions")) return outl;
+                var arr = root.get_array_member ("transitions");
+                for (uint i = 0; i < arr.get_length (); i++) {
+                    var t = arr.get_object_element (i);
+                    var to = _obj (t, "to");
+                    outl.add (new JiraTransition.with (
+                        _str (t, "id"), _str (t, "name"),
+                        _str (to, "name"), _str (_obj (to, "statusCategory"), "colorName")));
+                }
+            } catch (Error e) { _append_debug ("[!] transitions: " + e.message + "\n"); }
+            return outl;
+        }
+
+        public async bool transition_issue (string key, string transition_id, out string err) {
+            err = "";
+            string site  = config.get_string ("jira-site").strip ();
+            while (site.has_suffix ("/")) site = site.substring (0, site.length - 1);
+            string email = config.get_string ("jira-email").strip ();
+            string token = config.get_string ("jira-token").strip ();
+            if (site.length == 0 || email.length == 0 || token.length == 0) { err = "Faltan credenciales."; return false; }
+            var b = new Json.Builder ();
+            b.begin_object ();
+            b.set_member_name ("transition");
+            b.begin_object (); b.set_member_name ("id"); b.add_string_value (transition_id); b.end_object ();
+            b.end_object ();
+            var gen = new Json.Generator (); gen.set_root (b.get_root ());
+            var msg = new Soup.Message ("POST",
+                site + "/rest/api/3/issue/" + Uri.escape_string (key, null, true) + "/transitions");
+            msg.request_headers.append ("Authorization", "Basic " + Base64.encode ((email + ":" + token).data));
+            msg.request_headers.append ("Accept", "application/json");
+            msg.set_request_body_from_bytes ("application/json", new Bytes (gen.to_data (null).data));
+            try {
+                var bytes = yield session.send_and_read_async (msg, Priority.DEFAULT, null);
+                if (msg.status_code == 204 || msg.status_code == 200) return true;
+                err = _extract_error ((string) bytes.get_data ());
+                if (err.length == 0) err = "HTTP %u".printf (msg.status_code);
+                return false;
+            } catch (Error e) { err = "Error de red: " + e.message; return false; }
+        }
+
+        // Consumed-hours ratio for the progress bar: min(spent, original)/original,
+        // clamped to [0,1]. Returns -1 when there is no estimate to show.
+        public static double consumed_ratio (int original_sec, int spent_sec) {
+            if (original_sec <= 0) return -1;
+            double r = (double) int.min (spent_sec, original_sec) / (double) original_sec;
+            return r.clamp (0.0, 1.0);
+        }
+
+        public static string fmt_seconds (int s) {
+            if (s <= 0) return "0h";
+            int hh = s / 3600;
+            int mm = (s % 3600) / 60;
+            var parts = new string[0];
+            if (hh > 0) parts += "%dh".printf (hh);
+            if (mm > 0) parts += "%dm".printf (mm);
+            return parts.length > 0 ? string.joinv (" ", parts) : "0h";
+        }
+
         // Flatten an ADF node tree to plain text.
         public static string adf_to_text (Json.Node? node) {
             if (node == null) return "";
@@ -353,6 +430,9 @@ namespace Ct {
             var parent = _obj (f, "parent");
             iss.parent_key = _str (parent, "key");
             iss.parent_summary = _str (_obj (parent, "fields"), "summary");
+            var tt = _obj (f, "timetracking");
+            iss.original_sec = _int (tt, "originalEstimateSeconds");
+            iss.spent_sec = _int (tt, "timeSpentSeconds");
             iss.updated = _str (f, "updated");
             iss.url = site + "/browse/" + iss.key;
             return iss;
@@ -371,6 +451,8 @@ namespace Ct {
             b.set_member_name ("isSubtask"); b.add_boolean_value (iss.is_subtask);
             b.set_member_name ("parentKey"); b.add_string_value (iss.parent_key);
             b.set_member_name ("parentSummary"); b.add_string_value (iss.parent_summary);
+            b.set_member_name ("originalSec"); b.add_int_value (iss.original_sec);
+            b.set_member_name ("spentSec"); b.add_int_value (iss.spent_sec);
             b.set_member_name ("updated"); b.add_string_value (iss.updated);
             b.set_member_name ("url"); b.add_string_value (iss.url);
             b.end_object ();
@@ -393,6 +475,8 @@ namespace Ct {
                 iss.is_subtask = o.has_member ("isSubtask") && o.get_boolean_member ("isSubtask");
                 iss.parent_key = _str (o, "parentKey");
                 iss.parent_summary = _str (o, "parentSummary");
+                iss.original_sec = _int (o, "originalSec");
+                iss.spent_sec = _int (o, "spentSec");
                 iss.updated = _str (o, "updated");
                 iss.url = _str (o, "url");
                 return iss;
@@ -412,6 +496,14 @@ namespace Ct {
             if (o.has_member (key) && o.get_member (key).get_node_type () == Json.NodeType.OBJECT)
                 return o.get_object_member (key);
             return new Json.Object ();
+        }
+        internal static int _int (Json.Object o, string key) {
+            if (o.has_member (key) && o.get_member (key).get_node_type () == Json.NodeType.VALUE) {
+                var n = o.get_member (key);
+                if (n.get_value_type () == typeof (int64)) return (int) o.get_int_member (key);
+                if (n.get_value_type () == typeof (double)) return (int) o.get_double_member (key);
+            }
+            return 0;
         }
 
         private static string _extract_error (string body) {
