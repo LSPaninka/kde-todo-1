@@ -686,6 +686,18 @@ QtObject {
         for (var i = 0; i < issues.length; i++) s += issues[i].spentSec | 0;
         return s;
     }
+    // Remaining like the worklog rings' "Disponible": sum of the calculated
+    // remaining per issue = Σ max(0, original - spent). The consumed-vs-total
+    // bar uses consumed / (consumed + remaining), same shape as the ring.
+    function totalRemainingSec() {
+        var s = 0;
+        for (var i = 0; i < issues.length; i++) {
+            var o = issues[i].originalSec | 0;
+            var sp = issues[i].spentSec | 0;
+            s += Math.max(0, o - sp);
+        }
+        return s;
+    }
 
     // Scan the raw issues for a sprint object in `field` whose state is active.
     function _extractActiveSprint(rawIssues, field) {

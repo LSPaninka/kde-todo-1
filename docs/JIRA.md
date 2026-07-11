@@ -12,11 +12,14 @@ Este documento explica cómo configurar el modo Jira, qué hace cada
 opción y consideraciones de seguridad.
 
 > **Novedades (v1.6):**
-> - Debajo de la lista, una **barra gruesa** con la sumatoria de horas
->   consumidas de todas las incidencias (`min(gastadas, original) / original`).
+> - Debajo de la lista, una **barra gruesa** de horas consumidas de todas las
+>   incidencias. Usa la misma cuenta que los anillos del worklog-calendar:
+>   `quemadas / (quemadas + disponible)`, con `quemadas = Σ gastadas` y
+>   `disponible = Σ max(0, original − gastadas)`. El indicador va **centrado
+>   debajo** de la barra e incluye un ícono a la izquierda.
 > - Una **barra celeste de progreso del sprint activo** (por tiempo
->   transcurrido) con el **% y las fechas de inicio → fin** en formato
->   `ddd d/M hh:mm` (ej. `lun 7/7 21:04`). El sprint se toma del campo
+>   transcurrido) con el **% centrado debajo** y las fechas de inicio → fin en
+>   formato `ddd d/M hh:mm` (ej. `lun 7/7 21:04`). El sprint se toma del campo
 >   configurable *Campo de Sprint* (por defecto `customfield_10020`).
 >
 > **Novedades (v1.4):**

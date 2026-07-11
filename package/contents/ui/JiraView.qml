@@ -230,89 +230,129 @@ Item {
         // -------- Totals + sprint bars --------
         ColumnLayout {
             Layout.fillWidth: true
-            spacing: 3
+            spacing: 6
 
-            // Sum of consumed hours across every fetched issue (thicker bar).
-            RowLayout {
+            // --- Consumed hours across every fetched issue (ring-style) ---
+            // consumed = Σ spent; remaining = Σ max(0, original - spent);
+            // fill = consumed / (consumed + remaining), like the worklog ring.
+            ColumnLayout {
                 Layout.fillWidth: true
-                spacing: PlasmaCore.Units.smallSpacing
-                visible: jira && (view._v, jira.totalOriginalSec()) > 0
+                spacing: 2
+                visible: jira && (view._v, (jira.totalSpentSec() + jira.totalRemainingSec())) > 0
 
-                PlasmaComponents3.Label {
-                    text: i18n("Consumido total")
-                    opacity: 0.7
-                    font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
-                }
-                Rectangle {
-                    id: totalsTrack
+                RowLayout {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 12
-                    radius: 6
-                    color: Qt.rgba(1, 1, 1, 0.10)
+                    spacing: PlasmaCore.Units.smallSpacing
+
+                    PlasmaCore.IconItem {
+                        source: "chronometer"
+                        Layout.preferredWidth: 16
+                        Layout.preferredHeight: 16
+                        Layout.alignment: Qt.AlignVCenter
+                        MouseArea {
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            PlasmaComponents3.ToolTip.text: i18n("Horas consumidas de todas las incidencias (quemadas / total)")
+                            PlasmaComponents3.ToolTip.visible: containsMouse
+                            PlasmaComponents3.ToolTip.delay: 500
+                        }
+                    }
                     Rectangle {
-                        property int orig: jira ? (view._v, jira.totalOriginalSec()) : 0
-                        property int spent: jira ? (view._v, jira.totalSpentSec()) : 0
-                        width: orig > 0 ? Math.round(totalsTrack.width * Math.min(1, spent / orig)) : 0
-                        height: parent.height
-                        radius: 6
-                        color: view._barColorFor(orig, spent)
+                        id: totalsTrack
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 14
+                        radius: 7
+                        color: Qt.rgba(1, 1, 1, 0.10)
+                        Rectangle {
+                            property int consumed: jira ? (view._v, jira.totalSpentSec()) : 0
+                            property int remaining: jira ? (view._v, jira.totalRemainingSec()) : 0
+                            property int total: consumed + remaining
+                            width: total > 0 ? Math.round(totalsTrack.width * (consumed / total)) : 0
+                            height: parent.height
+                            radius: 7
+                            color: view._barColorFor(total, consumed)
+                        }
                     }
                 }
+                // Indicator centered below the bar.
                 PlasmaComponents3.Label {
-                    text: jira ? (view._fmtH((view._v, jira.totalSpentSec())) + " / " +
-                                  view._fmtH(jira.totalOriginalSec())) : ""
-                    font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
                     opacity: 0.75
+                    font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                    text: {
+                        if (!jira) return "";
+                        var c = (view._v, jira.totalSpentSec());
+                        var t = c + jira.totalRemainingSec();
+                        var pct = t > 0 ? Math.round(c / t * 100) : 0;
+                        return view._fmtH(c) + " / " + view._fmtH(t) + "  ·  " + pct + "%";
+                    }
                 }
             }
 
-            // Sprint progress by elapsed time (celeste bar) + start/end info.
-            RowLayout {
+            // --- Sprint progress (celeste) by elapsed time ---
+            ColumnLayout {
                 Layout.fillWidth: true
-                spacing: PlasmaCore.Units.smallSpacing
+                spacing: 2
                 visible: (view._v, view._sprintProgress()) >= 0
 
-                PlasmaComponents3.Label {
-                    text: i18n("Sprint")
-                    opacity: 0.7
-                    font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
-                }
-                Rectangle {
-                    id: sprintTrack
+                RowLayout {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 12
-                    radius: 6
-                    color: Qt.rgba(1, 1, 1, 0.10)
+                    spacing: PlasmaCore.Units.smallSpacing
+
+                    PlasmaCore.IconItem {
+                        source: "view-calendar"
+                        Layout.preferredWidth: 16
+                        Layout.preferredHeight: 16
+                        Layout.alignment: Qt.AlignVCenter
+                        MouseArea {
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            PlasmaComponents3.ToolTip.text: (jira && jira.currentSprint && jira.currentSprint.name)
+                                    ? i18n("Sprint: %1", jira.currentSprint.name)
+                                    : i18n("Progreso del sprint actual")
+                            PlasmaComponents3.ToolTip.visible: containsMouse
+                            PlasmaComponents3.ToolTip.delay: 500
+                        }
+                    }
                     Rectangle {
-                        width: Math.round(sprintTrack.width * Math.max(0, (view._v, view._sprintProgress())))
-                        height: parent.height
-                        radius: 6
-                        color: "#48cae4"   // celeste
+                        id: sprintTrack
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 14
+                        radius: 7
+                        color: Qt.rgba(1, 1, 1, 0.10)
+                        Rectangle {
+                            width: Math.round(sprintTrack.width * Math.max(0, (view._v, view._sprintProgress())))
+                            height: parent.height
+                            radius: 7
+                            color: "#48cae4"   // celeste
+                        }
                     }
                 }
+                // Percentage centered below the bar.
                 PlasmaComponents3.Label {
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
+                    opacity: 0.75
+                    font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
                     text: {
                         var p = (view._v, view._sprintProgress());
                         return p >= 0 ? Math.round(p * 100) + "%" : "";
                     }
-                    font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
-                    opacity: 0.75
                 }
-            }
-
-            // Sprint start → end (only when there is an active sprint).
-            PlasmaComponents3.Label {
-                Layout.fillWidth: true
-                visible: (view._v, view._sprintProgress()) >= 0
-                horizontalAlignment: Text.AlignHCenter
-                elide: Text.ElideRight
-                opacity: 0.6
-                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
-                text: (jira && jira.currentSprint)
-                      ? i18n("%1  →  %2",
-                             view._fmtSprintDate(jira.currentSprint.startDate),
-                             view._fmtSprintDate(jira.currentSprint.endDate))
-                      : ""
+                // Sprint start → end.
+                PlasmaComponents3.Label {
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
+                    elide: Text.ElideRight
+                    opacity: 0.6
+                    font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                    text: (jira && jira.currentSprint)
+                          ? i18n("%1  →  %2",
+                                 view._fmtSprintDate(jira.currentSprint.startDate),
+                                 view._fmtSprintDate(jira.currentSprint.endDate))
+                          : ""
+                }
             }
         }
 
