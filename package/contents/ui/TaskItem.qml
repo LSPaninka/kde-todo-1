@@ -91,13 +91,12 @@ Rectangle {
                 opacity: item.task && item.task.done ? 0.6 : 1.0
             }
 
-            // Jira-link button (left of the priority badge). "–" when the
-            // task has no linked issue; the issue key (e.g. CP-123) once linked.
-            PlasmaComponents3.ToolButton {
+            // Jira-link button (left of the priority badge). Same raised style
+            // as the "New…" button so it stands out; "–" when unlinked, the
+            // issue key (e.g. CP-123) once linked. Normal (non-bold) weight.
+            PlasmaComponents3.Button {
                 visible: plasmoid.configuration.todoJiraLink && item.task
                 text: (item.task && item.task.jiraKey) ? item.task.jiraKey : "–"
-                font.family: (item.task && item.task.jiraKey) ? "monospace" : PlasmaCore.Theme.defaultFont.family
-                font.bold: item.task && item.task.jiraKey
                 onClicked: {
                     if (item.task && item.task.jiraKey) item.openJiraRequested(item.task);
                     else item.linkJiraRequested(item.task);

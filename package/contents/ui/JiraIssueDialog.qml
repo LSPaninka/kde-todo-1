@@ -40,6 +40,10 @@ QQC2.Dialog {
     padding: 0
     // No standardButtons — the footer buttons are custom (Cerrar / Abrir).
 
+    // Always start scrolled at the top; QQC2.ScrollView otherwise keeps its
+    // previous scroll offset across reopens (top rows appeared cut off).
+    onOpened: if (bodyScroll.contentItem) bodyScroll.contentItem.contentY = 0;
+
     function openFor(issue) {
         linkTaskId = 0;
         basicIssue = issue;
@@ -211,12 +215,14 @@ QQC2.Dialog {
 
         // -------- Scrollable body --------
         QQC2.ScrollView {
+            id: bodyScroll
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
+            contentWidth: availableWidth   // never scroll horizontally
 
             ColumnLayout {
-                width: dlg.availableWidth
+                width: bodyScroll.availableWidth
                 spacing: PlasmaCore.Units.smallSpacing
                 // GridLayout of label/value pairs.
                 GridLayout {
@@ -446,12 +452,14 @@ QQC2.Dialog {
             }
             Item { Layout.fillWidth: true }
 
-            // Change the issue status (available workflow transitions).
-            PlasmaComponents3.Button {
-                text: i18n("Cambiar estado")
+            // Icon-only actions (tooltips describe them).
+            PlasmaComponents3.ToolButton {
                 icon.name: "checkmark"
                 enabled: dlg.jira && dlg._currentKey.length > 0
                 onClicked: dlg._openStateMenu()
+                PlasmaComponents3.ToolTip.text: i18n("Cambiar estado")
+                PlasmaComponents3.ToolTip.visible: hovered
+                PlasmaComponents3.ToolTip.delay: 500
 
                 QQC2.Menu {
                     id: stateMenuDlg
@@ -487,25 +495,32 @@ QQC2.Dialog {
             }
 
             // Only shown when the modal was opened from a linked ToDo task.
-            PlasmaComponents3.Button {
+            PlasmaComponents3.ToolButton {
                 visible: dlg.linkTaskId > 0
-                text: i18n("Cambiar subtarea")
                 icon.name: "document-swap"
                 onClicked: {
                     var t = dlg.linkTaskId;
                     dlg.close();
                     dlg.relinkRequested(t);
                 }
+                PlasmaComponents3.ToolTip.text: i18n("Cambiar subtarea anexada")
+                PlasmaComponents3.ToolTip.visible: hovered
+                PlasmaComponents3.ToolTip.delay: 500
             }
-            PlasmaComponents3.Button {
-                text: i18n("Cerrar")
+            PlasmaComponents3.ToolButton {
+                icon.name: "window-close"
                 onClicked: dlg.close()
+                PlasmaComponents3.ToolTip.text: i18n("Cerrar")
+                PlasmaComponents3.ToolTip.visible: hovered
+                PlasmaComponents3.ToolTip.delay: 500
             }
-            PlasmaComponents3.Button {
-                text: i18n("Abrir en Jira")
+            PlasmaComponents3.ToolButton {
                 icon.name: "globe"
                 enabled: dlg._url().length > 0
                 onClicked: { if (dlg._url()) Qt.openUrlExternally(dlg._url()); }
+                PlasmaComponents3.ToolTip.text: i18n("Abrir en Jira")
+                PlasmaComponents3.ToolTip.visible: hovered
+                PlasmaComponents3.ToolTip.delay: 500
             }
         }
     }
