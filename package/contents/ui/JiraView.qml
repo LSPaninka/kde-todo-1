@@ -238,7 +238,7 @@ Item {
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 2
-                visible: jira && (view._v, (jira.totalSpentSec() + jira.totalRemainingSec())) > 0
+                visible: jira && (view._v, (jira.hoursConsumedSec() + jira.hoursAvailableSec())) > 0
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -252,7 +252,9 @@ Item {
                         MouseArea {
                             anchors.fill: parent
                             hoverEnabled: true
-                            PlasmaComponents3.ToolTip.text: i18n("Horas consumidas de todas las incidencias (quemadas / total)")
+                            PlasmaComponents3.ToolTip.text: (jira && (view._v, jira._hasSprintHours()))
+                                    ? i18n("Horas del sprint: quemadas (worklogs del período) / (quemadas + disponible)")
+                                    : i18n("Horas consumidas de todas las incidencias (quemadas / total)")
                             PlasmaComponents3.ToolTip.visible: containsMouse
                             PlasmaComponents3.ToolTip.delay: 500
                         }
@@ -264,8 +266,8 @@ Item {
                         radius: 7
                         color: Qt.rgba(1, 1, 1, 0.10)
                         Rectangle {
-                            property int consumed: jira ? (view._v, jira.totalSpentSec()) : 0
-                            property int remaining: jira ? (view._v, jira.totalRemainingSec()) : 0
+                            property int consumed: jira ? (view._v, jira.hoursConsumedSec()) : 0
+                            property int remaining: jira ? (view._v, jira.hoursAvailableSec()) : 0
                             property int total: consumed + remaining
                             width: total > 0 ? Math.round(totalsTrack.width * (consumed / total)) : 0
                             height: parent.height
@@ -282,8 +284,8 @@ Item {
                     font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
                     text: {
                         if (!jira) return "";
-                        var c = (view._v, jira.totalSpentSec());
-                        var t = c + jira.totalRemainingSec();
+                        var c = (view._v, jira.hoursConsumedSec());
+                        var t = c + jira.hoursAvailableSec();
                         var pct = t > 0 ? Math.round(c / t * 100) : 0;
                         return view._fmtH(c) + " / " + view._fmtH(t) + "  ·  " + pct + "%";
                     }

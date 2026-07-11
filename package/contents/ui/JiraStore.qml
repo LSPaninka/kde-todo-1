@@ -37,6 +37,17 @@ QtObject {
     // from the sprint custom field of the fetched issues.
     property var currentSprint: null
 
+    // Sprint "Horas" figures, computed exactly like the worklog-calendar ring:
+    //   sprintConsumedSec  = Σ of my worklogs whose `started` is inside the
+    //                        sprint's [start,end] window (across the sprint's
+    //                        issues assigned to me).
+    //   sprintAvailableSec = Σ max(0, original - spent) of those issues.
+    // The footer "hours" bar shows consumed / (consumed + available).
+    property string myAccountId: ""
+    property real sprintConsumedSec: 0
+    property real sprintAvailableSec: 0
+    property bool _sprintHoursLoading: false
+
     // Plain-text accumulator for the in-UI debug dialog. Always populated
     // (independent of the jiraDebug console toggle).
     property string lastDebugLog: ""
@@ -63,6 +74,8 @@ QtObject {
         applyRefreshSchedule();
         _log("init: " + issues.length + " cached issue(s); lastFetchedAt=" +
              (lastFetchedAt ? new Date(lastFetchedAt).toISOString() : "never"));
+        // Refresh sprint hours if we already know the active sprint (cached).
+        if (currentSprint) _fetchSprintHours();
     }
 
     function applyRefreshSchedule() {
@@ -116,6 +129,9 @@ QtObject {
         }
         var sp = database.getSetting("jira.sprint", "");
         if (sp) { try { currentSprint = JSON.parse(sp); } catch (e) { /* ignore */ } }
+        myAccountId        = database.getSetting("jira.accountId", "") || myAccountId;
+        sprintConsumedSec  = Number(database.getSetting("jira.sprintConsumed",  "0")) || 0;
+        sprintAvailableSec = Number(database.getSetting("jira.sprintAvailable", "0")) || 0;
     }
 
     function saveCache() {
@@ -274,6 +290,8 @@ QtObject {
                     store.lastError = "";
                     store.saveCache();
                     store._bump();
+                    // Refresh the sprint "Horas" figures (worklogs in window).
+                    store._fetchSprintHours();
 
                     store._log("");
                     var more = (data.isLast === false) || (typeof data.nextPageToken === "string"
@@ -687,8 +705,7 @@ QtObject {
         return s;
     }
     // Remaining like the worklog rings' "Disponible": sum of the calculated
-    // remaining per issue = Σ max(0, original - spent). The consumed-vs-total
-    // bar uses consumed / (consumed + remaining), same shape as the ring.
+    // remaining per issue = Σ max(0, original - spent).
     function totalRemainingSec() {
         var s = 0;
         for (var i = 0; i < issues.length; i++) {
@@ -697,6 +714,115 @@ QtObject {
             s += Math.max(0, o - sp);
         }
         return s;
+    }
+
+    // The footer "Horas" bar uses the EXACT worklog-calendar figures when an
+    // active sprint is known (consumed = worklogs inside the sprint window),
+    // otherwise falls back to the all-issues timetracking sum.
+    function _hasSprintHours() {
+        return currentSprint && (sprintConsumedSec + sprintAvailableSec) > 0;
+    }
+    function hoursConsumedSec() {
+        return _hasSprintHours() ? sprintConsumedSec : totalSpentSec();
+    }
+    function hoursAvailableSec() {
+        return _hasSprintHours() ? sprintAvailableSec : totalRemainingSec();
+    }
+
+    // ------------------------------------------------------------------
+    // Sprint "Horas" (worklogs inside the sprint window) — mirrors the
+    // worklog-calendar's "Quemadas" ring exactly.
+    // ------------------------------------------------------------------
+
+    function _resolveAccountId(creds, cb) {
+        if (myAccountId) { cb(); return; }
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", creds.site + "/rest/api/3/myself", true);
+        xhr.setRequestHeader("Authorization", "Basic " + Qt.btoa(creds.email + ":" + creds.token));
+        xhr.setRequestHeader("Accept", "application/json");
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE) return;
+            if (xhr.status === 200) {
+                try {
+                    store.myAccountId = JSON.parse(xhr.responseText).accountId || "";
+                    if (database && database.ready) database.setSetting("jira.accountId", store.myAccountId);
+                } catch (e) { /* leave empty → count all authors */ }
+            }
+            cb();
+        };
+        try { xhr.send(); } catch (e) { cb(); }
+    }
+
+    // Calculated remaining from a raw issue's fields (worklog-strategy).
+    function _remainingSecFromFields(f) {
+        var tt = f.timetracking || {};
+        var orig = (typeof f.timeoriginalestimate === "number") ? f.timeoriginalestimate
+                 : (typeof tt.originalEstimateSeconds === "number") ? tt.originalEstimateSeconds : 0;
+        var spent = (typeof tt.timeSpentSeconds === "number") ? tt.timeSpentSeconds : 0;
+        return Math.max(0, orig - spent);
+    }
+
+    function _computeSprintHours(rawIssues, startMs, endMs) {
+        var available = 0, consumed = 0;
+        for (var k = 0; k < rawIssues.length; k++) {
+            var f = rawIssues[k].fields || {};
+            available += _remainingSecFromFields(f);
+            var wls = (f.worklog && f.worklog.worklogs) || [];
+            for (var w = 0; w < wls.length; w++) {
+                var wo = wls[w];
+                var sm = new Date(wo.started).getTime();
+                if (isNaN(sm) || sm < startMs || sm > endMs) continue;
+                var auth = wo.author || {};
+                if (myAccountId && auth.accountId !== myAccountId) continue;
+                consumed += wo.timeSpentSeconds | 0;
+            }
+        }
+        store.sprintConsumedSec  = consumed;
+        store.sprintAvailableSec = available;
+        if (database && database.ready) {
+            database.setSetting("jira.sprintConsumed",  "" + consumed);
+            database.setSetting("jira.sprintAvailable", "" + available);
+        }
+        store._bump();
+        _log("Sprint hours: consumed=" + consumed + "s, available=" + available + "s.");
+    }
+
+    function _fetchSprintHours() {
+        if (!currentSprint || !currentSprint.id) return;
+        if (_sprintHoursLoading) return;
+        var c = _jiraCreds();
+        if (!c) return;
+        var startMs = Date.parse(currentSprint.startDate);
+        var endMs   = Date.parse(currentSprint.endDate);
+        if (isNaN(startMs) || isNaN(endMs)) return;
+
+        _sprintHoursLoading = true;
+        _resolveAccountId(c, function() {
+            var jql = "sprint = " + currentSprint.id + " AND assignee = currentUser()";
+            var url = c.site + "/rest/api/3/search/jql?jql=" + encodeURIComponent(jql) +
+                      "&maxResults=200" +
+                      "&fields=summary,worklog,timeoriginalestimate,timeestimate,timetracking";
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET", url, true);
+            xhr.setRequestHeader("Authorization", "Basic " + Qt.btoa(c.email + ":" + c.token));
+            xhr.setRequestHeader("Accept", "application/json");
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState !== XMLHttpRequest.DONE) return;
+                store._sprintHoursLoading = false;
+                if (xhr.status === 200) {
+                    try {
+                        var data = JSON.parse(xhr.responseText);
+                        store._computeSprintHours(data.issues || [], startMs, endMs);
+                    } catch (e) {
+                        store._warn("sprint hours parse: " + e);
+                    }
+                } else {
+                    store._warn("sprint hours HTTP " + xhr.status);
+                }
+            };
+            try { xhr.send(); }
+            catch (e) { store._sprintHoursLoading = false; store._warn("sprint hours send: " + e); }
+        });
     }
 
     // Scan the raw issues for a sprint object in `field` whose state is active.
