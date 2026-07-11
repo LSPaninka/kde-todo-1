@@ -11,6 +11,14 @@ El plasmoide *Categorized ToDo* tiene dos modos:
 Este documento explica cómo configurar el modo Jira, qué hace cada
 opción y consideraciones de seguridad.
 
+> **Novedades (v1.6):**
+> - Debajo de la lista, una **barra gruesa** con la sumatoria de horas
+>   consumidas de todas las incidencias (`min(gastadas, original) / original`).
+> - Una **barra celeste de progreso del sprint activo** (por tiempo
+>   transcurrido) con el **% y las fechas de inicio → fin** en formato
+>   `ddd d/M hh:mm` (ej. `lun 7/7 21:04`). El sprint se toma del campo
+>   configurable *Campo de Sprint* (por defecto `customfield_10020`).
+>
 > **Novedades (v1.4):**
 > - Cada tarjeta muestra una **barra de horas consumidas** — usa la
 >   estrategia *calculada* `restante = max(0, original − gastadas)`, así

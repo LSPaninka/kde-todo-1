@@ -33,6 +33,10 @@ QtObject {
     // when the user clicks a panel swatch so the popup jumps to that tab.
     property int selectedCategory: 0
 
+    // Active sprint (or null): { id, name, startDate, endDate }. Extracted
+    // from the sprint custom field of the fetched issues.
+    property var currentSprint: null
+
     // Plain-text accumulator for the in-UI debug dialog. Always populated
     // (independent of the jiraDebug console toggle).
     property string lastDebugLog: ""
@@ -110,11 +114,14 @@ QtObject {
             lastFetchedAt = d.fetchedAt;
             _bump();
         }
+        var sp = database.getSetting("jira.sprint", "");
+        if (sp) { try { currentSprint = JSON.parse(sp); } catch (e) { /* ignore */ } }
     }
 
     function saveCache() {
         if (!database || !database.ready) return;
         database.saveJiraIssues(issues, lastFetchedAt);
+        database.setSetting("jira.sprint", currentSprint ? JSON.stringify(currentSprint) : "");
     }
 
     // ------------------------------------------------------------------
@@ -193,7 +200,9 @@ QtObject {
         lastError = "";
         _bump();
 
+        var sprintField = (pc.jiraSprintField || "").trim();
         var fields = "summary,status,priority,issuetype,parent,updated,timetracking";
+        if (sprintField) fields += "," + sprintField;
         // /rest/api/3/search was removed in 2025; /rest/api/3/search/jql is
         // the replacement. The new endpoint returns at most `maxResults`
         // issues and uses cursor pagination (nextPageToken + isLast) instead
@@ -260,6 +269,7 @@ QtObject {
                         out.push(_normalize(raw[i], site));
                     }
                     store.issues = out;
+                    store.currentSprint = store._extractActiveSprint(raw, sprintField);
                     store.lastFetchedAt = Date.now();
                     store.lastError = "";
                     store.saveCache();
@@ -663,6 +673,41 @@ QtObject {
 
     function totalCount() {
         return issues.length;
+    }
+
+    // Summed time tracking across all fetched issues (for the popup footer bar).
+    function totalOriginalSec() {
+        var s = 0;
+        for (var i = 0; i < issues.length; i++) s += issues[i].originalSec | 0;
+        return s;
+    }
+    function totalSpentSec() {
+        var s = 0;
+        for (var i = 0; i < issues.length; i++) s += issues[i].spentSec | 0;
+        return s;
+    }
+
+    // Scan the raw issues for a sprint object in `field` whose state is active.
+    function _extractActiveSprint(rawIssues, field) {
+        if (!field) return null;
+        for (var i = 0; i < rawIssues.length; i++) {
+            var arr = (rawIssues[i].fields || {})[field];
+            if (!arr) continue;
+            if (!Array.isArray(arr)) arr = [arr];
+            for (var j = 0; j < arr.length; j++) {
+                var s = arr[j];
+                if (s && typeof s === "object" &&
+                    (s.state === "active" || s.state === "ACTIVE")) {
+                    return {
+                        id: s.id,
+                        name: s.name || "",
+                        startDate: s.startDate || "",
+                        endDate: s.endDate || ""
+                    };
+                }
+            }
+        }
+        return null;
     }
 
     function pendingCount() {

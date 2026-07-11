@@ -26,6 +26,7 @@ ColumnLayout {
     property alias  cfg_jiraRefreshMinutes:  refreshSpin.value
     property alias  cfg_jiraMaxResults:      maxSpin.value
     property alias  cfg_jiraCategoryCount:   catCountSpin.value
+    property alias  cfg_jiraSprintField:     sprintFieldField.text
     property alias  cfg_jiraDebug:           debugCheck.checked
 
     Kirigami.FormLayout {
@@ -93,6 +94,14 @@ ColumnLayout {
             from: 1
             to: 10
             stepSize: 1
+        }
+
+        TextField {
+            id: sprintFieldField
+            Kirigami.FormData.label: i18n("Campo de Sprint:")
+            Layout.fillWidth: true
+            placeholderText: "customfield_10020"
+            inputMethodHints: Qt.ImhNoPredictiveText
         }
 
         CheckBox {

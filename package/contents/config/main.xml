@@ -177,6 +177,11 @@
             <default></default>
         </entry>
 
+        <entry name="jiraSprintField" type="String">
+            <label>Custom field id that holds the Sprint on your issues (used for the sprint progress bar). Usually customfield_10020.</label>
+            <default>customfield_10020</default>
+        </entry>
+
         <entry name="jiraDebug" type="Bool">
             <label>Log Jira fetch / parse / filter details to plasmashell stdout</label>
             <default>true</default>
