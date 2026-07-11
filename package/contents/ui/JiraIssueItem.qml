@@ -3,12 +3,16 @@
  *
  *  [type] [KEY-123]  Summary text...        [priority]  [status]
  *                    ↳ Parent: PARENT-12 — parent summary
+ *                    [====== consumed-hours bar ======]  8h / 10h
  *
- * Click: open the issue in the user's default browser.
+ * Left click: open the detail modal (via the `activated` signal).
+ * Right click: context menu to change the issue's status (available
+ * transitions) or open it in Jira.
  */
 
 import QtQuick 2.15
 import QtQuick.Layouts 1.15
+import QtQuick.Controls 2.15 as QQC2
 import org.kde.plasma.plasmoid 2.0
 import org.kde.plasma.core 2.0 as PlasmaCore
 import org.kde.plasma.components 3.0 as PlasmaComponents3
@@ -17,16 +21,44 @@ Rectangle {
     id: item
 
     property var issue        // normalized issue from JiraStore
+    property var jira: null   // the JiraStore (for transitions)
 
-    // Emitted on click; JiraView opens the detail modal.
+    // Emitted on left click; JiraView opens the detail modal.
     signal activated(var issue)
+
+    // Right-click menu state (transitions fetched lazily).
+    property var _transitions: []
+    property bool _transitionsLoading: false
 
     width: parent ? parent.width : 0
     implicitHeight: col.implicitHeight + PlasmaCore.Units.smallSpacing * 2
     radius: 4
-    color: mouse.containsMouse ? Qt.rgba(1, 1, 1, 0.07) : Qt.rgba(1, 1, 1, 0.04)
+    color: cardMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.07) : Qt.rgba(1, 1, 1, 0.04)
     border.width: 1
     border.color: Qt.rgba(1, 1, 1, 0.08)
+
+    // -------- Consumed-hours helpers (calculated strategy) --------
+    // remaining = max(0, original - spent), so consumed = min(spent, original)
+    // and the bar never exceeds 100% even when time is overrun.
+    readonly property int _origSec:  issue && issue.originalSec ? issue.originalSec : 0
+    readonly property int _spentSec: issue && issue.spentSec  ? issue.spentSec  : 0
+    readonly property real _progress: _origSec > 0 ? Math.min(1, _spentSec / _origSec) : 0
+    readonly property bool _hasEstimate: _origSec > 0
+
+    function _fmtH(sec) {
+        if (!sec || sec <= 0) return "0h";
+        var h = Math.floor(sec / 3600);
+        var m = Math.floor((sec % 3600) / 60);
+        if (h > 0 && m > 0) return h + "h " + m + "m";
+        if (h > 0) return h + "h";
+        return m + "m";
+    }
+    function _barColor() {
+        if (_spentSec > _origSec) return "#e74c3c";   // overrun
+        if (_progress >= 0.9) return "#e67e22";
+        if (_progress >= 0.7) return "#f1c40f";
+        return "#2ecc71";
+    }
 
     // A user-configured color for this exact status name (case-insensitive)
     // wins over Jira's own colorName mapping. Returns "" if none is set.
@@ -89,12 +121,91 @@ Rectangle {
         return "#7f8c8d";
     }
 
+    // -------- Right-click menu --------
+    function _openContextMenu(x, y) {
+        item._transitions = [];
+        item._transitionsLoading = true;
+        ctxMenu.x = x;
+        ctxMenu.y = y;
+        ctxMenu.open();
+        if (jira && issue) {
+            jira.fetchTransitions(issue.key, function(ok, arr) {
+                item._transitionsLoading = false;
+                item._transitions = ok ? arr : [];
+            });
+        } else {
+            item._transitionsLoading = false;
+        }
+    }
+
+    function _applyTransition(id) {
+        if (!jira || !issue) return;
+        jira.transitionIssue(issue.key, id, function(ok, err) {
+            if (ok) jira.fetch();
+        });
+    }
+
     MouseArea {
-        id: mouse
+        id: cardMouse
         anchors.fill: parent
         hoverEnabled: true
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
         cursorShape: Qt.PointingHandCursor
-        onClicked: item.activated(issue)
+        onClicked: {
+            if (mouse.button === Qt.RightButton) item._openContextMenu(mouse.x, mouse.y);
+            else item.activated(issue);
+        }
+    }
+
+    QQC2.Menu {
+        id: ctxMenu
+
+        QQC2.MenuItem {
+            text: i18n("Ver detalle")
+            icon.name: "dialog-information"
+            onTriggered: item.activated(issue)
+        }
+
+        QQC2.Menu {
+            id: stateMenu
+            title: i18n("Cambiar estado")
+            enabled: !item._transitionsLoading && item._transitions.length > 0
+
+            QQC2.MenuItem {
+                text: i18n("Cargando…")
+                enabled: false
+                visible: item._transitionsLoading
+                height: visible ? implicitHeight : 0
+            }
+            QQC2.MenuItem {
+                text: i18n("(sin transiciones)")
+                enabled: false
+                visible: !item._transitionsLoading && item._transitions.length === 0
+                height: visible ? implicitHeight : 0
+            }
+            Instantiator {
+                model: item._transitions
+                delegate: QQC2.MenuItem {
+                    text: modelData.toStatus
+                          ? (modelData.name + " → " + modelData.toStatus)
+                          : modelData.name
+                    onTriggered: {
+                        item._applyTransition(modelData.id);
+                        ctxMenu.close();
+                    }
+                }
+                onObjectAdded: function(index, object) { stateMenu.insertItem(index, object); }
+                onObjectRemoved: function(index, object) { stateMenu.removeItem(object); }
+            }
+        }
+
+        QQC2.MenuSeparator {}
+
+        QQC2.MenuItem {
+            text: i18n("Ver en Jira")
+            icon.name: "internet-services"
+            onTriggered: { if (issue && issue.url) Qt.openUrlExternally(issue.url); }
+        }
     }
 
     ColumnLayout {
@@ -190,6 +301,36 @@ Rectangle {
             opacity: 0.6
             font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
             font.italic: true
+        }
+
+        // -------- Consumed-hours progress bar --------
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.leftMargin: 28
+            Layout.topMargin: 2
+            visible: item._hasEstimate
+            spacing: PlasmaCore.Units.smallSpacing
+
+            Rectangle {
+                id: barTrack
+                Layout.fillWidth: true
+                Layout.preferredHeight: 6
+                radius: 3
+                color: Qt.rgba(1, 1, 1, 0.10)
+
+                Rectangle {
+                    width: Math.round(barTrack.width * item._progress)
+                    height: parent.height
+                    radius: 3
+                    color: item._barColor()
+                }
+            }
+
+            PlasmaComponents3.Label {
+                text: item._fmtH(item._spentSec) + " / " + item._fmtH(item._origSec)
+                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                opacity: 0.7
+            }
         }
     }
 }

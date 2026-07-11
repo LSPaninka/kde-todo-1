@@ -163,6 +163,7 @@ Item {
                             delegate: JiraIssueItem {
                                 width: list.width
                                 issue: modelData
+                                jira: view.jira
                                 onActivated: function(iss) { issueDialog.openFor(iss); }
                             }
 
@@ -219,6 +220,14 @@ Item {
     JiraIssueDialog {
         id: issueDialog
         jira: view.jira
+    }
+
+    // Close the detail modal if the plasmoid popup is collapsed.
+    Connections {
+        target: plasmoid
+        function onExpandedChanged() {
+            if (!plasmoid.expanded && issueDialog.opened) issueDialog.close();
+        }
     }
 
     // -------- Debug overlay (in-popup modal showing last fetch log) --------

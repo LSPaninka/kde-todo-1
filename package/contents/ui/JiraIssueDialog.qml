@@ -22,6 +22,11 @@ QQC2.Dialog {
     property var detail: null          // the fetched detail (or null)
     property bool loadingDetail: false
     property string detailError: ""
+    property string _currentKey: ""
+
+    // Status-transition menu state.
+    property var _transitions: []
+    property bool _transitionsLoading: false
 
     modal: true
     anchors.centerIn: parent
@@ -32,12 +37,19 @@ QQC2.Dialog {
 
     function openFor(issue) {
         basicIssue = issue;
+        _currentKey = issue ? (issue.key || "") : "";
+        _transitions = [];
+        _transitionsLoading = false;
+        open();
+        _fetchDetail();
+    }
+
+    function _fetchDetail() {
         detail = null;
         detailError = "";
-        loadingDetail = true;
-        open();
-        if (jira && issue && issue.key) {
-            jira.fetchIssueDetail(issue.key, function(ok, d, err) {
+        if (jira && _currentKey) {
+            loadingDetail = true;
+            jira.fetchIssueDetail(_currentKey, function(ok, d, err) {
                 dlg.loadingDetail = false;
                 if (ok) dlg.detail = d;
                 else dlg.detailError = err || i18n("No se pudo cargar el detalle.");
@@ -46,6 +58,47 @@ QQC2.Dialog {
             loadingDetail = false;
             detailError = i18n("Sin datos de la incidencia.");
         }
+    }
+
+    // -------- Status transitions --------
+    function _openStateMenu() {
+        dlg._transitions = [];
+        dlg._transitionsLoading = true;
+        stateMenuDlg.open();
+        if (jira && dlg._currentKey) {
+            jira.fetchTransitions(dlg._currentKey, function(ok, arr) {
+                dlg._transitionsLoading = false;
+                dlg._transitions = ok ? arr : [];
+            });
+        } else {
+            dlg._transitionsLoading = false;
+        }
+    }
+    function _applyTransition(id) {
+        if (!jira || !dlg._currentKey) return;
+        jira.transitionIssue(dlg._currentKey, id, function(ok, err) {
+            if (ok) {
+                dlg._fetchDetail();   // refresh the modal
+                jira.fetch();         // refresh the list behind it
+            }
+        });
+    }
+
+    // -------- Consumed-hours helpers (calculated strategy) --------
+    function _fmtH(sec) {
+        if (!sec || sec <= 0) return "0h";
+        var h = Math.floor(sec / 3600);
+        var m = Math.floor((sec % 3600) / 60);
+        if (h > 0 && m > 0) return h + "h " + m + "m";
+        if (h > 0) return h + "h";
+        return m + "m";
+    }
+    function _barColorFor(orig, spent) {
+        if (spent > orig) return "#e74c3c";
+        var r = orig > 0 ? spent / orig : 0;
+        if (r >= 0.9) return "#e67e22";
+        if (r >= 0.7) return "#f1c40f";
+        return "#2ecc71";
     }
 
     function _key()      { return detail ? detail.key      : (basicIssue ? basicIssue.key : ""); }
@@ -220,6 +273,38 @@ QQC2.Dialog {
                     Item { Layout.fillWidth: true }
                 }
 
+                // Consumed-hours bar (min(spent, original) / original).
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: PlasmaCore.Units.smallSpacing * 2
+                    Layout.rightMargin: PlasmaCore.Units.smallSpacing * 2
+                    visible: dlg.detail && dlg.detail.originalSec > 0
+                    spacing: PlasmaCore.Units.smallSpacing
+
+                    Rectangle {
+                        id: dlgBarTrack
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 8
+                        radius: 4
+                        color: Qt.rgba(1, 1, 1, 0.10)
+                        Rectangle {
+                            width: {
+                                if (!dlg.detail || dlg.detail.originalSec <= 0) return 0;
+                                var r = Math.min(1, dlg.detail.spentSec / dlg.detail.originalSec);
+                                return Math.round(dlgBarTrack.width * r);
+                            }
+                            height: parent.height
+                            radius: 4
+                            color: dlg.detail ? dlg._barColorFor(dlg.detail.originalSec, dlg.detail.spentSec) : "#2ecc71"
+                        }
+                    }
+                    PlasmaComponents3.Label {
+                        text: dlg.detail ? (dlg._fmtH(dlg.detail.spentSec) + " / " + dlg._fmtH(dlg.detail.originalSec)) : ""
+                        font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                        opacity: 0.7
+                    }
+                }
+
                 // Description.
                 PlasmaComponents3.Label {
                     Layout.leftMargin: PlasmaCore.Units.smallSpacing * 2
@@ -343,6 +428,46 @@ QQC2.Dialog {
                 }
             }
             Item { Layout.fillWidth: true }
+
+            // Change the issue status (available workflow transitions).
+            PlasmaComponents3.Button {
+                text: i18n("Cambiar estado")
+                icon.name: "checkmark"
+                enabled: dlg.jira && dlg._currentKey.length > 0
+                onClicked: dlg._openStateMenu()
+
+                QQC2.Menu {
+                    id: stateMenuDlg
+                    y: -implicitHeight   // open above the footer button
+
+                    QQC2.MenuItem {
+                        text: i18n("Cargando…")
+                        enabled: false
+                        visible: dlg._transitionsLoading
+                        height: visible ? implicitHeight : 0
+                    }
+                    QQC2.MenuItem {
+                        text: i18n("(sin transiciones)")
+                        enabled: false
+                        visible: !dlg._transitionsLoading && dlg._transitions.length === 0
+                        height: visible ? implicitHeight : 0
+                    }
+                    Instantiator {
+                        model: dlg._transitions
+                        delegate: QQC2.MenuItem {
+                            text: modelData.toStatus
+                                  ? (modelData.name + " → " + modelData.toStatus)
+                                  : modelData.name
+                            onTriggered: {
+                                dlg._applyTransition(modelData.id);
+                                stateMenuDlg.close();
+                            }
+                        }
+                        onObjectAdded: function(index, object) { stateMenuDlg.insertItem(index, object); }
+                        onObjectRemoved: function(index, object) { stateMenuDlg.removeItem(object); }
+                    }
+                }
+            }
 
             PlasmaComponents3.Button {
                 text: i18n("Cerrar")

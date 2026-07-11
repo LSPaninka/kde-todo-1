@@ -193,7 +193,7 @@ QtObject {
         lastError = "";
         _bump();
 
-        var fields = "summary,status,priority,issuetype,parent,updated";
+        var fields = "summary,status,priority,issuetype,parent,updated,timetracking";
         // /rest/api/3/search was removed in 2025; /rest/api/3/search/jql is
         // the replacement. The new endpoint returns at most `maxResults`
         // issues and uses cursor pagination (nextPageToken + isLast) instead
@@ -428,6 +428,85 @@ QtObject {
         catch (e) { cb(false, null, qsTr("Error de red: ") + e); }
     }
 
+    // ------------------------------------------------------------------
+    // Status transitions (mirror of worklog-calendar's flow):
+    //   GET  /rest/api/3/issue/{key}/transitions  → available transitions
+    //   POST /rest/api/3/issue/{key}/transitions  → apply one
+    // ------------------------------------------------------------------
+
+    function _jiraCreds() {
+        if (!plasmoidApi) return null;
+        var pc = plasmoidApi.configuration;
+        var site  = (pc.jiraSite || "").trim().replace(/\/+$/, "");
+        var email = (pc.jiraEmail || "").trim();
+        var token = (pc.jiraToken || "").trim();
+        if (!site || !email || !token) return null;
+        return { site: site, email: email, token: token };
+    }
+
+    // cb(ok, [{ id, name, toStatus, toStatusColor }])
+    function fetchTransitions(key, cb) {
+        cb = cb || function() {};
+        var c = _jiraCreds();
+        if (!c) { cb(false, []); return; }
+        var url = c.site + "/rest/api/3/issue/" + encodeURIComponent(key) + "/transitions";
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", url, true);
+        xhr.setRequestHeader("Authorization", "Basic " + Qt.btoa(c.email + ":" + c.token));
+        xhr.setRequestHeader("Accept", "application/json");
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE) return;
+            if (xhr.status === 200) {
+                try {
+                    var data = JSON.parse(xhr.responseText);
+                    var arr = data.transitions || [];
+                    var out = [];
+                    for (var i = 0; i < arr.length; i++) {
+                        var t = arr[i];
+                        var to = t.to || {};
+                        out.push({
+                            id: "" + (t.id || ""),
+                            name: t.name || "",
+                            toStatus: to.name || "",
+                            toStatusColor: (to.statusCategory || {}).colorName || ""
+                        });
+                    }
+                    cb(true, out);
+                } catch (e) {
+                    store._warn("transitions parse: " + e);
+                    cb(false, []);
+                }
+            } else {
+                store._warn("transitions HTTP " + xhr.status);
+                cb(false, []);
+            }
+        };
+        try { xhr.send(); } catch (e) { store._warn("transitions send: " + e); cb(false, []); }
+    }
+
+    // cb(ok, errMsg)
+    function transitionIssue(key, transitionId, cb) {
+        cb = cb || function() {};
+        var c = _jiraCreds();
+        if (!c) { cb(false, qsTr("Faltan credenciales.")); return; }
+        var url = c.site + "/rest/api/3/issue/" + encodeURIComponent(key) + "/transitions";
+        var body = JSON.stringify({ transition: { id: "" + transitionId } });
+        var xhr = new XMLHttpRequest();
+        xhr.open("POST", url, true);
+        xhr.setRequestHeader("Authorization", "Basic " + Qt.btoa(c.email + ":" + c.token));
+        xhr.setRequestHeader("Accept", "application/json");
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE) return;
+            if (xhr.status === 204 || xhr.status === 200) {
+                cb(true, "");
+            } else {
+                cb(false, store._extractErrorMessage(xhr.responseText) || ("HTTP " + xhr.status));
+            }
+        };
+        try { xhr.send(body); } catch (e) { cb(false, qsTr("Error de red: ") + e); }
+    }
+
     function _normalizeDetail(raw, site) {
         var f = raw.fields || {};
         var status = f.status || {};
@@ -463,6 +542,8 @@ QtObject {
             originalEstimate: _fmtSeconds(tt.originalEstimateSeconds),
             timeSpent: _fmtSeconds(tt.timeSpentSeconds),
             remaining: _fmtSeconds(tt.remainingEstimateSeconds),
+            originalSec: tt.originalEstimateSeconds | 0,
+            spentSec: tt.timeSpentSeconds | 0,
             hasTime: !!(tt.originalEstimateSeconds || tt.timeSpentSeconds || tt.remainingEstimateSeconds),
             created: f.created || "",
             updated: f.updated || "",
@@ -661,6 +742,7 @@ QtObject {
         var prio = f.priority || {};
         var it = f.issuetype || {};
         var parent = f.parent || null;
+        var tt = f.timetracking || {};
         var parentSummary = "";
         if (parent && parent.fields && parent.fields.summary) {
             parentSummary = parent.fields.summary;
@@ -677,6 +759,9 @@ QtObject {
             isSubtask: !!it.subtask,
             parentKey: parent ? (parent.key || "") : "",
             parentSummary: parentSummary,
+            // Time tracking (seconds) for the per-card progress bar.
+            originalSec: tt.originalEstimateSeconds | 0,
+            spentSec: tt.timeSpentSeconds | 0,
             updated: f.updated || "",
             url: site + "/browse/" + (raw.key || "")
         };

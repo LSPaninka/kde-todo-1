@@ -4,11 +4,22 @@ El plasmoide *Categorized ToDo* tiene dos modos:
 
 - **ToDo** (por defecto): la lista de tareas local con categorías,
   prioridades, subtareas y archivado.
-- **Jira**: vista de **solo lectura** de las incidencias que tenés
-  asignadas en un **Jira Cloud** vía la REST API v3.
+- **Jira**: vista de las incidencias que tenés asignadas en un
+  **Jira Cloud** vía la REST API v3. Es de lectura, salvo que ahora
+  también podés **cambiar el estado** de una incidencia (transiciones).
 
 Este documento explica cómo configurar el modo Jira, qué hace cada
 opción y consideraciones de seguridad.
+
+> **Novedades (v1.4):**
+> - Cada tarjeta muestra una **barra de horas consumidas** — usa la
+>   estrategia *calculada* `restante = max(0, original − gastadas)`, así
+>   que la barra representa `min(gastadas, original) / original` (misma
+>   estrategia que el worklog-calendar).
+> - **Click derecho** en una tarjeta (o el botón **«Cambiar estado»** del
+>   modal) abre el flujo de transiciones disponible y aplica la que elijas.
+> - Hasta **10 categorías**, colores de estado configurables y modal de
+>   detalle con comentarios (v1.3).
 
 ---
 
