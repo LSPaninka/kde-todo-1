@@ -35,6 +35,7 @@ Item {
         TodoView {
             store: full.store
             notionSync: full.notionSync
+            jira: full.jira
         }
 
         JiraView {

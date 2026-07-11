@@ -24,6 +24,11 @@ QQC2.Dialog {
     property string detailError: ""
     property string _currentKey: ""
 
+    // When opened from a linked ToDo task, this holds that task's id so the
+    // "Cambiar subtarea anexada" button can offer to re-pick. 0 = plain mode.
+    property int linkTaskId: 0
+    signal relinkRequested(int taskId)
+
     // Status-transition menu state.
     property var _transitions: []
     property bool _transitionsLoading: false
@@ -36,8 +41,20 @@ QQC2.Dialog {
     // No standardButtons — the footer buttons are custom (Cerrar / Abrir).
 
     function openFor(issue) {
+        linkTaskId = 0;
         basicIssue = issue;
         _currentKey = issue ? (issue.key || "") : "";
+        _transitions = [];
+        _transitionsLoading = false;
+        open();
+        _fetchDetail();
+    }
+
+    // Opened from a linked ToDo task: shows the "Cambiar subtarea" button.
+    function openForLinked(jiraKey, taskId) {
+        linkTaskId = taskId || 0;
+        basicIssue = { key: jiraKey || "" };
+        _currentKey = jiraKey || "";
         _transitions = [];
         _transitionsLoading = false;
         open();
@@ -469,6 +486,17 @@ QQC2.Dialog {
                 }
             }
 
+            // Only shown when the modal was opened from a linked ToDo task.
+            PlasmaComponents3.Button {
+                visible: dlg.linkTaskId > 0
+                text: i18n("Cambiar subtarea")
+                icon.name: "document-swap"
+                onClicked: {
+                    var t = dlg.linkTaskId;
+                    dlg.close();
+                    dlg.relinkRequested(t);
+                }
+            }
             PlasmaComponents3.Button {
                 text: i18n("Cerrar")
                 onClicked: dlg.close()

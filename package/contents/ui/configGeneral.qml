@@ -18,6 +18,7 @@ Kirigami.FormLayout {
     property alias cfg_categoryCount: catCountSpin.value
     property alias cfg_showPriorityIcons: showPrioCheck.checked
     property alias cfg_confirmDelete: confirmDeleteCheck.checked
+    property alias cfg_todoJiraLink: todoJiraLinkCheck.checked
     property alias cfg_popupWidth: popupW.value
     property alias cfg_popupHeight: popupH.value
 
@@ -79,6 +80,12 @@ Kirigami.FormLayout {
         id: confirmDeleteCheck
         Kirigami.FormData.label: i18n("Borrado:")
         text: i18n("Confirmar antes de borrar permanentemente archivadas")
+    }
+
+    CheckBox {
+        id: todoJiraLinkCheck
+        Kirigami.FormData.label: i18n("Anexar Jira:")
+        text: i18n("Mostrar un botón en cada tarea para anexar una subtarea de Jira")
     }
 
     Item { Kirigami.FormData.isSection: true }

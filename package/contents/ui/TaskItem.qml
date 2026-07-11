@@ -28,8 +28,19 @@ Rectangle {
     property color catColor: "#7f8c8d"
     property bool expanded: false
 
+    // Driven by the view's "expand all / collapse all" buttons: when
+    // expandSignal changes, adopt expandTarget. New delegates adopt the
+    // current target on creation (Component.onCompleted).
+    property int expandSignal: 0
+    property bool expandTarget: false
+    onExpandSignalChanged: expanded = expandTarget
+    Component.onCompleted: expanded = expandTarget
+
     signal editRequested(var task)
     signal subtaskEditRequested(var task, var subtask)
+    // Jira-link feature (only used when plasmoid.configuration.todoJiraLink).
+    signal linkJiraRequested(var task)
+    signal openJiraRequested(var task)
 
     width: parent ? parent.width : 0
     implicitHeight: col.implicitHeight + PlasmaCore.Units.smallSpacing * 2
@@ -78,6 +89,24 @@ Rectangle {
                 wrapMode: item.expanded ? Text.WordWrap : Text.NoWrap
                 font.strikeout: item.task && item.task.done
                 opacity: item.task && item.task.done ? 0.6 : 1.0
+            }
+
+            // Jira-link button (left of the priority badge). "–" when the
+            // task has no linked issue; the issue key (e.g. CP-123) once linked.
+            PlasmaComponents3.ToolButton {
+                visible: plasmoid.configuration.todoJiraLink && item.task
+                text: (item.task && item.task.jiraKey) ? item.task.jiraKey : "–"
+                font.family: (item.task && item.task.jiraKey) ? "monospace" : PlasmaCore.Theme.defaultFont.family
+                font.bold: item.task && item.task.jiraKey
+                onClicked: {
+                    if (item.task && item.task.jiraKey) item.openJiraRequested(item.task);
+                    else item.linkJiraRequested(item.task);
+                }
+                PlasmaComponents3.ToolTip.text: (item.task && item.task.jiraKey)
+                        ? i18n("Subtarea de Jira %1 — click para ver el detalle", item.task.jiraKey)
+                        : i18n("Anexar una subtarea de Jira")
+                PlasmaComponents3.ToolTip.visible: hovered
+                PlasmaComponents3.ToolTip.delay: 500
             }
 
             PriorityBadge {

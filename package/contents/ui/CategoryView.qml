@@ -20,6 +20,12 @@ Item {
     signal editSubtaskRequested(var task, var subtask)
     signal exportRequested(int catIndex, string categoryName)
     signal importRequested(int catIndex, string categoryName)
+    signal linkJiraRequested(var task)
+    signal openJiraRequested(var task)
+
+    // Expand/collapse-all control (see TaskItem.expandSignal/expandTarget).
+    property int _expandSeq: 0
+    property bool _expandTarget: false
 
     CategoryHelper { id: cats }
 
@@ -63,6 +69,21 @@ Item {
                 }
                 font.bold: true
                 elide: Text.ElideRight
+            }
+            // Expand / collapse all tasks (show/hide descriptions).
+            PlasmaComponents3.ToolButton {
+                icon.name: "arrow-down-double"
+                onClicked: { view._expandTarget = true; view._expandSeq++; }
+                PlasmaComponents3.ToolTip.text: i18n("Expandir todas las tareas")
+                PlasmaComponents3.ToolTip.visible: hovered
+                PlasmaComponents3.ToolTip.delay: 500
+            }
+            PlasmaComponents3.ToolButton {
+                icon.name: "arrow-up-double"
+                onClicked: { view._expandTarget = false; view._expandSeq++; }
+                PlasmaComponents3.ToolTip.text: i18n("Colapsar todas las tareas")
+                PlasmaComponents3.ToolTip.visible: hovered
+                PlasmaComponents3.ToolTip.delay: 500
             }
             PlasmaComponents3.ToolButton {
                 icon.name: "document-export"
@@ -125,8 +146,12 @@ Item {
                     task: modelData
                     store: view.store
                     catColor: cats.color(modelData ? modelData.category : 0)
+                    expandSignal: view._expandSeq
+                    expandTarget: view._expandTarget
                     onEditRequested: view.editTaskRequested(task)
                     onSubtaskEditRequested: view.editSubtaskRequested(task, subtask)
+                    onLinkJiraRequested: view.linkJiraRequested(task)
+                    onOpenJiraRequested: view.openJiraRequested(task)
                 }
 
                 PlasmaComponents3.Label {

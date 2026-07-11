@@ -85,6 +85,7 @@ QtObject {
             updatedAt: t.updatedAt || 0,
             notionLastEdited: t.notionLastEdited || "",
             notionSyncedAt: t.notionSyncedAt || 0,
+            jiraKey: t.jiraKey || "",
             subtasks: (t.subtasks || []).map(function(s) {
                 return {
                     id: s.id || 0,
@@ -192,6 +193,17 @@ QtObject {
         tasks[i].done = !tasks[i].done;
         _touch(tasks[i]);
         if (database) database.saveTask(tasks[i], false);
+        _bump();
+    }
+
+    // Link (or unlink, with "") a task to a Jira issue/subtask key.
+    function setJiraKey(id, key) {
+        var loc = _locById(id);
+        if (!loc) return;
+        var t = loc.arr[loc.i];
+        t.jiraKey = key || "";
+        _touch(t);
+        if (database) database.saveTask(t, loc.archived);
         _bump();
     }
 

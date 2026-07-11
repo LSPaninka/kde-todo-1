@@ -18,6 +18,7 @@ Item {
 
     property var store
     property var notionSync
+    property var jira
 
     readonly property int _nv: notionSync ? notionSync.version : 0
 
@@ -158,6 +159,8 @@ Item {
                 store: todoView.store
                 onEditTaskRequested: taskDialog.openEdit(task)
                 onEditSubtaskRequested: subDialog.openFor(task, subtask)
+                onLinkJiraRequested: jiraPicker.openFor(task)
+                onOpenJiraRequested: todoView._openLinkedJira(task)
             }
 
             Repeater {
@@ -170,6 +173,8 @@ Item {
                     onEditSubtaskRequested: subDialog.openFor(task, subtask)
                     onExportRequested: exportDialog.openFor(catIndex, categoryName)
                     onImportRequested: importDialog.openFor(catIndex, categoryName)
+                    onLinkJiraRequested: jiraPicker.openFor(task)
+                    onOpenJiraRequested: todoView._openLinkedJira(task)
                 }
             }
 
@@ -230,10 +235,42 @@ Item {
         }
     }
 
+    // Open the Jira detail modal for a linked task (guards against a stale
+    // link with no key).
+    function _openLinkedJira(task) {
+        if (!task) return;
+        if (task.jiraKey && task.jiraKey.length > 0)
+            jiraDetail.openForLinked(task.jiraKey, task.id);
+        else
+            jiraPicker.openFor(task);
+    }
+
     // -------- Shared dialogs (rendered on top of the popup) --------
     TaskEditDialog {
         id: taskDialog
         store: todoView.store
+    }
+
+    // Jira-link dialogs (only used when todoJiraLink is on).
+    JiraSubtaskPicker {
+        id: jiraPicker
+        jira: todoView.jira
+        onPicked: function(taskId, key) { todoView.store.setJiraKey(taskId, key); }
+    }
+    JiraIssueDialog {
+        id: jiraDetail
+        jira: todoView.jira
+        onRelinkRequested: function(taskId) {
+            jiraPicker.openFor(todoView.store.getAnyTask(taskId));
+        }
+    }
+
+    // Close the Jira detail modal if the plasmoid popup is collapsed.
+    Connections {
+        target: plasmoid
+        function onExpandedChanged() {
+            if (!plasmoid.expanded && jiraDetail.opened) jiraDetail.close();
+        }
     }
 
     SubtaskEditDialog {

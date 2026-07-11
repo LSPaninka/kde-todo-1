@@ -40,6 +40,11 @@
             <default>true</default>
         </entry>
 
+        <entry name="todoJiraLink" type="Bool">
+            <label>Show a button on each ToDo task to link it to a Jira issue/subtask</label>
+            <default>false</default>
+        </entry>
+
         <entry name="panelShowLabels" type="Bool">
             <label>Show category names next to counters in the panel</label>
             <default>false</default>

@@ -134,6 +134,14 @@ QtObject {
                 tx.executeSql("UPDATE schema_version SET v=3");
                 v = 3;
             }
+            if (v < 4) {
+                // Optional link from a local task to a Jira issue/subtask
+                // (the "todoJiraLink" feature). Empty = not linked.
+                tx.executeSql(
+                    "ALTER TABLE tasks ADD COLUMN jira_key TEXT NOT NULL DEFAULT ''");
+                tx.executeSql("UPDATE schema_version SET v=4");
+                v = 4;
+            }
             // Future migrations: bump v and add ALTER TABLE / new tables.
         });
     }
@@ -214,6 +222,7 @@ QtObject {
             updatedAt: row.updated_at | 0,
             notionLastEdited: row.notion_last_edited || "",
             notionSyncedAt: row.notion_synced_at | 0,
+            jiraKey: row.jira_key || "",
             subtasks: []
         };
     }
@@ -225,8 +234,8 @@ QtObject {
         _conn.transaction(function(tx) {
             tx.executeSql(
                 "INSERT OR REPLACE INTO tasks " +
-                "(id, title, description, category, priority, done, archived, created_at, archived_at, notion_page_id, updated_at, notion_last_edited, notion_synced_at) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "(id, title, description, category, priority, done, archived, created_at, archived_at, notion_page_id, updated_at, notion_last_edited, notion_synced_at, jira_key) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 [
                     t.id,
                     t.title || "",
@@ -240,7 +249,8 @@ QtObject {
                     t.notionPageId || "",
                     t.updatedAt | 0,
                     t.notionLastEdited || "",
-                    t.notionSyncedAt | 0
+                    t.notionSyncedAt | 0,
+                    t.jiraKey || ""
                 ]);
             tx.executeSql("DELETE FROM subtasks WHERE task_id=?", [t.id]);
             var subs = t.subtasks || [];
