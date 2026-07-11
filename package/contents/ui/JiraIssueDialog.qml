@@ -166,7 +166,14 @@ QQC2.Dialog {
         radius: 6
     }
 
-    contentItem: ColumnLayout {
+    // NB: the content is wrapped in a plain Item (not a Layout directly as
+    // contentItem). A ColumnLayout used as contentItem collapses to its
+    // implicit height on reopen (a QQC2.Dialog quirk) — the body was cut in
+    // half the 2nd time. The Item is sized reliably by the Dialog and the
+    // ColumnLayout anchors-fills it.
+    contentItem: Item {
+      ColumnLayout {
+        anchors.fill: parent
         spacing: 0
 
         // -------- Header --------
@@ -508,13 +515,6 @@ QQC2.Dialog {
                 PlasmaComponents3.ToolTip.delay: 500
             }
             PlasmaComponents3.ToolButton {
-                icon.name: "window-close"
-                onClicked: dlg.close()
-                PlasmaComponents3.ToolTip.text: i18n("Cerrar")
-                PlasmaComponents3.ToolTip.visible: hovered
-                PlasmaComponents3.ToolTip.delay: 500
-            }
-            PlasmaComponents3.ToolButton {
                 icon.name: "globe"
                 enabled: dlg._url().length > 0
                 onClicked: { if (dlg._url()) Qt.openUrlExternally(dlg._url()); }
@@ -523,5 +523,6 @@ QQC2.Dialog {
                 PlasmaComponents3.ToolTip.delay: 500
             }
         }
+      }
     }
 }

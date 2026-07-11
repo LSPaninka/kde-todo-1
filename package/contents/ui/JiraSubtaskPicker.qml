@@ -55,7 +55,11 @@ QQC2.Dialog {
         return out;
     }
 
-    contentItem: ColumnLayout {
+    // Wrapped in a plain Item so the ColumnLayout doesn't collapse to its
+    // implicit height on reopen (QQC2.Dialog quirk with a Layout contentItem).
+    contentItem: Item {
+      ColumnLayout {
+        anchors.fill: parent
         spacing: PlasmaCore.Units.smallSpacing
 
         // Search + refresh.
@@ -190,5 +194,6 @@ QQC2.Dialog {
                 onClicked: picker.close()
             }
         }
+      }
     }
 }
