@@ -716,17 +716,20 @@ QtObject {
         return s;
     }
 
-    // The footer "Horas" bar uses the EXACT worklog-calendar figures when an
-    // active sprint is known (consumed = worklogs inside the sprint window),
-    // otherwise falls back to the all-issues timetracking sum.
+    // The footer "Horas" bar mirrors the worklog-calendar ring. When there is
+    // an active sprint we ALWAYS use the sprint figures (consumed = my worklogs
+    // inside the sprint window; available = remaining of the sprint issues) —
+    // never the all-issues sum, which would be misleading (it aggregates every
+    // assigned issue's lifetime spent). The all-issues fallback is only used
+    // when there is no active sprint at all.
     function _hasSprintHours() {
-        return currentSprint && (sprintConsumedSec + sprintAvailableSec) > 0;
+        return currentSprint ? true : false;
     }
     function hoursConsumedSec() {
-        return _hasSprintHours() ? sprintConsumedSec : totalSpentSec();
+        return currentSprint ? sprintConsumedSec : totalSpentSec();
     }
     function hoursAvailableSec() {
-        return _hasSprintHours() ? sprintAvailableSec : totalRemainingSec();
+        return currentSprint ? sprintAvailableSec : totalRemainingSec();
     }
 
     // ------------------------------------------------------------------
@@ -746,16 +749,24 @@ QtObject {
                 try {
                     store.myAccountId = JSON.parse(xhr.responseText).accountId || "";
                     if (database && database.ready) database.setSetting("jira.accountId", store.myAccountId);
-                } catch (e) { /* leave empty → count all authors */ }
+                    store._log("accountId resuelto (" + (store.myAccountId ? "OK" : "vacío") + ").");
+                } catch (e) { store._warn("/myself parse: " + e); }
+            } else {
+                store._warn("/myself HTTP " + xhr.status + " — no se pudo resolver el accountId; " +
+                            "las horas quemadas del sprint quedarán en 0.");
             }
             cb();
         };
-        try { xhr.send(); } catch (e) { cb(); }
+        try { xhr.send(); } catch (e) { store._warn("/myself send: " + e); cb(); }
     }
 
-    // Calculated remaining from a raw issue's fields (worklog-strategy).
+    // Remaining like the ring's default ("api") strategy: trust Jira's
+    // remainingEstimateSeconds / timeestimate, falling back to the calculated
+    // max(0, original - spent) when Jira doesn't provide a remaining estimate.
     function _remainingSecFromFields(f) {
         var tt = f.timetracking || {};
+        if (typeof tt.remainingEstimateSeconds === "number") return tt.remainingEstimateSeconds;
+        if (typeof f.timeestimate === "number") return f.timeestimate;
         var orig = (typeof f.timeoriginalestimate === "number") ? f.timeoriginalestimate
                  : (typeof tt.originalEstimateSeconds === "number") ? tt.originalEstimateSeconds : 0;
         var spent = (typeof tt.timeSpentSeconds === "number") ? tt.timeSpentSeconds : 0;
@@ -764,6 +775,7 @@ QtObject {
 
     function _computeSprintHours(rawIssues, startMs, endMs) {
         var available = 0, consumed = 0;
+        var counted = 0, skippedAuthor = 0, skippedDate = 0;
         for (var k = 0; k < rawIssues.length; k++) {
             var f = rawIssues[k].fields || {};
             available += _remainingSecFromFields(f);
@@ -771,10 +783,13 @@ QtObject {
             for (var w = 0; w < wls.length; w++) {
                 var wo = wls[w];
                 var sm = new Date(wo.started).getTime();
-                if (isNaN(sm) || sm < startMs || sm > endMs) continue;
+                if (isNaN(sm) || sm < startMs || sm > endMs) { skippedDate++; continue; }
                 var auth = wo.author || {};
-                if (myAccountId && auth.accountId !== myAccountId) continue;
+                // Only MY worklogs count. If we couldn't resolve our own
+                // accountId, count nothing (better than counting the team's).
+                if (!myAccountId || auth.accountId !== myAccountId) { skippedAuthor++; continue; }
                 consumed += wo.timeSpentSeconds | 0;
+                counted++;
             }
         }
         store.sprintConsumedSec  = consumed;
@@ -784,17 +799,20 @@ QtObject {
             database.setSetting("jira.sprintAvailable", "" + available);
         }
         store._bump();
-        _log("Sprint hours: consumed=" + consumed + "s, available=" + available + "s.");
+        _log("Sprint hours: issues=" + rawIssues.length + ", myAccountId=" +
+             (myAccountId ? myAccountId : "(VACÍO!)") + ", consumed=" + consumed +
+             "s (" + counted + " worklog[s]), available=" + available + "s; " +
+             "skipped: " + skippedDate + " by date, " + skippedAuthor + " by author.");
     }
 
     function _fetchSprintHours() {
-        if (!currentSprint || !currentSprint.id) return;
+        if (!currentSprint || !currentSprint.id) { _log("sprint hours: sin sprint id, se omite."); return; }
         if (_sprintHoursLoading) return;
         var c = _jiraCreds();
-        if (!c) return;
+        if (!c) { _warn("sprint hours: faltan credenciales."); return; }
         var startMs = Date.parse(currentSprint.startDate);
         var endMs   = Date.parse(currentSprint.endDate);
-        if (isNaN(startMs) || isNaN(endMs)) return;
+        if (isNaN(startMs) || isNaN(endMs)) { _warn("sprint hours: fechas de sprint inválidas."); return; }
 
         _sprintHoursLoading = true;
         _resolveAccountId(c, function() {
@@ -802,6 +820,8 @@ QtObject {
             var url = c.site + "/rest/api/3/search/jql?jql=" + encodeURIComponent(jql) +
                       "&maxResults=200" +
                       "&fields=summary,worklog,timeoriginalestimate,timeestimate,timetracking";
+            store._log("sprint hours GET (jql=" + jql + ", accountId=" +
+                       (store.myAccountId ? "[OK]" : "(VACÍO!)") + ")");
             var xhr = new XMLHttpRequest();
             xhr.open("GET", url, true);
             xhr.setRequestHeader("Authorization", "Basic " + Qt.btoa(c.email + ":" + c.token));
@@ -817,7 +837,8 @@ QtObject {
                         store._warn("sprint hours parse: " + e);
                     }
                 } else {
-                    store._warn("sprint hours HTTP " + xhr.status);
+                    store._warn("sprint hours HTTP " + xhr.status + ": " +
+                                store._extractErrorMessage(xhr.responseText));
                 }
             };
             try { xhr.send(); }
