@@ -138,6 +138,7 @@ QtObject {
         if (!database || !database.ready) return;
         database.saveJiraIssues(issues, lastFetchedAt);
         database.setSetting("jira.sprint", currentSprint ? JSON.stringify(currentSprint) : "");
+        database.setSetting("jira.sprintAvailable", "" + (sprintAvailableSec | 0));
     }
 
     // ------------------------------------------------------------------
@@ -286,11 +287,15 @@ QtObject {
                     }
                     store.issues = out;
                     store.currentSprint = store._extractActiveSprint(raw, sprintField);
+                    // "Disponible" comes straight from the issues we just
+                    // fetched (those in the active sprint) — no fragile extra
+                    // request. "Quemadas" (worklogs in window) still needs one.
+                    store.sprintAvailableSec = store._computeSprintAvailable(raw, sprintField, store.currentSprint);
                     store.lastFetchedAt = Date.now();
                     store.lastError = "";
                     store.saveCache();
                     store._bump();
-                    // Refresh the sprint "Horas" figures (worklogs in window).
+                    // Refresh the sprint "Quemadas" (my worklogs in the window).
                     store._fetchSprintHours();
 
                     store._log("");
@@ -773,12 +778,33 @@ QtObject {
         return Math.max(0, orig - spent);
     }
 
-    function _computeSprintHours(rawIssues, startMs, endMs) {
-        var available = 0, consumed = 0;
-        var counted = 0, skippedAuthor = 0, skippedDate = 0;
+    // "Disponible": Σ remaining of the fetched issues that are in the active
+    // sprint (uses the sprint custom field to decide membership). Computed
+    // from the main fetch, so the bar is reliable even if the worklog query
+    // for "Quemadas" fails.
+    function _computeSprintAvailable(rawIssues, field, sprint) {
+        if (!sprint || !field) return 0;
+        var s = 0;
+        for (var i = 0; i < rawIssues.length; i++) {
+            var f = rawIssues[i].fields || {};
+            var arr = f[field];
+            if (!arr) continue;
+            if (!Array.isArray(arr)) arr = [arr];
+            var inSprint = false;
+            for (var j = 0; j < arr.length; j++) {
+                if (arr[j] && arr[j].id === sprint.id) { inSprint = true; break; }
+            }
+            if (!inSprint) continue;
+            s += _remainingSecFromFields(f);
+        }
+        return s;
+    }
+
+    // "Quemadas": Σ of MY worklogs whose `started` is inside the sprint window.
+    function _computeSprintConsumed(rawIssues, startMs, endMs) {
+        var consumed = 0, counted = 0, skippedAuthor = 0, skippedDate = 0;
         for (var k = 0; k < rawIssues.length; k++) {
             var f = rawIssues[k].fields || {};
-            available += _remainingSecFromFields(f);
             var wls = (f.worklog && f.worklog.worklogs) || [];
             for (var w = 0; w < wls.length; w++) {
                 var wo = wls[w];
@@ -792,17 +818,13 @@ QtObject {
                 counted++;
             }
         }
-        store.sprintConsumedSec  = consumed;
-        store.sprintAvailableSec = available;
-        if (database && database.ready) {
-            database.setSetting("jira.sprintConsumed",  "" + consumed);
-            database.setSetting("jira.sprintAvailable", "" + available);
-        }
+        store.sprintConsumedSec = consumed;
+        if (database && database.ready) database.setSetting("jira.sprintConsumed", "" + consumed);
         store._bump();
-        _log("Sprint hours: issues=" + rawIssues.length + ", myAccountId=" +
+        _log("Sprint quemadas: issues=" + rawIssues.length + ", myAccountId=" +
              (myAccountId ? myAccountId : "(VACÍO!)") + ", consumed=" + consumed +
-             "s (" + counted + " worklog[s]), available=" + available + "s; " +
-             "skipped: " + skippedDate + " by date, " + skippedAuthor + " by author.");
+             "s (" + counted + " worklog[s]); skipped: " + skippedDate + " by date, " +
+             skippedAuthor + " by author.");
     }
 
     function _fetchSprintHours() {
@@ -832,7 +854,7 @@ QtObject {
                 if (xhr.status === 200) {
                     try {
                         var data = JSON.parse(xhr.responseText);
-                        store._computeSprintHours(data.issues || [], startMs, endMs);
+                        store._computeSprintConsumed(data.issues || [], startMs, endMs);
                     } catch (e) {
                         store._warn("sprint hours parse: " + e);
                     }
