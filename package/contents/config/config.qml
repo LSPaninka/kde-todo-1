@@ -18,19 +18,34 @@ ConfigModel {
         source: "configAppearance.qml"
     }
     ConfigCategory {
-        name: i18n("Jira")
+        name: i18n("Jira 1")
         icon: "go-bottom"
         source: "configJira.qml"
     }
     ConfigCategory {
-        name: i18n("Categorías Jira")
+        name: i18n("Categorías Jira 1")
         icon: "preferences-desktop-color"
         source: "configJiraCategories.qml"
     }
     ConfigCategory {
-        name: i18n("Estados Jira")
+        name: i18n("Estados Jira 1")
         icon: "preferences-desktop-color"
         source: "configJiraStatuses.qml"
+    }
+    ConfigCategory {
+        name: i18n("Jira 2")
+        icon: "go-bottom"
+        source: "configJira2.qml"
+    }
+    ConfigCategory {
+        name: i18n("Categorías Jira 2")
+        icon: "preferences-desktop-color"
+        source: "configJira2Categories.qml"
+    }
+    ConfigCategory {
+        name: i18n("Estados Jira 2")
+        icon: "preferences-desktop-color"
+        source: "configJira2Statuses.qml"
     }
     ConfigCategory {
         name: i18n("GitHub")

@@ -18,6 +18,7 @@ QQC2.Dialog {
     id: dlg
 
     property var jira
+    property string cfgPrefix: "jira"
     property var basicIssue: null      // the list item we were opened from
     property var detail: null          // the fetched detail (or null)
     property bool loadingDetail: false
@@ -137,8 +138,8 @@ QQC2.Dialog {
     function _statusColor() {
         var name = _status();
         var s = (name || "").trim().toLowerCase();
-        var names  = plasmoid.configuration.jiraStatusNames  || [];
-        var colors = plasmoid.configuration.jiraStatusColors || [];
+        var names  = plasmoid.configuration[cfgPrefix+"StatusNames"]  || [];
+        var colors = plasmoid.configuration[cfgPrefix+"StatusColors"] || [];
         for (var i = 0; i < names.length; i++) {
             if ((names[i] || "").trim().toLowerCase() === s) {
                 var c = (colors[i] || "").trim();

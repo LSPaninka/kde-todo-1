@@ -23,6 +23,12 @@ QtObject {
     property var plasmoidApi: null
     property var database: null
 
+    // Config/settings key prefix, so a second instance ("jira2") reuses all
+    // of this logic against its own credentials/categories/etc. Config keys
+    // are `<cfgPrefix>Site`, `<cfgPrefix>CategoryNames`, … and SQLite settings
+    // keys are `<cfgPrefix>.site`, `<cfgPrefix>.sprint`, …
+    property string cfgPrefix: "jira"
+
     property var issues: []
     property bool loading: false
     property string lastError: ""
@@ -78,9 +84,16 @@ QtObject {
         if (currentSprint) _fetchSprintHours();
     }
 
+    // Read a config value for this instance (cfgPrefix + suffix).
+    function _cfg(suffix) {
+        return plasmoidApi ? plasmoidApi.configuration[cfgPrefix + suffix] : undefined;
+    }
+    // SQLite settings key for this instance (cfgPrefix + "." + key).
+    function _sk(key) { return cfgPrefix + "." + key; }
+
     function applyRefreshSchedule() {
         if (!plasmoidApi) return;
-        var minutes = plasmoidApi.configuration.jiraRefreshMinutes | 0;
+        var minutes = _cfg("RefreshMinutes") | 0;
         if (minutes > 0) {
             _refreshTimer.interval = minutes * 60 * 1000;
             _refreshTimer.running = true;
@@ -99,20 +112,20 @@ QtObject {
         if (!database || !database.ready || !plasmoidApi) return;
         var pc = plasmoidApi.configuration;
         var restored = [];
-        if (!pc.jiraSite)  { var s = database.getSetting("jira.site",  ""); if (s) { pc.jiraSite  = s; restored.push("site"); } }
-        if (!pc.jiraEmail) { var e = database.getSetting("jira.email", ""); if (e) { pc.jiraEmail = e; restored.push("email"); } }
-        if (!pc.jiraToken) { var t = database.getSetting("jira.token", ""); if (t) { pc.jiraToken = t; restored.push("token"); } }
-        if (!pc.jiraJql)   { var j = database.getSetting("jira.jql",   ""); if (j) { pc.jiraJql   = j; restored.push("jql"); } }
+        if (!pc[cfgPrefix+"Site"])  { var s = database.getSetting(_sk("site"),  ""); if (s) { pc[cfgPrefix+"Site"]  = s; restored.push("site"); } }
+        if (!pc[cfgPrefix+"Email"]) { var e = database.getSetting(_sk("email"), ""); if (e) { pc[cfgPrefix+"Email"] = e; restored.push("email"); } }
+        if (!pc[cfgPrefix+"Token"]) { var t = database.getSetting(_sk("token"), ""); if (t) { pc[cfgPrefix+"Token"] = t; restored.push("token"); } }
+        if (!pc[cfgPrefix+"Jql"])   { var j = database.getSetting(_sk("jql"),   ""); if (j) { pc[cfgPrefix+"Jql"]   = j; restored.push("jql"); } }
         if (restored.length) _log("restored from cache: " + restored.join(", "));
     }
 
     function persistCredentials() {
         if (!database || !database.ready || !plasmoidApi) return;
         var pc = plasmoidApi.configuration;
-        database.setSetting("jira.site",  pc.jiraSite  || "");
-        database.setSetting("jira.email", pc.jiraEmail || "");
-        database.setSetting("jira.token", pc.jiraToken || "");
-        database.setSetting("jira.jql",   pc.jiraJql   || "");
+        database.setSetting(_sk("site"),  pc[cfgPrefix+"Site"]  || "");
+        database.setSetting(_sk("email"), pc[cfgPrefix+"Email"] || "");
+        database.setSetting(_sk("token"), pc[cfgPrefix+"Token"] || "");
+        database.setSetting(_sk("jql"),   pc[cfgPrefix+"Jql"]   || "");
     }
 
     // ------------------------------------------------------------------
@@ -121,24 +134,24 @@ QtObject {
 
     function loadCache() {
         if (!database || !database.ready) return;
-        var d = database.loadJiraIssues();
+        var d = database.loadJiraIssues(cfgPrefix);
         if (d.issues && d.issues.length > 0) {
             issues = d.issues;
             lastFetchedAt = d.fetchedAt;
             _bump();
         }
-        var sp = database.getSetting("jira.sprint", "");
+        var sp = database.getSetting(_sk("sprint"), "");
         if (sp) { try { currentSprint = JSON.parse(sp); } catch (e) { /* ignore */ } }
-        myAccountId        = database.getSetting("jira.accountId", "") || myAccountId;
-        sprintConsumedSec  = Number(database.getSetting("jira.sprintConsumed",  "0")) || 0;
-        sprintAvailableSec = Number(database.getSetting("jira.sprintAvailable", "0")) || 0;
+        myAccountId        = database.getSetting(_sk("accountId"), "") || myAccountId;
+        sprintConsumedSec  = Number(database.getSetting(_sk("sprintConsumed"),  "0")) || 0;
+        sprintAvailableSec = Number(database.getSetting(_sk("sprintAvailable"), "0")) || 0;
     }
 
     function saveCache() {
         if (!database || !database.ready) return;
-        database.saveJiraIssues(issues, lastFetchedAt);
-        database.setSetting("jira.sprint", currentSprint ? JSON.stringify(currentSprint) : "");
-        database.setSetting("jira.sprintAvailable", "" + (sprintAvailableSec | 0));
+        database.saveJiraIssues(issues, lastFetchedAt, cfgPrefix);
+        database.setSetting(_sk("sprint"), currentSprint ? JSON.stringify(currentSprint) : "");
+        database.setSetting(_sk("sprintAvailable"), "" + (sprintAvailableSec | 0));
     }
 
     // ------------------------------------------------------------------
@@ -174,11 +187,11 @@ QtObject {
         }
 
         var pc = plasmoidApi.configuration;
-        var site  = (pc.jiraSite || "").trim().replace(/\/+$/, "");
-        var email = (pc.jiraEmail || "").trim();
-        var token = (pc.jiraToken || "").trim();
-        var jql   = (pc.jiraJql || "").trim();
-        var max   = Math.max(10, Math.min(200, pc.jiraMaxResults | 0 || 50));
+        var site  = (pc[cfgPrefix+"Site"] || "").trim().replace(/\/+$/, "");
+        var email = (pc[cfgPrefix+"Email"] || "").trim();
+        var token = (pc[cfgPrefix+"Token"] || "").trim();
+        var jql   = (pc[cfgPrefix+"Jql"] || "").trim();
+        var max   = Math.max(10, Math.min(200, pc[cfgPrefix+"MaxResults"] | 0 || 50));
 
         _log("Credenciales (de plasmoidApi.configuration):");
         _log("  jiraSite   = " + (site  || "(VACÍO)"));
@@ -217,7 +230,7 @@ QtObject {
         lastError = "";
         _bump();
 
-        var sprintField = (pc.jiraSprintField || "").trim();
+        var sprintField = (pc[cfgPrefix+"SprintField"] || "").trim();
         var fields = "summary,status,priority,issuetype,parent,updated,timetracking";
         if (sprintField) fields += "," + sprintField;
         // /rest/api/3/search was removed in 2025; /rest/api/3/search/jql is
@@ -430,9 +443,9 @@ QtObject {
     function fetchIssueDetail(key, cb) {
         if (!plasmoidApi) { cb(false, null, qsTr("Sin configuración.")); return; }
         var pc = plasmoidApi.configuration;
-        var site  = (pc.jiraSite || "").trim().replace(/\/+$/, "");
-        var email = (pc.jiraEmail || "").trim();
-        var token = (pc.jiraToken || "").trim();
+        var site  = (pc[cfgPrefix+"Site"] || "").trim().replace(/\/+$/, "");
+        var email = (pc[cfgPrefix+"Email"] || "").trim();
+        var token = (pc[cfgPrefix+"Token"] || "").trim();
         if (!site || !email || !token) { cb(false, null, qsTr("Faltan credenciales.")); return; }
 
         var fields = "summary,status,priority,issuetype,parent,assignee,description," +
@@ -470,9 +483,9 @@ QtObject {
     function _jiraCreds() {
         if (!plasmoidApi) return null;
         var pc = plasmoidApi.configuration;
-        var site  = (pc.jiraSite || "").trim().replace(/\/+$/, "");
-        var email = (pc.jiraEmail || "").trim();
-        var token = (pc.jiraToken || "").trim();
+        var site  = (pc[cfgPrefix+"Site"] || "").trim().replace(/\/+$/, "");
+        var email = (pc[cfgPrefix+"Email"] || "").trim();
+        var token = (pc[cfgPrefix+"Token"] || "").trim();
         if (!site || !email || !token) return null;
         return { site: site, email: email, token: token };
     }
@@ -664,8 +677,8 @@ QtObject {
 
     function matchesJiraCategory(issue, catIndex) {
         if (!plasmoidApi) return false;
-        var fields = plasmoidApi.configuration.jiraCategoryFilterFields || [];
-        var values = plasmoidApi.configuration.jiraCategoryFilterValues || [];
+        var fields = _cfg("CategoryFilterFields") || [];
+        var values = _cfg("CategoryFilterValues") || [];
         var field = (fields[catIndex] || "").trim();
         var value = (values[catIndex] || "").trim();
 
@@ -753,7 +766,7 @@ QtObject {
             if (xhr.status === 200) {
                 try {
                     store.myAccountId = JSON.parse(xhr.responseText).accountId || "";
-                    if (database && database.ready) database.setSetting("jira.accountId", store.myAccountId);
+                    if (database && database.ready) database.setSetting(store._sk("accountId"), store.myAccountId);
                     store._log("accountId resuelto (" + (store.myAccountId ? "OK" : "vacío") + ").");
                 } catch (e) { store._warn("/myself parse: " + e); }
             } else {
@@ -819,7 +832,7 @@ QtObject {
             }
         }
         store.sprintConsumedSec = consumed;
-        if (database && database.ready) database.setSetting("jira.sprintConsumed", "" + consumed);
+        if (database && database.ready) database.setSetting(_sk("sprintConsumed"), "" + consumed);
         store._bump();
         _log("Sprint quemadas: issues=" + rawIssues.length + ", myAccountId=" +
              (myAccountId ? myAccountId : "(VACÍO!)") + ", consumed=" + consumed +
@@ -918,8 +931,8 @@ QtObject {
     function _log(msg) {
         _appendDebug(msg + "\n");
         if (!plasmoidApi) return;
-        if (plasmoidApi.configuration.jiraDebug === false) return;
-        console.log("[JiraStore] " + msg);
+        if (_cfg("Debug") === false) return;
+        console.log("[JiraStore:" + cfgPrefix + "] " + msg);
     }
 
     function _warn(msg) {
@@ -942,10 +955,10 @@ QtObject {
 
     function _logCategoryCounts() {
         if (!plasmoidApi) return;
-        var n = Math.min(10, Math.max(1, plasmoidApi.configuration.jiraCategoryCount | 0 || 3));
-        var names  = plasmoidApi.configuration.jiraCategoryNames        || [];
-        var fields = plasmoidApi.configuration.jiraCategoryFilterFields || [];
-        var values = plasmoidApi.configuration.jiraCategoryFilterValues || [];
+        var n = Math.min(10, Math.max(1, _cfg("CategoryCount") | 0 || 3));
+        var names  = _cfg("CategoryNames")        || [];
+        var fields = _cfg("CategoryFilterFields") || [];
+        var values = _cfg("CategoryFilterValues") || [];
         for (var i = 0; i < n; i++) {
             var label = names[i] || ("Cat. " + (i + 1));
             var field = fields[i] || "(sin filtro)";

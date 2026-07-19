@@ -16,10 +16,12 @@ import org.kde.plasma.components 3.0 as PlasmaComponents3
 Item {
     id: view
     property var jira
+    // Config key prefix for this instance ("jira" or "jira2").
+    property string cfgPrefix: "jira"
 
     readonly property int _v: jira ? jira.version : 0
     readonly property int categoryCount:
-        Math.min(10, Math.max(1, plasmoid.configuration.jiraCategoryCount | 0 || 3))
+        Math.min(10, Math.max(1, plasmoid.configuration[cfgPrefix+"CategoryCount"] | 0 || 3))
     // Each tab gets a 1/N share of the bar so they always fill the width.
     readonly property real _tabWidth: tabs.width / Math.max(1, categoryCount)
 
@@ -28,11 +30,11 @@ Item {
         return Qt.formatDateTime(new Date(ms), Qt.DefaultLocaleShortDate);
     }
     function _categoryName(i) {
-        var arr = plasmoid.configuration.jiraCategoryNames || [];
+        var arr = plasmoid.configuration[cfgPrefix+"CategoryNames"] || [];
         return arr[i] || qsTr("Cat. %1").arg(i + 1);
     }
     function _categoryColor(i) {
-        var arr = plasmoid.configuration.jiraCategoryColors || [];
+        var arr = plasmoid.configuration[cfgPrefix+"CategoryColors"] || [];
         return arr[i] || "#7f8c8d";
     }
 
@@ -197,6 +199,7 @@ Item {
                                 width: list.width
                                 issue: modelData
                                 jira: view.jira
+                                cfgPrefix: view.cfgPrefix
                                 onActivated: function(iss) { issueDialog.openFor(iss); }
                             }
 
@@ -384,6 +387,7 @@ Item {
     JiraIssueDialog {
         id: issueDialog
         jira: view.jira
+        cfgPrefix: view.cfgPrefix
     }
 
     // Close the detail modal if the plasmoid popup is collapsed.

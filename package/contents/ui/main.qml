@@ -34,6 +34,7 @@ Item {
     Plasmoid.fullRepresentation: FullRepresentation {
         store: _store
         jira: _jira
+        jira2: _jira2
         gh: _gh
         notion: _notion
         notionSync: _notionSync
@@ -46,6 +47,7 @@ Item {
     Plasmoid.compactRepresentation: CompactRepresentation {
         store: _store
         jira: _jira
+        jira2: _jira2
         gh: _gh
         notion: _notion
         onHoverChanged: function(isHov, mainText, subText) {
@@ -57,7 +59,8 @@ Item {
     Plasmoid.toolTipMainText: {
         // Per-square hover wins over the widget-wide summary.
         if (root.compactHoverMain.length > 0) return root.compactHoverMain;
-        if (root.mode === "jira")   return i18n("Jira — assigned issues");
+        if (root.mode === "jira")   return i18n("Jira 1 — assigned issues");
+        if (root.mode === "jira2")  return i18n("Jira 2 — assigned issues");
         if (root.mode === "gh")     return i18n("GitHub Projects");
         if (root.mode === "notion") return i18n("Notion pages");
         return i18n("Categorized ToDo");
@@ -69,6 +72,11 @@ Item {
             if (!_jira) return "";
             if (_jira.lastError) return _jira.lastError;
             return i18np("%1 issue", "%1 issues", _jira.totalCount());
+        }
+        if (root.mode === "jira2") {
+            if (!_jira2) return "";
+            if (_jira2.lastError) return _jira2.lastError;
+            return i18np("%1 issue", "%1 issues", _jira2.totalCount());
         }
         if (root.mode === "gh") {
             if (!_gh) return "";
@@ -95,6 +103,15 @@ Item {
 
     JiraStore {
         id: _jira
+        cfgPrefix: "jira"
+        plasmoidApi: plasmoid
+        database: _db
+    }
+
+    // Second Jira instance — identical logic, its own credentials/config.
+    JiraStore {
+        id: _jira2
+        cfgPrefix: "jira2"
         plasmoidApi: plasmoid
         database: _db
     }
@@ -132,6 +149,7 @@ Item {
         // Belt-and-suspenders: re-assign plasmoidApi explicitly in case the
         // declarative binding above didn't fire for some reason.
         _jira.plasmoidApi       = plasmoid;
+        _jira2.plasmoidApi      = plasmoid;
         _gh.plasmoidApi         = plasmoid;
         _notion.plasmoidApi     = plasmoid;
         _notionSync.plasmoidApi = plasmoid;
@@ -141,6 +159,7 @@ Item {
         _db.init();
         _store.load();
         _jira.init();
+        _jira2.init();
         _gh.init();
         _notion.init();
         _notionSync.init();
@@ -155,11 +174,15 @@ Item {
         // into Plasmoid.configuration; mirror them straight back into
         // SQLite so the two layers stay in sync.
         _jira.persistCredentials();
+        _jira2.persistCredentials();
         _gh.persistCredentials();
         _notionSync.persistCredentials();
 
         if (root.mode === "jira" && _jira.lastFetchedAt === 0) {
             _jira.fetch();
+        }
+        if (root.mode === "jira2" && _jira2.lastFetchedAt === 0) {
+            _jira2.fetch();
         }
         if (root.mode === "gh" && _gh.lastFetchedAt === 0) {
             _gh.fetch();
@@ -198,6 +221,13 @@ Item {
 
         function onJiraRefreshMinutesChanged() { _jira.applyRefreshSchedule(); }
 
+        // Jira 2 credentials mirror + reschedule.
+        function onJira2SiteChanged()  { _jira2.persistCredentials(); }
+        function onJira2EmailChanged() { _jira2.persistCredentials(); }
+        function onJira2TokenChanged() { _jira2.persistCredentials(); }
+        function onJira2JqlChanged()   { _jira2.persistCredentials(); }
+        function onJira2RefreshMinutesChanged() { _jira2.applyRefreshSchedule(); }
+
         // Mirror GitHub credentials too.
         function onGhTokenChanged() { _gh.persistCredentials(); }
         function onGhOwnerChanged() { _gh.persistCredentials(); }
@@ -222,6 +252,9 @@ Item {
         function onModeChanged() {
             if (root.mode === "jira" && _jira.lastFetchedAt === 0 && !_jira.loading) {
                 _jira.fetch();
+            }
+            if (root.mode === "jira2" && _jira2.lastFetchedAt === 0 && !_jira2.loading) {
+                _jira2.fetch();
             }
             if (root.mode === "gh" && _gh.lastFetchedAt === 0 && !_gh.loading) {
                 _gh.fetch();

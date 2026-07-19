@@ -33,11 +33,18 @@ PlasmaComponents3.ToolButton {
             onTriggered: plasmoid.configuration.mode = "todo"
         }
         QQC2.MenuItem {
-            text: i18n("Jira")
+            text: i18n("Jira 1")
             icon.name: "go-bottom"
             checkable: true
             checked: plasmoid.configuration.mode === "jira"
             onTriggered: plasmoid.configuration.mode = "jira"
+        }
+        QQC2.MenuItem {
+            text: i18n("Jira 2")
+            icon.name: "go-bottom"
+            checkable: true
+            checked: plasmoid.configuration.mode === "jira2"
+            onTriggered: plasmoid.configuration.mode = "jira2"
         }
         QQC2.MenuItem {
             text: i18n("GitHub Projects")

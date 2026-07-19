@@ -36,9 +36,15 @@ Kirigami.FormLayout {
         }
         RadioButton {
             ButtonGroup.group: modeGroup
-            text: i18n("Jira")
+            text: i18n("Jira 1")
             checked: page.cfg_mode === "jira"
             onToggled: if (checked) page.cfg_mode = "jira"
+        }
+        RadioButton {
+            ButtonGroup.group: modeGroup
+            text: i18n("Jira 2")
+            checked: page.cfg_mode === "jira2"
+            onToggled: if (checked) page.cfg_mode = "jira2"
         }
         RadioButton {
             ButtonGroup.group: modeGroup

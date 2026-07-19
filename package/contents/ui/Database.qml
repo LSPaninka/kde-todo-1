@@ -142,6 +142,21 @@ QtObject {
                 tx.executeSql("UPDATE schema_version SET v=4");
                 v = 4;
             }
+            if (v < 5) {
+                // Support multiple Jira instances: the issue cache is now keyed
+                // by (instance, issue_key). It's only a cache, so drop & recreate.
+                tx.executeSql("DROP TABLE IF EXISTS jira_cache");
+                tx.executeSql(
+                    "CREATE TABLE jira_cache (" +
+                    "  instance TEXT NOT NULL DEFAULT 'jira'," +
+                    "  issue_key TEXT NOT NULL," +
+                    "  data TEXT NOT NULL," +
+                    "  fetched_at INTEGER NOT NULL," +
+                    "  PRIMARY KEY (instance, issue_key)" +
+                    ")");
+                tx.executeSql("UPDATE schema_version SET v=5");
+                v = 5;
+            }
             // Future migrations: bump v and add ALTER TABLE / new tables.
         });
     }
@@ -296,24 +311,26 @@ QtObject {
     // Jira cache
     // ------------------------------------------------------------------
 
-    function saveJiraIssues(issues, fetchedAt) {
+    function saveJiraIssues(issues, fetchedAt, instance) {
         if (!ready) return;
+        var inst = instance || "jira";
         _conn.transaction(function(tx) {
-            tx.executeSql("DELETE FROM jira_cache");
+            tx.executeSql("DELETE FROM jira_cache WHERE instance=?", [inst]);
             for (var i = 0; i < issues.length; i++) {
                 var iss = issues[i];
                 tx.executeSql(
-                    "INSERT INTO jira_cache (issue_key, data, fetched_at) VALUES (?, ?, ?)",
-                    [iss.key || ("?" + i), JSON.stringify(iss), fetchedAt | 0]);
+                    "INSERT INTO jira_cache (instance, issue_key, data, fetched_at) VALUES (?, ?, ?, ?)",
+                    [inst, iss.key || ("?" + i), JSON.stringify(iss), fetchedAt | 0]);
             }
         });
     }
 
-    function loadJiraIssues() {
+    function loadJiraIssues(instance) {
         var out = { issues: [], fetchedAt: 0 };
         if (!ready) return out;
+        var inst = instance || "jira";
         _conn.readTransaction(function(tx) {
-            var rs = tx.executeSql("SELECT data, fetched_at FROM jira_cache");
+            var rs = tx.executeSql("SELECT data, fetched_at FROM jira_cache WHERE instance=?", [inst]);
             for (var i = 0; i < rs.rows.length; i++) {
                 var row = rs.rows.item(i);
                 try {

@@ -15,6 +15,7 @@ Item {
 
     property var store
     property var jira
+    property var jira2
     property var gh
     property var notion
     property var notionSync
@@ -25,6 +26,7 @@ Item {
         if (full.mode === "jira")   return 1;
         if (full.mode === "gh")     return 2;
         if (full.mode === "notion") return 3;
+        if (full.mode === "jira2")  return 4;
         return 0;
     }
 
@@ -40,6 +42,7 @@ Item {
 
         JiraView {
             jira: full.jira
+            cfgPrefix: "jira"
         }
 
         GhView {
@@ -48,6 +51,11 @@ Item {
 
         NotionView {
             notion: full.notion
+        }
+
+        JiraView {
+            jira: full.jira2
+            cfgPrefix: "jira2"
         }
     }
 }

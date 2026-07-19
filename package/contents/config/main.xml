@@ -187,6 +187,79 @@
             <default>true</default>
         </entry>
 
+        <!-- Second Jira instance ("Jira 2"): same shape as the jira* entries
+             above, with its own credentials, categories, statuses, etc. -->
+        <entry name="jira2Site" type="String">
+            <label>Jira 2 Cloud site, e.g. https://your-company.atlassian.net</label>
+            <default></default>
+        </entry>
+        <entry name="jira2Email" type="String">
+            <label>Jira 2 account email</label>
+            <default></default>
+        </entry>
+        <entry name="jira2Token" type="String">
+            <label>Jira 2 API token</label>
+            <default></default>
+        </entry>
+        <entry name="jira2Jql" type="String">
+            <label>JQL query for Jira 2</label>
+            <default>assignee = currentUser() AND statusCategory != Done ORDER BY priority DESC, updated DESC</default>
+        </entry>
+        <entry name="jira2RefreshMinutes" type="Int">
+            <label>Jira 2 auto-refresh interval in minutes (0 = manual only)</label>
+            <default>5</default>
+            <min>0</min>
+            <max>1440</max>
+        </entry>
+        <entry name="jira2MaxResults" type="Int">
+            <label>Jira 2 maximum number of issues to fetch per call</label>
+            <default>50</default>
+            <min>10</min>
+            <max>200</max>
+        </entry>
+        <entry name="jira2CategoryCount" type="Int">
+            <label>Number of Jira 2 categories (tabs)</label>
+            <default>3</default>
+            <min>1</min>
+            <max>10</max>
+        </entry>
+        <entry name="jira2CategoryNames" type="StringList">
+            <label>Display name of each Jira 2 category (up to 10)</label>
+            <default>Por hacer,En curso,Hechas,Otras,Cat 5,Cat 6,Cat 7,Cat 8,Cat 9,Cat 10</default>
+        </entry>
+        <entry name="jira2CategoryColors" type="StringList">
+            <label>Hex color of each Jira 2 category (up to 10)</label>
+            <default>#42526e,#f5a623,#2ecc71,#9b59b6,#3498db,#e67e22,#1abc9c,#e74c3c,#34495e,#16a085</default>
+        </entry>
+        <entry name="jira2CategoryTextColors" type="StringList">
+            <label>"white" or "black" text color for each Jira 2 category swatch (up to 10)</label>
+            <default>white,white,white,white,white,white,white,white,white,white</default>
+        </entry>
+        <entry name="jira2CategoryFilterFields" type="StringList">
+            <label>Field that each Jira 2 category filters on (up to 10). Default: status.</label>
+            <default>status,status,status,status,status,status,status,status,status,status</default>
+        </entry>
+        <entry name="jira2CategoryFilterValues" type="StringList">
+            <label>Value to match for each Jira 2 category (use ';' for OR, up to 10)</label>
+            <default>,,,,,,,,,</default>
+        </entry>
+        <entry name="jira2StatusNames" type="StringList">
+            <label>Jira 2 status names whose chip color is overridden</label>
+            <default></default>
+        </entry>
+        <entry name="jira2StatusColors" type="StringList">
+            <label>Hex color for each overridden Jira 2 status name</label>
+            <default></default>
+        </entry>
+        <entry name="jira2SprintField" type="String">
+            <label>Jira 2 Sprint custom field id (usually customfield_10020)</label>
+            <default>customfield_10020</default>
+        </entry>
+        <entry name="jira2Debug" type="Bool">
+            <label>Log Jira 2 fetch / parse / filter details to plasmashell stdout</label>
+            <default>true</default>
+        </entry>
+
         <!-- GitHub Projects integration (read-only). Uses GraphQL v4 and a
              Personal Access Token. See docs/GH_PROJECTS.md. -->
         <entry name="ghToken" type="String">

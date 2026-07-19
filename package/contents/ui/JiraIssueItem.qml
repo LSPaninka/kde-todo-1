@@ -22,6 +22,7 @@ Rectangle {
 
     property var issue        // normalized issue from JiraStore
     property var jira: null   // the JiraStore (for transitions)
+    property string cfgPrefix: "jira"
 
     // Emitted on left click; JiraView opens the detail modal.
     signal activated(var issue)
@@ -65,8 +66,8 @@ Rectangle {
     function _configuredStatusColor(statusName) {
         var s = (statusName || "").trim().toLowerCase();
         if (!s) return "";
-        var names  = plasmoid.configuration.jiraStatusNames  || [];
-        var colors = plasmoid.configuration.jiraStatusColors || [];
+        var names  = plasmoid.configuration[cfgPrefix+"StatusNames"]  || [];
+        var colors = plasmoid.configuration[cfgPrefix+"StatusColors"] || [];
         for (var i = 0; i < names.length; i++) {
             if ((names[i] || "").trim().toLowerCase() === s) {
                 var c = (colors[i] || "").trim();

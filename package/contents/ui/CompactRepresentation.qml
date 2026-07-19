@@ -24,18 +24,20 @@ Item {
     id: compact
     property var store
     property var jira
+    property var jira2
     property var gh
     property var notion
 
     readonly property string mode: plasmoid.configuration.mode || "todo"
     readonly property int _vTodo:   store  ? store.version  : 0
     readonly property int _vJira:   jira   ? jira.version   : 0
+    readonly property int _vJira2:  jira2  ? jira2.version  : 0
     readonly property int _vGh:     gh     ? gh.version     : 0
     readonly property int _vNotion: notion ? notion.version : 0
 
-    // The "notion" CLI mode is disabled for now, so the wheel only cycles
-    // todo → jira → gh. (Notion is a ToDo-mode sync, not a standalone mode.)
-    readonly property var _modeOrder: ["todo", "jira", "gh"]
+    // The "notion" CLI mode is disabled for now, so the wheel cycles
+    // todo → jira → jira2 → gh. (Notion is a ToDo-mode sync, not a mode.)
+    readonly property var _modeOrder: ["todo", "jira", "jira2", "gh"]
 
     // Emitted whenever a swatch gains or loses hover. main.qml uses this
     // to swap Plasmoid.toolTipMainText / toolTipSubText so the *native*
@@ -81,21 +83,22 @@ Item {
         return lines.join("\n");
     }
 
-    function _jiraTextColor(idx) {
-        var arr = plasmoid.configuration.jiraCategoryTextColors || [];
+    // Jira swatch helpers, parameterized by config prefix ("jira"/"jira2").
+    function _jiraTextColor(prefix, idx) {
+        var arr = plasmoid.configuration[prefix+"CategoryTextColors"] || [];
         var v = arr[idx];
         return (v === "black") ? "black" : "white";
     }
-    function _jiraName(i) {
-        var arr = plasmoid.configuration.jiraCategoryNames || [];
+    function _jiraName(prefix, i) {
+        var arr = plasmoid.configuration[prefix+"CategoryNames"] || [];
         return arr[i] || qsTr("Cat. %1").arg(i + 1);
     }
-    function _jiraColor(i) {
-        var arr = plasmoid.configuration.jiraCategoryColors || [];
+    function _jiraColor(prefix, i) {
+        var arr = plasmoid.configuration[prefix+"CategoryColors"] || [];
         return arr[i] || "#7f8c8d";
     }
-    function _jiraCount() {
-        return Math.min(10, Math.max(1, plasmoid.configuration.jiraCategoryCount | 0 || 3));
+    function _jiraCount(prefix) {
+        return Math.min(10, Math.max(1, plasmoid.configuration[prefix+"CategoryCount"] | 0 || 3));
     }
 
     function _ghTextColor(idx) {
@@ -173,32 +176,58 @@ Item {
             }
         }
 
-        // -------- JIRA mode --------
+        // -------- JIRA 1 mode --------
         Repeater {
-            model: compact.mode === "jira" ? compact._jiraCount() : 0
+            model: compact.mode === "jira" ? compact._jiraCount("jira") : 0
             delegate: SwatchBadge {
                 catIndex: index
-                color: compact._jiraColor(index)
+                color: compact._jiraColor("jira", index)
                 count: (compact._vJira, jira ? jira.countByJiraCategory(index) : 0)
                 showZero: plasmoid.configuration.panelShowZero
-                label: compact._jiraName(index)
+                label: compact._jiraName("jira", index)
                 showLabel: plasmoid.configuration.panelShowLabels
-                textColor: compact._jiraTextColor(index)
+                textColor: compact._jiraTextColor("jira", index)
                 insideMode: plasmoid.configuration.panelCounterStyle === "inside"
                 scalePercent: compact._scalePct
                 smallSwatch: compact._smallSwatch
                 bigSwatch: compact._bigSwatch
-                tooltipTitle: compact._jiraName(index)
-                // Hover shows the codes + names of this category's issues.
+                tooltipTitle: compact._jiraName("jira", index)
                 tooltipBody: (compact._vJira, jira ? jira.issueTitlesForCategory(index) : "")
                 onHoverChanged: function(isHov, m, s) { compact.hoverChanged(isHov, m, s); }
-                // Click opens the popup on this exact category tab; clicking
-                // again while open closes it (regardless of category).
                 onClicked: {
                     if (plasmoid.expanded) {
                         plasmoid.expanded = false;
                     } else {
                         if (jira) jira.requestCategory(index);
+                        plasmoid.expanded = true;
+                    }
+                }
+            }
+        }
+
+        // -------- JIRA 2 mode --------
+        Repeater {
+            model: compact.mode === "jira2" ? compact._jiraCount("jira2") : 0
+            delegate: SwatchBadge {
+                catIndex: index
+                color: compact._jiraColor("jira2", index)
+                count: (compact._vJira2, jira2 ? jira2.countByJiraCategory(index) : 0)
+                showZero: plasmoid.configuration.panelShowZero
+                label: compact._jiraName("jira2", index)
+                showLabel: plasmoid.configuration.panelShowLabels
+                textColor: compact._jiraTextColor("jira2", index)
+                insideMode: plasmoid.configuration.panelCounterStyle === "inside"
+                scalePercent: compact._scalePct
+                smallSwatch: compact._smallSwatch
+                bigSwatch: compact._bigSwatch
+                tooltipTitle: compact._jiraName("jira2", index)
+                tooltipBody: (compact._vJira2, jira2 ? jira2.issueTitlesForCategory(index) : "")
+                onHoverChanged: function(isHov, m, s) { compact.hoverChanged(isHov, m, s); }
+                onClicked: {
+                    if (plasmoid.expanded) {
+                        plasmoid.expanded = false;
+                    } else {
+                        if (jira2) jira2.requestCategory(index);
                         plasmoid.expanded = true;
                     }
                 }
