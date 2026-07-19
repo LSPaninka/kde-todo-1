@@ -33,6 +33,10 @@ Rectangle {
     property string kind: "jira"   // "jira" | "clockify"
     property bool compact: false   // true in combined mode (force smaller font)
     property bool useProjectColor: false
+    // Optional per-instance base color (hex) for Jira blocks — lets a
+    // second Jira instance be told apart from the first. Empty = the
+    // classic muted purple.
+    property string baseColor: ""
     // When true the block sits on top of (overlaps in time) another block
     // of the same source on the same day — the calendar computes this
     // per source and passes it down. Jira-Jira overlaps get an orange
@@ -70,9 +74,23 @@ Rectangle {
     readonly property int _smallSize:   Math.max(7, _baseSize - 1)
     readonly property int _useSize:     (compact || _isShort) ? _smallSize : _baseSize
 
+    // Parse a "#rrggbb" string into {r,g,b} 0..1 (no Qt.color() in QML).
+    function _hex(hex, fallbackR, fallbackG, fallbackB) {
+        var h = ("" + (hex || "")).trim();
+        var r = fallbackR, g = fallbackG, b = fallbackB;
+        if (h.charAt(0) === "#" && h.length >= 7) {
+            var pr = parseInt(h.substr(1, 2), 16);
+            var pg = parseInt(h.substr(3, 2), 16);
+            var pb = parseInt(h.substr(5, 2), 16);
+            if (!isNaN(pr) && !isNaN(pg) && !isNaN(pb)) { r = pr; g = pg; b = pb; }
+        }
+        return { r: r / 255, g: g / 255, b: b / 255 };
+    }
+
     function _fillColor() {
         if (kind === "jira") {
-            return Qt.rgba(155/255, 145/255, 230/255, 0.55);       // muted purple
+            var c = _hex(baseColor, 155, 145, 230);   // default muted purple
+            return Qt.rgba(c.r, c.g, c.b, 0.55);
         }
         // Clockify: optional project tint, otherwise light green.
         if (useProjectColor && entry && entry.projectColor && entry.projectColor.length > 0) {
@@ -87,7 +105,10 @@ Rectangle {
                    ? Qt.rgba(255/255, 140/255,   0/255, 1)   // dark orange
                    : Qt.rgba(255/255, 215/255,   0/255, 1);  // gold / yellow
         }
-        if (kind === "jira") return Qt.rgba(120/255, 110/255, 200/255, 0.95);
+        if (kind === "jira") {
+            var c = _hex(baseColor, 120, 110, 200);   // default purple border
+            return Qt.rgba(c.r, c.g, c.b, 0.95);
+        }
         if (useProjectColor && entry && entry.projectColor) {
             return Qt.darker(entry.projectColor, 1.3);
         }

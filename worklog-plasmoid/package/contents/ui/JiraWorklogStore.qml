@@ -21,6 +21,15 @@ QtObject {
 
     property var plasmoidApi: null
 
+    // Which kcfg keys hold this instance's credentials. Instance 1 uses the
+    // shared jira* keys; instance 2 uses jira2*. Everything else (sprint,
+    // subtask JQL, remaining mode, debug) stays shared — the bottom panel
+    // is attached to the first Jira only.
+    property string siteKey:  "jiraSite"
+    property string emailKey: "jiraEmail"
+    property string tokenKey: "jiraToken"
+    property int    instanceId: 1     // 1 or 2, for log labels
+
     property var worklogs: []         // {id, issueKey, issueSummary, started (ms), durationSec, comment}
     property var assignableIssues: [] // {key, summary, issuetype, status, remainingSec}
     property var subtasks: []         // {key, summary, status, statusCategory, statusColor,
@@ -864,9 +873,9 @@ QtObject {
     function _creds() {
         if (!plasmoidApi) return null;
         var pc = plasmoidApi.configuration;
-        var site  = (pc.jiraSite  || "").trim().replace(/\/+$/, "");
-        var email = (pc.jiraEmail || "").trim();
-        var token = (pc.jiraToken || "").trim();
+        var site  = ("" + (pc[siteKey]  || "")).trim().replace(/\/+$/, "");
+        var email = ("" + (pc[emailKey] || "")).trim();
+        var token = ("" + (pc[tokenKey] || "")).trim();
         if (!site || !email || !token) {
             lastError = qsTr("Faltan credenciales (sitio, email o token). Configurá la pestaña Jira.");
             _warn("Faltan credenciales: site=" + (!!site) + " email=" + (!!email) + " token=" + (!!token));
@@ -1006,12 +1015,12 @@ QtObject {
         _appendDebug(msg + "\n");
         if (!plasmoidApi) return;
         if (plasmoidApi.configuration.worklogDebug === false) return;
-        console.log("[JiraWorklog] " + msg);
+        console.log("[JiraWorklog:" + instanceId + "] " + msg);
     }
 
     function _warn(msg) {
         _appendDebug("[!] " + msg + "\n");
-        console.warn("[JiraWorklog] " + msg);
+        console.warn("[JiraWorklog:" + instanceId + "] " + msg);
     }
 
     function _bump() {

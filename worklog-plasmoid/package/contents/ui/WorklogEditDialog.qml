@@ -19,7 +19,18 @@ import org.kde.plasma.components 3.0 as PlasmaComponents3
 Item {
     id: dlg
 
-    property var store
+    property var store              // Jira instance 1
+    property var store2: null       // Jira instance 2 (optional)
+    property bool store2Enabled: false
+    // Which Jira tab is active: 0 = instance 1, 1 = instance 2. The picker,
+    // the create and the store callbacks all route through _activeStore.
+    property int activeTab: 0
+    readonly property var _activeStore: (activeTab === 1 && store2) ? store2 : store
+    readonly property int _vActive: _activeStore ? _activeStore.version : 0
+
+    // Picker sort: "remaining" (horas desc), "key" (código), "status".
+    property string sortMode: "remaining"
+
     property bool isEdit: false
     property var editingEntry: null
 
@@ -50,6 +61,7 @@ Item {
     function openCreate(dayMs, sMs, eMs) {
         isEdit = false;
         editingEntry = null;
+        activeTab = 0;
         startMs = sMs;
         endMs = eMs;
         commentArea.text = "";
@@ -58,13 +70,19 @@ Item {
         searchField.text = "";
         statusText = "";
         visible = true;
+        jiraTabs.currentIndex = 0;   // reset tab to Jira 1 (imperative, see TabBar)
         dlg.forceActiveFocus();
         _refreshPicker();
+        // Warm the second instance's list too so switching tabs is instant.
+        if (store2Enabled && store2) store2.fetchAssignableIssues(function(ok) {});
     }
 
-    function openEdit(entry) {
+    // instanceIndex: 0 = Jira 1, 1 = Jira 2 (the block being edited belongs
+    // to that instance, so the tab is locked to it).
+    function openEdit(entry, instanceIndex) {
         isEdit = true;
         editingEntry = entry;
+        activeTab = (instanceIndex === 1) ? 1 : 0;
         startMs = entry.started;
         endMs = entry.started + entry.durationSec * 1000;
         commentArea.text = entry.comment || "";
@@ -73,19 +91,42 @@ Item {
         searchField.text = "";
         statusText = "";
         visible = true;
+        jiraTabs.currentIndex = dlg.activeTab;
         dlg.forceActiveFocus();
     }
 
     function _refreshPicker() {
-        if (!store) return;
+        var s = dlg._activeStore;
+        if (!s) return;
         dlg.loading = true;
-        store.fetchAssignableIssues(function(ok) {
+        s.fetchAssignableIssues(function(ok) {
             dlg.loading = false;
             if (!ok) {
                 statusText = i18n("No se pudo cargar la lista de issues.");
                 statusColor = PlasmaCore.Theme.negativeTextColor;
             }
         });
+    }
+
+    // Filter + sort the active store's assignable issues for the picker.
+    function _pickerRows() {
+        var s = dlg._activeStore;
+        var arr = (s && s.assignableIssues) ? s.assignableIssues.slice() : [];
+        var q = (searchField.text || "").trim().toLowerCase();
+        if (q.length > 0) {
+            arr = arr.filter(function(it) {
+                var hay = (it.key + " " + it.summary + " " + it.issuetype + " " + it.status).toLowerCase();
+                return hay.indexOf(q) >= 0;
+            });
+        }
+        if (dlg.sortMode === "remaining") {
+            arr.sort(function(a, b) { return (b.remainingSec || 0) - (a.remainingSec || 0); });
+        } else if (dlg.sortMode === "status") {
+            arr.sort(function(a, b) { return ("" + a.status).localeCompare("" + b.status); });
+        } else {
+            arr.sort(function(a, b) { return ("" + a.key).localeCompare("" + b.key); });
+        }
+        return arr;
     }
 
     function _fmtTime(ms) {
@@ -289,6 +330,26 @@ Item {
                 wrapMode: Text.WordWrap
             }
 
+            // Jira instance tabs — only when a second Jira is enabled and
+            // we're creating (edit locks to the block's own instance).
+            // currentIndex is set imperatively from openCreate/openEdit (not
+            // bound) — a user click sets it internally and would otherwise
+            // break a `currentIndex:` binding, leaving the tab out of sync.
+            QQC2.TabBar {
+                id: jiraTabs
+                Layout.fillWidth: true
+                visible: dlg.store2Enabled && !dlg.isEdit
+                onCurrentIndexChanged: {
+                    if (currentIndex === dlg.activeTab) return;
+                    dlg.activeTab = currentIndex;
+                    dlg.selectedIssueKey = "";
+                    dlg.selectedIssueSummary = "";
+                    dlg._refreshPicker();
+                }
+                QQC2.TabButton { text: i18n("Jira 1") }
+                QQC2.TabButton { text: i18n("Jira 2") }
+            }
+
             RowLayout {
                 Layout.fillWidth: true
                 visible: !dlg.isEdit
@@ -303,6 +364,26 @@ Item {
                     id: searchField
                     Layout.fillWidth: true
                     placeholderText: i18n("Filtrar issues por texto…")
+                }
+                // Sort order: hours desc / code / status.
+                QQC2.ComboBox {
+                    id: sortCombo
+                    Layout.preferredWidth: 150
+                    textRole: "label"
+                    model: [
+                        { key: "remaining", label: i18n("Horas (desc)") },
+                        { key: "key",       label: i18n("Código") },
+                        { key: "status",    label: i18n("Estado") }
+                    ]
+                    currentIndex: {
+                        if (dlg.sortMode === "key") return 1;
+                        if (dlg.sortMode === "status") return 2;
+                        return 0;
+                    }
+                    onActivated: function(idx) { dlg.sortMode = sortCombo.model[idx].key; }
+                    PlasmaComponents3.ToolTip.text: i18n("Ordenar la lista")
+                    PlasmaComponents3.ToolTip.visible: hovered
+                    PlasmaComponents3.ToolTip.delay: 500
                 }
                 PlasmaComponents3.ToolButton {
                     icon.name: "view-refresh"
@@ -323,19 +404,7 @@ Item {
                 ListView {
                     id: pickerList
                     spacing: 2
-                    model: {
-                        if (!store) return [];
-                        var q = (searchField.text || "").trim().toLowerCase();
-                        var arr = store.assignableIssues || [];
-                        if (q.length === 0) return arr;
-                        var out = [];
-                        for (var i = 0; i < arr.length; i++) {
-                            var it = arr[i];
-                            var hay = (it.key + " " + it.summary + " " + it.issuetype + " " + it.status).toLowerCase();
-                            if (hay.indexOf(q) >= 0) out.push(it);
-                        }
-                        return out;
-                    }
+                    model: (dlg._vActive, dlg.sortMode, searchField.text, dlg._pickerRows())
                     delegate: Rectangle {
                         width: pickerList.width
                         height: row.implicitHeight + 6
@@ -453,7 +522,7 @@ Item {
                         if (!dlg.editingEntry) return;
                         dlg.loading = true;
                         dlg.statusText = i18n("Eliminando…");
-                        store.deleteWorklog(dlg.editingEntry.issueKey, dlg.editingEntry.id);
+                        dlg._activeStore.deleteWorklog(dlg.editingEntry.issueKey, dlg.editingEntry.id);
                     }
                 }
                 PlasmaComponents3.Button {
@@ -473,7 +542,7 @@ Item {
                         dlg.statusColor = PlasmaCore.Theme.textColor;
                         var dur = dlg._durationSec();
                         if (dlg.isEdit) {
-                            store.updateWorklog(
+                            dlg._activeStore.updateWorklog(
                                 dlg.editingEntry.issueKey,
                                 dlg.editingEntry.id,
                                 new Date(dlg.startMs),
@@ -481,7 +550,7 @@ Item {
                                 commentArea.text || ""
                             );
                         } else {
-                            store.createWorklog(
+                            dlg._activeStore.createWorklog(
                                 dlg.selectedIssueKey,
                                 new Date(dlg.startMs),
                                 dur,
@@ -495,8 +564,11 @@ Item {
     }
 
     // -------- store callbacks --------
+    // Target follows the active tab so both instances' create/update/delete
+    // results land here (the modal is single-flight, so the target won't
+    // switch mid-operation).
     Connections {
-        target: dlg.store
+        target: dlg._activeStore
         function onCreateFinished(ok, err) {
             dlg.loading = false;
             if (ok) {

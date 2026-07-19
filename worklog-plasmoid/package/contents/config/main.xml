@@ -26,6 +26,50 @@
             <default></default>
         </entry>
 
+        <!-- Second Jira instance (worklog plasmoid only; NOT shared with the
+             ToDo plasmoid). Independent credentials so a second Jira Cloud
+             site can be logged against side by side. The bottom panel
+             (rings / subtasks / heatmap) stays attached to the first Jira. -->
+        <entry name="jira2Enabled" type="Bool">
+            <label>Enable a second Jira instance with its own credentials.</label>
+            <default>false</default>
+        </entry>
+        <entry name="jira2Site" type="String">
+            <label>Second Jira Cloud site, e.g. https://other.atlassian.net</label>
+            <default></default>
+        </entry>
+        <entry name="jira2Email" type="String">
+            <label>Second Jira account email</label>
+            <default></default>
+        </entry>
+        <entry name="jira2Token" type="String">
+            <label>Second Jira API token (NOT password)</label>
+            <default></default>
+        </entry>
+
+        <!-- Per-instance block colors (rendered translucent), used in the
+             jira and jira-clockify modes to tell the two Jiras apart. -->
+        <entry name="jira1BlockColor" type="String">
+            <label>Block color (hex) for the first Jira instance. Drawn translucent.</label>
+            <default>#9b91e6</default>
+        </entry>
+        <entry name="jira2BlockColor" type="String">
+            <label>Block color (hex) for the second Jira instance. Drawn translucent.</label>
+            <default>#26a69a</default>
+        </entry>
+
+        <!-- Jira → Clockify sync mapping: each Jira instance copies its
+             worklogs into a specific Clockify project so the two never
+             overlap. Dedup validation is scoped to the mapped project. -->
+        <entry name="jira1ClockifyProjectId" type="String">
+            <label>Clockify project id that the first Jira's worklogs sync into.</label>
+            <default></default>
+        </entry>
+        <entry name="jira2ClockifyProjectId" type="String">
+            <label>Clockify project id that the second Jira's worklogs sync into.</label>
+            <default></default>
+        </entry>
+
         <!-- Worklog-specific config -->
         <entry name="worklogViewMode" type="String">
             <label>"9h" (09:00-18:00) or "24h" (00:00-24:00)</label>

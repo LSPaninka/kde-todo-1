@@ -123,6 +123,24 @@ Después del sync se refresca automáticamente la semana.
 
 ---
 
+## Segundo Jira
+
+Desde **Configurar → Jira** se puede habilitar una **segunda instancia de
+Jira** con credenciales propias (independientes, no compartidas con el
+plasmoide ToDo). Sus bloques aparecen en los modos Jira y Jira/Clockify con
+un **color configurable por instancia** (se dibujan translúcidos; por
+defecto violeta el 1 y verde azulado el 2), compartiendo la misma columna.
+
+En el modal de cargar horas, con 2 Jiras aparecen **dos pestañas** (Jira 1
+/ Jira 2), cada una con su lista de issues y un combo de orden (horas desc
+/ código / estado). El botón **Jira → Clockify** usa el **mapeo por
+instancia** que se configura en **Configurar → Clockify** (Jira 1 → proyecto
+X, Jira 2 → proyecto Y), así cada Jira sincroniza a su proyecto sin
+solaparse. El panel inferior (anillos / subtareas / heatmap) sigue atado al
+primer Jira.
+
+---
+
 ## Google Calendar (solo lectura)
 
 Botón de **tilde arriba a la derecha** del popup: prende/apaga la vista de

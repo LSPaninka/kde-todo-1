@@ -23,6 +23,7 @@ Item {
 
     Plasmoid.fullRepresentation: FullRepresentation {
         jiraStore: _jira
+        jira2Store: _jira2
         clockifyStore: _clockify
         googleStore: _google
         Layout.minimumWidth: plasmoid.configuration.worklogPopupWidth
@@ -56,6 +57,16 @@ Item {
     JiraWorklogStore {
         id: _jira
         plasmoidApi: plasmoid
+        instanceId: 1
+    }
+    // Second Jira instance — its own credentials via the jira2* keys.
+    JiraWorklogStore {
+        id: _jira2
+        plasmoidApi: plasmoid
+        instanceId: 2
+        siteKey: "jira2Site"
+        emailKey: "jira2Email"
+        tokenKey: "jira2Token"
     }
     ClockifyStore {
         id: _clockify
@@ -68,9 +79,11 @@ Item {
 
     Component.onCompleted: {
         _jira.plasmoidApi     = plasmoid;
+        _jira2.plasmoidApi    = plasmoid;
         _clockify.plasmoidApi = plasmoid;
         _google.plasmoidApi   = plasmoid;
         _jira.init();
+        _jira2.init();
         _clockify.init();
         _google.init();
         // Apply the pinned state on startup.

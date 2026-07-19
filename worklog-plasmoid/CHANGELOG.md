@@ -1,5 +1,33 @@
 # Changelog — Jira / Clockify Worklog Calendar
 
+## 0.12.0 — Second Jira instance
+
+- **Two Jira instances.** A second Jira can be enabled in Configurar →
+  Jira with its own site/email/token (independent of the first, and not
+  shared with the ToDo plasmoid). Its worklogs render on the calendar in
+  the jira and jira-clockify modes.
+- **Per-instance block color.** Each Jira's blocks use a configurable
+  color (drawn translucent) so the two are easy to tell apart. Defaults:
+  purple (Jira 1), teal (Jira 2). Both share the same region (they can
+  overlap, like two calendars).
+- **Tabbed new-worklog modal.** When a second Jira is enabled the modal
+  shows two tabs (Jira 1 / Jira 2); each tab lists that instance's issues
+  and logs against that instance. A new sort combo orders the list by
+  **hours (desc)**, **code** or **status**. Editing a block opens on its
+  own instance's tab (locked).
+- **Jira → Clockify sync reworked.** The inline project picker in the
+  footer is gone; instead each Jira instance is mapped to a Clockify
+  project in Configurar → Clockify (**Jira 1 →** / **Jira 2 →**). The
+  sync copies each Jira's worklogs into its mapped project, and dedup is
+  now **scoped to that project**, so the two instances can never create
+  entries in the wrong project or shadow each other's duplicates.
+- The bottom panel (rings / subtasks / heatmap) stays attached to the
+  **first** Jira, unchanged. New kcfgs: `jira2Enabled`, `jira2Site`,
+  `jira2Email`, `jira2Token`, `jira1BlockColor`, `jira2BlockColor`,
+  `jira1ClockifyProjectId`, `jira2ClockifyProjectId`.
+
+Bumped metadata 0.11.1 → 0.12.0.
+
 ## 0.11.1 — Fix: calendar blocks rendered opaque white
 
 - The 0.11.0 per-calendar color path used `Qt.color(base)` to read the

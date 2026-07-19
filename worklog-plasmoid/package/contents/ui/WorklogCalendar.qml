@@ -25,6 +25,7 @@ Item {
     id: cal
 
     property var jiraStore
+    property var jira2Store
     property var clockifyStore
     property var googleStore
     property date weekStart: new Date()
@@ -33,16 +34,19 @@ Item {
     signal createJiraRequested(real dayMs, real startMs, real endMs)
     signal createClockifyRequested(real dayMs, real startMs, real endMs)
     signal editJiraRequested(var entry)
+    signal editJira2Requested(var entry)
     signal editClockifyRequested(var entry)
     // Unified change signals — used for cross-day moves, top-edge resizes
     // (changes both start and duration) and bottom-edge resizes (duration
     // only). The store layer doesn't care which gesture produced them.
     signal moveJiraRequested(var entry, real newStartMs, int newDurationSec)
+    signal moveJira2Requested(var entry, real newStartMs, int newDurationSec)
     signal moveClockifyRequested(var entry, real newStartMs, int newDurationSec)
     signal duplicateJiraRequested(var entry)
+    signal duplicateJira2Requested(var entry)
     signal duplicateClockifyRequested(var entry)
 
-    function _emitChange(entry, newStartMs, newDurationSec, isJira) {
+    function _emitChange(entry, newStartMs, newDurationSec, kind) {
         // Clamp to the visible week so a wild drag can't log on day -1
         // or day 8. Per-day clamp is intentionally skipped — entries that
         // span midnight are legal in both Jira and Clockify.
@@ -53,8 +57,9 @@ Item {
         if (newStartMs + durMs > weMs) newStartMs = weMs - durMs;
         if (newDurationSec < 600)      newDurationSec = 600;   // 10-min floor
         if (newStartMs === entry.started && newDurationSec === entry.durationSec) return;
-        if (isJira) moveJiraRequested(entry, newStartMs, newDurationSec);
-        else        moveClockifyRequested(entry, newStartMs, newDurationSec);
+        if (kind === "jira")       moveJiraRequested(entry, newStartMs, newDurationSec);
+        else if (kind === "jira2") moveJira2Requested(entry, newStartMs, newDurationSec);
+        else                       moveClockifyRequested(entry, newStartMs, newDurationSec);
     }
 
     // px → snapped minutes. `fine` (Shift) snaps to 10 min, else 30.
@@ -64,26 +69,26 @@ Item {
         return Math.round(rawMin / g) * g;
     }
 
-    function _handleMove(entry, deltaX, deltaY, currentDayWidth, isJira, fine) {
+    function _handleMove(entry, deltaX, deltaY, currentDayWidth, kind, fine) {
         var stepMin = _pxToSnappedMin(deltaY, fine);
         var days    = currentDayWidth > 0 ? Math.round(deltaX / currentDayWidth) : 0;
         if (stepMin === 0 && days === 0) return;
         var newStart = entry.started + days * 86400000 + stepMin * 60000;
-        _emitChange(entry, newStart, entry.durationSec, isJira);
+        _emitChange(entry, newStart, entry.durationSec, kind);
     }
-    function _handleResizeTop(entry, deltaY, isJira, fine) {
+    function _handleResizeTop(entry, deltaY, kind, fine) {
         var stepMin = _pxToSnappedMin(deltaY, fine);
         if (stepMin === 0) return;
         // deltaY positive → started later, duration shrinks by same.
         var newStart = entry.started + stepMin * 60000;
         var newDur   = entry.durationSec - stepMin * 60;
-        _emitChange(entry, newStart, newDur, isJira);
+        _emitChange(entry, newStart, newDur, kind);
     }
-    function _handleResizeBottom(entry, deltaH, isJira, fine) {
+    function _handleResizeBottom(entry, deltaH, kind, fine) {
         var stepMin = _pxToSnappedMin(deltaH, fine);
         if (stepMin === 0) return;
         var newDur = entry.durationSec + stepMin * 60;
-        _emitChange(entry, entry.started, newDur, isJira);
+        _emitChange(entry, entry.started, newDur, kind);
     }
 
     readonly property bool _isCombined: source === "jira-clockify"
@@ -101,8 +106,16 @@ Item {
     readonly property real dailyTargetHours: plasmoid.configuration.worklogDailyTargetHours || 8
 
     readonly property int _vJira: jiraStore ? jiraStore.version : 0
+    readonly property int _vJira2: jira2Store ? jira2Store.version : 0
     readonly property int _vClockify: clockifyStore ? clockifyStore.version : 0
     readonly property int _vGoogle: googleStore ? googleStore.version : 0
+
+    // Second Jira instance — shown in the same modes/region as the first,
+    // told apart by its own configurable color. Overlaps are allowed.
+    readonly property bool _showJira2:
+        _showJira && plasmoid.configuration.jira2Enabled === true && !!jira2Store
+    readonly property string _jira1Color: plasmoid.configuration.jira1BlockColor || "#9b91e6"
+    readonly property string _jira2Color: plasmoid.configuration.jira2BlockColor || "#26a69a"
 
     // Google Calendar event blocks — immovable, non-interactive, drawn
     // behind the Jira/Clockify entries. Shown only when the toggle is on.
@@ -148,6 +161,7 @@ Item {
         var s = ev.started, e = ev.started + ev.durationSec * 1000;
         var lists = [];
         if (_showJira)     lists.push(_jiraByDay[dayIdx] || []);
+        if (_showJira2)    lists.push(_jira2ByDay[dayIdx] || []);
         if (_showClockify) lists.push(_clockifyByDay[dayIdx] || []);
         for (var l = 0; l < lists.length; l++) {
             var arr = lists[l];
@@ -160,8 +174,9 @@ Item {
         return false;
     }
 
-    // Buckets per day for both sources.
+    // Buckets per day for every source.
     property var _jiraByDay:     cal._rebuild(_vJira,     weekStart, jiraStore ? jiraStore.worklogs : [])
+    property var _jira2ByDay:    cal._rebuild(_vJira2,    weekStart, jira2Store ? jira2Store.worklogs : [])
     property var _clockifyByDay: cal._rebuild(_vClockify, weekStart, clockifyStore ? clockifyStore.entries : [])
     property var _googleByDay:   cal._rebuild(_vGoogle,   weekStart, googleStore ? googleStore.events : [])
 
@@ -171,6 +186,7 @@ Item {
     // starts) do NOT count. Recomputed on every store version bump via
     // the same `_v…` dependencies that drive `_byDay`.
     readonly property var _jiraOverlapMap:     cal._computeOverlaps(_vJira,     _jiraByDay)
+    readonly property var _jira2OverlapMap:    cal._computeOverlaps(_vJira2,    _jira2ByDay)
     readonly property var _clockifyOverlapMap: cal._computeOverlaps(_vClockify, _clockifyByDay)
 
     function _rebuild(_unusedV, _unusedWs, list) {
@@ -587,12 +603,13 @@ Item {
                         }
                     }
 
-                    // Jira entries.
+                    // Jira entries (instance 1).
                     Repeater {
                         model: cal._showJira ? (cal._vJira, cal._jiraByDay[dayCol.dayIndex] || []) : []
                         delegate: WorklogEntry {
                             entry: modelData
                             kind: "jira"
+                            baseColor: cal._jira1Color
                             compact: cal._isCombined
                             overlapping: !!(cal._jiraOverlapMap && cal._jiraOverlapMap[modelData.id])
                             x: cal._isCombined ? 2 : 2
@@ -604,11 +621,38 @@ Item {
                             rowHeight: cal.rowHeight
                             onClicked: cal.editJiraRequested(entry)
                             onMoveRequested: function(dx, dy, fine) {
-                                cal._handleMove(entry, dx, dy, dayCol.width, true, fine);
+                                cal._handleMove(entry, dx, dy, dayCol.width, "jira", fine);
                             }
-                            onResizeTopRequested:    function(dy, fine) { cal._handleResizeTop(entry, dy, true, fine); }
-                            onResizeBottomRequested: function(dh, fine) { cal._handleResizeBottom(entry, dh, true, fine); }
+                            onResizeTopRequested:    function(dy, fine) { cal._handleResizeTop(entry, dy, "jira", fine); }
+                            onResizeBottomRequested: function(dh, fine) { cal._handleResizeBottom(entry, dh, "jira", fine); }
                             onDuplicateRequested:    function() { cal.duplicateJiraRequested(entry); }
+                        }
+                    }
+
+                    // Jira entries (instance 2) — same region as instance 1,
+                    // told apart by color; overlaps allowed.
+                    Repeater {
+                        model: cal._showJira2 ? (cal._vJira2, cal._jira2ByDay[dayCol.dayIndex] || []) : []
+                        delegate: WorklogEntry {
+                            entry: modelData
+                            kind: "jira"
+                            baseColor: cal._jira2Color
+                            compact: cal._isCombined
+                            overlapping: !!(cal._jira2OverlapMap && cal._jira2OverlapMap[modelData.id])
+                            x: cal._isCombined ? 2 : 2
+                            y: cal._yForEntry(modelData, dayCol.dayIndex)
+                            width: cal._isCombined ? (dayCol.width / 2) - 3 : dayCol.width - 4
+                            height: cal._heightForEntry(modelData)
+                            columnHeight: dayCol.height
+                            columnWidth: dayCol.width
+                            rowHeight: cal.rowHeight
+                            onClicked: cal.editJira2Requested(entry)
+                            onMoveRequested: function(dx, dy, fine) {
+                                cal._handleMove(entry, dx, dy, dayCol.width, "jira2", fine);
+                            }
+                            onResizeTopRequested:    function(dy, fine) { cal._handleResizeTop(entry, dy, "jira2", fine); }
+                            onResizeBottomRequested: function(dh, fine) { cal._handleResizeBottom(entry, dh, "jira2", fine); }
+                            onDuplicateRequested:    function() { cal.duplicateJira2Requested(entry); }
                         }
                     }
 
@@ -631,10 +675,10 @@ Item {
                             rowHeight: cal.rowHeight
                             onClicked: cal.editClockifyRequested(entry)
                             onMoveRequested: function(dx, dy, fine) {
-                                cal._handleMove(entry, dx, dy, dayCol.width, false, fine);
+                                cal._handleMove(entry, dx, dy, dayCol.width, "clockify", fine);
                             }
-                            onResizeTopRequested:    function(dy, fine) { cal._handleResizeTop(entry, dy, false, fine); }
-                            onResizeBottomRequested: function(dh, fine) { cal._handleResizeBottom(entry, dh, false, fine); }
+                            onResizeTopRequested:    function(dy, fine) { cal._handleResizeTop(entry, dy, "clockify", fine); }
+                            onResizeBottomRequested: function(dh, fine) { cal._handleResizeBottom(entry, dh, "clockify", fine); }
                             onDuplicateRequested:    function() { cal.duplicateClockifyRequested(entry); }
                         }
                     }

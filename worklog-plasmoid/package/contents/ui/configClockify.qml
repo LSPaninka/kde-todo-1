@@ -24,6 +24,11 @@ ColumnLayout {
     property string cfg_clockifyDefaultProjectId: ""
     property alias  cfg_clockifyBillableDefault:  billableCheck.checked
 
+    // Jira → Clockify sync mapping: which Clockify project each Jira
+    // instance's worklogs are copied into (keeps the two from overlapping).
+    property string cfg_jira1ClockifyProjectId: ""
+    property string cfg_jira2ClockifyProjectId: ""
+
     // Projects fetched by "Probar". Always starts with "(sin proyecto)".
     property var projectList: [{ id: "", name: i18n("(sin proyecto)") }]
 
@@ -32,6 +37,19 @@ ColumnLayout {
             if (projectList[i].id === id) return i;
         }
         return -1;
+    }
+    // Model for a project combo: the fetched list + a placeholder row for a
+    // saved id that isn't in the list yet (so it's not silently dropped).
+    function _projModel(savedId) {
+        var arr = page.projectList.slice();
+        if (savedId && page._projectIndexFor(savedId) < 0) {
+            arr.push({ id: savedId, name: i18n("[%1] (probá la conexión)", savedId.substring(0, 8)) });
+        }
+        return arr;
+    }
+    function _projIndexIn(model, id) {
+        for (var i = 0; i < model.length; i++) if (model[i].id === id) return i;
+        return 0;
     }
 
     Label {
@@ -156,6 +174,51 @@ ColumnLayout {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 text: ""
+            }
+        }
+    }
+
+    // -------- Jira → Clockify sync mapping --------
+    GroupBox {
+        Layout.fillWidth: true
+        title: i18n("Sync Jira → Clockify")
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: Kirigami.Units.smallSpacing
+
+            Label {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                opacity: 0.75
+                text: i18n("Al usar el botón «Jira → Clockify», cada instancia de Jira copia sus "
+                         + "worklogs al proyecto elegido acá. Así no se solapan ni se cargan en el "
+                         + "proyecto equivocado. Probá la conexión arriba para poblar la lista.")
+            }
+
+            Kirigami.FormLayout {
+                Layout.fillWidth: true
+
+                ComboBox {
+                    id: jira1ProjCombo
+                    Kirigami.FormData.label: i18n("Jira 1 →:")
+                    Layout.fillWidth: true
+                    textRole: "name"
+                    valueRole: "id"
+                    model: page._projModel(page.cfg_jira1ClockifyProjectId)
+                    currentIndex: page._projIndexIn(model, page.cfg_jira1ClockifyProjectId)
+                    onActivated: page.cfg_jira1ClockifyProjectId = model[currentIndex].id
+                }
+                ComboBox {
+                    id: jira2ProjCombo
+                    Kirigami.FormData.label: i18n("Jira 2 →:")
+                    Layout.fillWidth: true
+                    textRole: "name"
+                    valueRole: "id"
+                    model: page._projModel(page.cfg_jira2ClockifyProjectId)
+                    currentIndex: page._projIndexIn(model, page.cfg_jira2ClockifyProjectId)
+                    onActivated: page.cfg_jira2ClockifyProjectId = model[currentIndex].id
+                }
             }
         }
     }

@@ -477,6 +477,11 @@ QtObject {
     // longer" case — without overlap-based dedup the previous logic
     // (±60 s start / ±60 s duration) would create a second Clockify entry
     // sitting on top of the old one.
+    //
+    // Dedup + creation are BOTH scoped to `defaultProjectId`: only Clockify
+    // entries in that project are considered when checking for duplicates,
+    // and new entries are created in it. This keeps two Jira instances that
+    // map to different projects from interfering with each other's sync.
     // ------------------------------------------------------------------
 
     function syncFromJira(jiraWorklogs, defaultProjectId, defaultBillable, callback) {
@@ -484,6 +489,7 @@ QtObject {
             callback(0, 0, 0);
             return;
         }
+        var targetProject = defaultProjectId || "";
         ensureContext(function(ok) {
             if (!ok) { callback(0, 0, 0); return; }
             var toCreate = [];
@@ -492,10 +498,12 @@ QtObject {
                 var desc = j.issueKey + (j.issueSummary ? ": " + j.issueSummary : "");
                 var jStart = j.started;
                 var jEnd   = j.started + j.durationSec * 1000;
-                // Already there? Same description + any time-range overlap.
+                // Already there? Same PROJECT + same description + any
+                // time-range overlap.
                 var hit = false;
                 for (var k = 0; k < store.entries.length; k++) {
                     var c = store.entries[k];
+                    if ((c.projectId || "") !== targetProject) continue;
                     if (c.description !== desc) continue;
                     var cStart = c.started;
                     var cEnd   = c.started + c.durationSec * 1000;

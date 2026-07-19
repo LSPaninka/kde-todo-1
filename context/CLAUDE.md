@@ -53,7 +53,7 @@ read from them and emit signals back.
 | Plasmoid                | Stores instantiated in main.qml                                                  |
 | ----------------------- | -------------------------------------------------------------------------------- |
 | Categorized ToDo        | `Database`, `TaskStore`, `JiraStore`, `GhStore`, `NotionStore`                   |
-| Worklog Calendar        | `JiraWorklogStore`, `ClockifyStore`, `GoogleCalendarStore`                       |
+| Worklog Calendar        | `JiraWorklogStore` ×2 (jira / jira2 keys), `ClockifyStore`, `GoogleCalendarStore` |
 
 Patterns shared by **every** store:
 

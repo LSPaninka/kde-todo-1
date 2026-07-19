@@ -93,6 +93,12 @@ value after a Plasma reload.
 | Entry                  | Type   | Default          | Notes |
 | ---------------------- | ------ | ---------------- | ----- |
 | `worklogSource`        | String | `jira`           | `jira` \| `jira-clockify` \| `clockify` |
+| `jira2Enabled`         | Bool   | `false`          | Enable a second Jira instance |
+| `jira2Site` / `jira2Email` / `jira2Token` | String | `""` | Second Jira credentials (worklog plasmoid only) |
+| `jira1BlockColor`      | String | `#9b91e6`        | Jira 1 block color (drawn translucent) |
+| `jira2BlockColor`      | String | `#26a69a`        | Jira 2 block color (drawn translucent) |
+| `jira1ClockifyProjectId` | String | `""`           | Clockify project Jira 1's worklogs sync into |
+| `jira2ClockifyProjectId` | String | `""`           | Clockify project Jira 2's worklogs sync into |
 | `worklogViewMode`      | String | `9h`             | `9h` (09:00–18:00) \| `24h` |
 | `worklogPopupWidth`    | Int    | `1100`           | px |
 | `worklogPopupHeight`   | Int    | `750`            | px |

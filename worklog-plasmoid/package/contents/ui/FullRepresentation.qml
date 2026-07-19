@@ -21,13 +21,20 @@ Item {
     id: full
 
     property var jiraStore
+    property var jira2Store
     property var clockifyStore
     property var googleStore
 
     property date currentWeekStart: _sundayOf(new Date())
     readonly property int _vJira: jiraStore ? jiraStore.version : 0
+    readonly property int _vJira2: jira2Store ? jira2Store.version : 0
     readonly property int _vClockify: clockifyStore ? clockifyStore.version : 0
     readonly property int _vGoogle: googleStore ? googleStore.version : 0
+
+    // Second Jira instance is active only when enabled and we're in a mode
+    // that shows Jira.
+    readonly property bool _showJira2:
+        plasmoid.configuration.jira2Enabled === true && _showJira && !!jira2Store
 
     // Whether Google Calendar event blocks are shown on the grid.
     readonly property bool _showGoogleEvents:
@@ -60,20 +67,6 @@ Item {
                                         : PlasmaCore.Theme.positiveTextColor;
         _statusOverrideHoldsError = !!isError;
         _clearStatusTimer.restart();
-    }
-
-    // Project selected from the footer ComboBox used by the
-    // "Jira → Clockify" sync button. Initialised from the config default;
-    // changes are written back so the choice persists across reloads.
-    property string syncProjectId: plasmoid.configuration.clockifyDefaultProjectId || ""
-
-    Connections {
-        target: plasmoid.configuration
-        function onClockifyDefaultProjectIdChanged() {
-            // Keep the in-memory value in sync if the user edits the
-            // config dialog while the popup is open.
-            full.syncProjectId = plasmoid.configuration.clockifyDefaultProjectId || "";
-        }
     }
 
     function _sundayOf(d) {
@@ -159,26 +152,48 @@ Item {
 
     function syncNow() {
         if (_showJira     && jiraStore)     jiraStore.fetchWeek(currentWeekStart);
+        if (_showJira2    && jira2Store)    jira2Store.fetchWeek(currentWeekStart);
         if (_showClockify && clockifyStore) clockifyStore.fetchWeek(currentWeekStart);
         if (_showGoogleEvents && googleStore) googleStore.fetchWeek(currentWeekStart);
         _refreshCurrentBottomView();
     }
 
+    // Jira → Clockify sync. Each Jira instance copies into its OWN mapped
+    // Clockify project (jira1ClockifyProjectId / jira2ClockifyProjectId),
+    // so the two never land in the wrong project and their dedup checks
+    // don't cross-contaminate. Runs sequentially and reports the totals.
     function syncJiraIntoClockify() {
-        if (!jiraStore || !clockifyStore) return;
+        if (!clockifyStore) return;
         full._setStatus(i18n("Copiando Jira → Clockify…"), false);
-        // Don't auto-clear while the sync is in flight.
         _clearStatusTimer.stop();
-        var projectForSync = full.syncProjectId || "";
-        var defaultBillable = plasmoid.configuration.clockifyBillableDefault !== false;
-        clockifyStore.syncFromJira(jiraStore.worklogs, projectForSync, defaultBillable,
-            function(created, skipped, failed) {
+        var billable = plasmoid.configuration.clockifyBillableDefault !== false;
+
+        var jobs = [];
+        if (jiraStore)
+            jobs.push({ store: jiraStore, label: i18n("Jira 1"),
+                        project: plasmoid.configuration.jira1ClockifyProjectId || "" });
+        if (full._showJira2 && jira2Store)
+            jobs.push({ store: jira2Store, label: i18n("Jira 2"),
+                        project: plasmoid.configuration.jira2ClockifyProjectId || "" });
+
+        var totCreated = 0, totSkipped = 0, totFailed = 0;
+        var runJob = function(idx) {
+            if (idx >= jobs.length) {
                 full._setStatus(
                     i18n("Sync terminado: %1 creadas, %2 ya existían, %3 fallaron.",
-                         created, skipped, failed),
-                    failed > 0);
+                         totCreated, totSkipped, totFailed),
+                    totFailed > 0);
                 if (clockifyStore) clockifyStore.fetchWeek(full.currentWeekStart);
-            });
+                return;
+            }
+            var job = jobs[idx];
+            clockifyStore.syncFromJira(job.store.worklogs, job.project, billable,
+                function(created, skipped, failed) {
+                    totCreated += created; totSkipped += skipped; totFailed += failed;
+                    runJob(idx + 1);
+                });
+        };
+        runJob(0);
     }
 
     ColumnLayout {
@@ -303,9 +318,12 @@ Item {
             text: {
                 if (full._statusOverride.length > 0) return full._statusOverride;
                 if (jiraStore && jiraStore.loading) return i18n("Jira: cargando…");
+                if (full._showJira2 && jira2Store && jira2Store.loading) return i18n("Jira 2: cargando…");
                 if (clockifyStore && clockifyStore.loading) return i18n("Clockify: cargando…");
                 if (jiraStore && jiraStore.lastError.length > 0)
                     return i18n("Jira: %1", jiraStore.lastError);
+                if (full._showJira2 && jira2Store && jira2Store.lastError.length > 0)
+                    return i18n("Jira 2: %1", jira2Store.lastError);
                 if (clockifyStore && clockifyStore.lastError.length > 0)
                     return i18n("Clockify: %1", clockifyStore.lastError);
                 return " ";   // U+00A0 NO-BREAK SPACE: reserves vertical space.
@@ -328,13 +346,15 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             jiraStore: full.jiraStore
+            jira2Store: full.jira2Store
             clockifyStore: full.clockifyStore
             googleStore: full.googleStore
             weekStart: full.currentWeekStart
             source: full.source
             onCreateJiraRequested:     jiraEditDialog.openCreate(dayMs, startMs, endMs)
             onCreateClockifyRequested: clockifyEditDialog.openCreate(startMs, endMs)
-            onEditJiraRequested:       jiraEditDialog.openEdit(entry)
+            onEditJiraRequested:       jiraEditDialog.openEdit(entry, 0)
+            onEditJira2Requested:      jiraEditDialog.openEdit(entry, 1)
             onEditClockifyRequested:   clockifyEditDialog.openEdit(entry)
             // One handler covers cross-day move, top resize and bottom
             // resize — all three end up as a Jira/Clockify update with
@@ -352,6 +372,17 @@ Item {
                     new Date(newStartMs),
                     newDurationSec,
                     undefined   // keep existing comment
+                );
+            }
+            onMoveJira2Requested: function(entry, newStartMs, newDurationSec) {
+                if (!jira2Store) return;
+                full._setStatus(i18n("Actualizando worklog Jira 2…"), false);
+                jira2Store.updateWorklog(
+                    entry.issueKey,
+                    entry.id,
+                    new Date(newStartMs),
+                    newDurationSec,
+                    undefined
                 );
             }
             onMoveClockifyRequested: function(entry, newStartMs, newDurationSec) {
@@ -376,6 +407,16 @@ Item {
                 if (!jiraStore) return;
                 full._setStatus(i18n("Duplicando worklog Jira…"), false);
                 jiraStore.createWorklog(
+                    entry.issueKey,
+                    new Date(entry.started),
+                    entry.durationSec,
+                    entry.comment || ""
+                );
+            }
+            onDuplicateJira2Requested: function(entry) {
+                if (!jira2Store) return;
+                full._setStatus(i18n("Duplicando worklog Jira 2…"), false);
+                jira2Store.createWorklog(
                     entry.issueKey,
                     new Date(entry.started),
                     entry.durationSec,
@@ -412,6 +453,21 @@ Item {
             function onDeleteFinished(ok, err) {
                 if (ok) full.syncNow();
                 else    full._setStatus(i18n("Jira: no se pudo borrar — %1", err), true);
+            }
+        }
+        Connections {
+            target: jira2Store
+            function onUpdateFinished(ok, err) {
+                if (ok) full.syncNow();
+                else    full._setStatus(i18n("Jira 2: no se pudo guardar — %1", err), true);
+            }
+            function onCreateFinished(ok, err) {
+                if (ok) full.syncNow();
+                else    full._setStatus(i18n("Jira 2: no se pudo crear — %1", err), true);
+            }
+            function onDeleteFinished(ok, err) {
+                if (ok) full.syncNow();
+                else    full._setStatus(i18n("Jira 2: no se pudo borrar — %1", err), true);
             }
         }
         Connections {
@@ -584,6 +640,11 @@ Item {
                         for (var i = 0; i < jiraStore.worklogs.length; i++) jt += jiraStore.worklogs[i].durationSec;
                         parts.push(i18n("Jira: %1h %2m", Math.floor(jt/3600), Math.floor((jt%3600)/60)));
                     }
+                    if (full._showJira2 && jira2Store) {
+                        var j2t = 0;
+                        for (var k = 0; k < jira2Store.worklogs.length; k++) j2t += jira2Store.worklogs[k].durationSec;
+                        parts.push(i18n("Jira 2: %1h %2m", Math.floor(j2t/3600), Math.floor((j2t%3600)/60)));
+                    }
                     if (full._showClockify && clockifyStore) {
                         var ct = 0;
                         for (var j = 0; j < clockifyStore.entries.length; j++) ct += clockifyStore.entries[j].durationSec;
@@ -595,66 +656,17 @@ Item {
                 font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
             }
 
-            // Combined-mode-only: project picker for the sync.
-            // Color swatch + ComboBox showing every Clockify project. The
-            // default selection is mirrored from plasmoid.configuration
-            // .clockifyDefaultProjectId via the Connections block above,
-            // and changes here persist back to that same kcfg key.
-            Rectangle {
-                visible: full._isCombined
-                Layout.preferredWidth: 12
-                Layout.preferredHeight: 12
-                radius: 2
-                color: {
-                    if (!clockifyStore) return "transparent";
-                    for (var i = 0; i < clockifyStore.projects.length; i++) {
-                        if (clockifyStore.projects[i].id === full.syncProjectId
-                            && clockifyStore.projects[i].color)
-                            return clockifyStore.projects[i].color;
-                    }
-                    return "transparent";
-                }
-                border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.3)
-                Layout.alignment: Qt.AlignVCenter
-            }
-            QQC2.ComboBox {
-                id: syncProjectCombo
-                visible: full._isCombined
-                Layout.preferredWidth: 200
-                textRole: "name"
-                valueRole: "id"
-                model: {
-                    var head = [{ id: "", name: i18n("(sin proyecto)"), color: "" }];
-                    return (clockifyStore && clockifyStore.projects.length > 0)
-                           ? head.concat(clockifyStore.projects)
-                           : head;
-                }
-                currentIndex: {
-                    var arr = syncProjectCombo.model || [];
-                    for (var i = 0; i < arr.length; i++) {
-                        if (arr[i].id === full.syncProjectId) return i;
-                    }
-                    return 0;
-                }
-                onActivated: function(idx) {
-                    full.syncProjectId = syncProjectCombo.model[idx].id;
-                    // Persist so the choice survives the next popup open.
-                    plasmoid.configuration.clockifyDefaultProjectId = full.syncProjectId;
-                }
-                PlasmaComponents3.ToolTip.text: i18n("Proyecto destino del sync Jira → Clockify")
-                PlasmaComponents3.ToolTip.visible: hovered
-                PlasmaComponents3.ToolTip.delay: 500
-            }
-
             // Combined-mode-only: copy Jira worklogs into Clockify entries.
+            // The destination project per Jira instance is configured in
+            // Configurar → Clockify (no inline picker anymore).
             PlasmaComponents3.Button {
                 visible: full._isCombined
                 text: i18n("Jira → Clockify")
                 icon.name: "edit-copy"
                 onClicked: full.syncJiraIntoClockify()
-                PlasmaComponents3.ToolTip.text: i18n("Crea una entrada Clockify por cada worklog de Jira " +
-                                                     "que aún no tenga su réplica (descripción = CP-XXX: título).")
+                PlasmaComponents3.ToolTip.text: i18n("Crea una entrada Clockify por cada worklog de Jira que " +
+                                                     "aún no tenga réplica. Cada Jira usa el proyecto Clockify " +
+                                                     "que le asignaste en Configurar → Clockify.")
                 PlasmaComponents3.ToolTip.visible: hovered
                 PlasmaComponents3.ToolTip.delay: 500
             }
@@ -731,6 +743,8 @@ Item {
     WorklogEditDialog {
         id: jiraEditDialog
         store: full.jiraStore
+        store2: full.jira2Store
+        store2Enabled: full._showJira2
         anchors.fill: parent
     }
     ClockifyEditDialog {
@@ -786,6 +800,7 @@ Item {
                         text: i18n("Limpiar")
                         onClicked: {
                             if (jiraStore && jiraStore.hasDebugLog) jiraStore.clearDebugLog();
+                            if (jira2Store && jira2Store.hasDebugLog) jira2Store.clearDebugLog();
                             if (clockifyStore && clockifyStore.hasDebugLog) clockifyStore.clearDebugLog();
                             if (googleStore && googleStore.hasDebugLog) googleStore.clearDebugLog();
                         }
@@ -809,11 +824,13 @@ Item {
                         font.pixelSize: 11
                         text: {
                             var j = (jiraStore && jiraStore.hasDebugLog) ? jiraStore.lastDebugLog : "";
+                            var j2 = (jira2Store && jira2Store.hasDebugLog) ? jira2Store.lastDebugLog : "";
                             var c = (clockifyStore && clockifyStore.hasDebugLog) ? clockifyStore.lastDebugLog : "";
                             var g = (googleStore && googleStore.hasDebugLog) ? googleStore.lastDebugLog : "";
-                            var _ = (full._vJira, full._vClockify, full._vGoogle);
-                            if (!j && !c && !g) return i18n("Sin datos. Pulsá ↻ para sincronizar.");
-                            return "---- JIRA ----\n" + (j || "(vacío)") +
+                            var _ = (full._vJira, full._vJira2, full._vClockify, full._vGoogle);
+                            if (!j && !j2 && !c && !g) return i18n("Sin datos. Pulsá ↻ para sincronizar.");
+                            return "---- JIRA 1 ----\n" + (j || "(vacío)") +
+                                   "\n\n---- JIRA 2 ----\n" + (j2 || "(vacío)") +
                                    "\n\n---- CLOCKIFY ----\n" + (c || "(vacío)") +
                                    "\n\n---- GOOGLE ----\n" + (g || "(vacío)");
                         }
@@ -827,6 +844,7 @@ Item {
         // Start with the displayed view matching the saved one (no anim).
         _displayBottomView = _bottomView;
         if (jiraStore && jiraStore.lastFetchedAt === 0 && _showJira) jiraStore.fetchWeek(currentWeekStart);
+        if (jira2Store && jira2Store.lastFetchedAt === 0 && _showJira2) jira2Store.fetchWeek(currentWeekStart);
         if (clockifyStore && clockifyStore.lastFetchedAt === 0 && _showClockify) clockifyStore.fetchWeek(currentWeekStart);
         if (googleStore && googleStore.lastFetchedAt === 0 && _showGoogleEvents) googleStore.fetchWeek(currentWeekStart);
         full._refreshCurrentBottomView();
@@ -847,6 +865,12 @@ Item {
         function onGoogleCalendarIdsChanged() {
             if (full._showGoogleEvents && googleStore) googleStore.fetchWeek(full.currentWeekStart);
         }
+        // Second Jira toggled on / credentials changed → fetch its week.
+        function onJira2EnabledChanged() {
+            if (full._showJira2 && jira2Store) jira2Store.fetchWeek(full.currentWeekStart);
+        }
+        function onJira2SiteChanged()  { if (full._showJira2 && jira2Store) jira2Store.fetchWeek(full.currentWeekStart); }
+        function onJira2TokenChanged() { if (full._showJira2 && jira2Store) jira2Store.fetchWeek(full.currentWeekStart); }
     }
 
     // Animate the bottom-panel switch whenever the view changes (from the
