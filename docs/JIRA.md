@@ -11,6 +11,17 @@ El plasmoide *Categorized ToDo* tiene dos modos:
 Este documento explica cómo configurar el modo Jira, qué hace cada
 opción y consideraciones de seguridad.
 
+> **Novedades (v1.8):**
+> - **Click central** en una tarjeta abre la incidencia directamente en el
+>   navegador.
+> - Nueva pestaña **«HU»** (primera, angosta) que lista las **historias de
+>   usuario / padres** de las subtareas cargadas (una fila por padre, aunque
+>   haya muchas subtareas). Al abrir una, muestra una **tabla** de sus
+>   subtareas (código, nombre, estado, horas restantes, responsable) con un
+>   toggle **«Solo mis subtareas»**. Se activa/desactiva desde *Configurar…*
+>   (por defecto: **Sí**). Cada instancia (Jira 1 / Jira 2) tiene su propio
+>   toggle.
+>
 > **Novedades (v1.6):**
 > - Debajo de la lista, una **barra gruesa** de horas. Cuando hay un sprint
 >   activo usa **exactamente** la cuenta del anillo "Horas" del

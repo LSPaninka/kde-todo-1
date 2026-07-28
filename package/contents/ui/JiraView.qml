@@ -22,8 +22,15 @@ Item {
     readonly property int _v: jira ? jira.version : 0
     readonly property int categoryCount:
         Math.min(10, Math.max(1, plasmoid.configuration[cfgPrefix+"CategoryCount"] | 0 || 3))
-    // Each tab gets a 1/N share of the bar so they always fill the width.
-    readonly property real _tabWidth: tabs.width / Math.max(1, categoryCount)
+
+    // Optional "HU" tab (user stories) shown first; fixed narrow width.
+    readonly property bool _showHu: plasmoid.configuration[cfgPrefix+"ShowHuTab"] !== false
+    readonly property int _huW: 46
+    readonly property int _huOffset: _showHu ? 1 : 0
+
+    // Each category tab gets a 1/N share of the remaining bar width.
+    readonly property real _tabWidth:
+        (tabs.width - (_showHu ? _huW : 0)) / Math.max(1, categoryCount)
 
     function _formatDate(ms) {
         if (!ms) return "";
@@ -71,17 +78,18 @@ Item {
         return Qt.formatDateTime(d, "ddd d/M hh:mm");
     }
 
-    // Jump to the tab requested from a panel swatch click.
+    // Jump to the tab requested from a panel swatch click (offset by the HU tab).
     Connections {
         target: jira || null
         function onCategoryRequested(index) {
-            if (index >= 0 && index < view.categoryCount) tabs.currentIndex = index;
+            if (index >= 0 && index < view.categoryCount)
+                tabs.currentIndex = index + view._huOffset;
         }
     }
     // On (re)open, honour the last requested category.
     Component.onCompleted: {
         if (jira && jira.selectedCategory >= 0 && jira.selectedCategory < view.categoryCount)
-            tabs.currentIndex = jira.selectedCategory;
+            tabs.currentIndex = jira.selectedCategory + view._huOffset;
     }
 
     ColumnLayout {
@@ -138,10 +146,30 @@ Item {
             }
         }
 
-        // -------- Tabs (one per Jira category) --------
+        // -------- Tabs (optional "HU" first, then one per Jira category) --------
         QQC2.TabBar {
             id: tabs
             Layout.fillWidth: true
+
+            // HU tab — narrow, just the two letters.
+            Repeater {
+                model: view._showHu ? 1 : 0
+                QQC2.TabButton {
+                    width: view._huW
+                    leftPadding: 4
+                    rightPadding: 4
+                    contentItem: RowLayout {
+                        spacing: 4
+                        PlasmaComponents3.Label {
+                            text: i18n("HU")
+                            font.bold: true
+                            Layout.fillWidth: true
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+                }
+            }
 
             Repeater {
                 model: view.categoryCount
@@ -178,12 +206,90 @@ Item {
             }
         }
 
-        // -------- Body: list per tab --------
+        // -------- Body: HU list (optional) then a list per category tab --------
         StackLayout {
             id: stack
             Layout.fillWidth: true
             Layout.fillHeight: true
             currentIndex: tabs.currentIndex
+
+            // HU: list of unique parents (user stories) of the fetched issues.
+            Repeater {
+                model: view._showHu ? 1 : 0
+                Item {
+                    QQC2.ScrollView {
+                        anchors.fill: parent
+                        clip: true
+                        ListView {
+                            id: huList
+                            spacing: 4
+                            model: (view._v, jira ? jira.parentsFromIssues() : [])
+                            delegate: Rectangle {
+                                width: huList.width
+                                implicitHeight: huRow.implicitHeight + PlasmaCore.Units.smallSpacing * 2
+                                radius: 4
+                                color: huMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(1, 1, 1, 0.04)
+                                border.width: 1
+                                border.color: Qt.rgba(1, 1, 1, 0.08)
+
+                                MouseArea {
+                                    id: huMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        if (mouse.button === Qt.MiddleButton) {
+                                            var u = jira ? jira.browseUrl(modelData.key) : "";
+                                            if (u) Qt.openUrlExternally(u);
+                                        } else {
+                                            huDialog.openFor(modelData.key, modelData.summary);
+                                        }
+                                    }
+                                }
+
+                                RowLayout {
+                                    id: huRow
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    anchors.leftMargin: PlasmaCore.Units.smallSpacing
+                                    anchors.rightMargin: PlasmaCore.Units.smallSpacing
+                                    spacing: PlasmaCore.Units.smallSpacing
+
+                                    PlasmaComponents3.Label {
+                                        text: modelData ? modelData.key : ""
+                                        font.family: "monospace"
+                                        font.bold: true
+                                        opacity: 0.9
+                                    }
+                                    PlasmaComponents3.Label {
+                                        Layout.fillWidth: true
+                                        text: modelData ? modelData.summary : ""
+                                        elide: Text.ElideRight
+                                    }
+                                    TabCountBadge {
+                                        visible: modelData && modelData.count > 0
+                                        count: modelData ? modelData.count : 0
+                                        badgeColor: PlasmaCore.Theme.highlightColor
+                                        Layout.alignment: Qt.AlignVCenter
+                                    }
+                                }
+                            }
+
+                            PlasmaComponents3.Label {
+                                anchors.centerIn: parent
+                                width: parent.width - 40
+                                horizontalAlignment: Text.AlignHCenter
+                                wrapMode: Text.WordWrap
+                                visible: huList.count === 0 && jira && !jira.loading
+                                opacity: 0.55
+                                text: i18n("No hay historias de usuario (padres) entre las incidencias cargadas.")
+                            }
+                        }
+                    }
+                }
+            }
 
             Repeater {
                 model: view.categoryCount
@@ -390,11 +496,21 @@ Item {
         cfgPrefix: view.cfgPrefix
     }
 
-    // Close the detail modal if the plasmoid popup is collapsed.
+    // -------- HU (user story) modal --------
+    HuDialog {
+        id: huDialog
+        jira: view.jira
+        cfgPrefix: view.cfgPrefix
+    }
+
+    // Close the modals if the plasmoid popup is collapsed.
     Connections {
         target: plasmoid
         function onExpandedChanged() {
-            if (!plasmoid.expanded && issueDialog.opened) issueDialog.close();
+            if (!plasmoid.expanded) {
+                if (issueDialog.opened) issueDialog.close();
+                if (huDialog.opened) huDialog.close();
+            }
         }
     }
 

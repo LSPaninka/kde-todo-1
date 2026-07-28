@@ -20,6 +20,7 @@ ColumnLayout {
     property alias  cfg_jira2MaxResults:      maxSpin.value
     property alias  cfg_jira2CategoryCount:   catCountSpin.value
     property alias  cfg_jira2SprintField:     sprintFieldField.text
+    property alias  cfg_jira2ShowHuTab:       huTabCheck.checked
     property alias  cfg_jira2Debug:           debugCheck.checked
 
     Kirigami.FormLayout {
@@ -94,6 +95,12 @@ ColumnLayout {
             Layout.fillWidth: true
             placeholderText: "customfield_10020"
             inputMethodHints: Qt.ImhNoPredictiveText
+        }
+
+        CheckBox {
+            id: huTabCheck
+            Kirigami.FormData.label: i18n("Pestaña HU:")
+            text: i18n("Mostrar la pestaña «HU» (historias de usuario / padres de las subtareas)")
         }
 
         CheckBox {

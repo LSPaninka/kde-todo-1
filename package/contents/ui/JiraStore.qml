@@ -675,6 +675,87 @@ QtObject {
         categoryRequested(index);
     }
 
+    // ------------------------------------------------------------------
+    // HU tab: user stories / parents of the fetched sub-tasks.
+    // ------------------------------------------------------------------
+
+    // Unique parents (user stories) across the fetched issues: [{key, summary, count}].
+    function parentsFromIssues() {
+        var map = {};
+        var order = [];
+        for (var i = 0; i < issues.length; i++) {
+            var pk = issues[i].parentKey;
+            if (!pk) continue;
+            if (!map[pk]) {
+                map[pk] = { key: pk, summary: issues[i].parentSummary || "", count: 0 };
+                order.push(pk);
+            }
+            map[pk].count++;
+        }
+        var out = [];
+        for (var j = 0; j < order.length; j++) out.push(map[order[j]]);
+        out.sort(function(a, b) { return a.key < b.key ? -1 : (a.key > b.key ? 1 : 0); });
+        return out;
+    }
+
+    function browseUrl(key) {
+        var c = _jiraCreds();
+        return (c && key) ? (c.site + "/browse/" + key) : "";
+    }
+
+    // All sub-tasks of a parent (story) — for the HU modal table.
+    // cb(ok, [{key, summary, statusName, statusColor, statusCat, remainingSec,
+    //          assignee, assigneeAccountId, url}], err).
+    function fetchSubtasksOfParent(parentKey, cb) {
+        cb = cb || function() {};
+        var c = _jiraCreds();
+        if (!c) { cb(false, [], qsTr("Faltan credenciales.")); return; }
+        _resolveAccountId(c, function() {
+            var jql = "parent = " + parentKey + " ORDER BY status ASC";
+            var url = c.site + "/rest/api/3/search/jql?jql=" + encodeURIComponent(jql) +
+                      "&maxResults=200" +
+                      "&fields=summary,status,assignee,timetracking,timeestimate,timeoriginalestimate";
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET", url, true);
+            xhr.setRequestHeader("Authorization", "Basic " + Qt.btoa(c.email + ":" + c.token));
+            xhr.setRequestHeader("Accept", "application/json");
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState !== XMLHttpRequest.DONE) return;
+                if (xhr.status === 200) {
+                    try {
+                        var data = JSON.parse(xhr.responseText);
+                        var raw = data.issues || [];
+                        var out = [];
+                        for (var i = 0; i < raw.length; i++) {
+                            var r = raw[i];
+                            var f = r.fields || {};
+                            var st = f.status || {};
+                            var sc = st.statusCategory || {};
+                            var asg = f.assignee || null;
+                            out.push({
+                                key: r.key || "",
+                                summary: f.summary || "",
+                                statusName: st.name || "",
+                                statusColor: sc.colorName || "",
+                                statusCat: sc.key || "",
+                                remainingSec: store._remainingSecFromFields(f),
+                                assignee: asg ? (asg.displayName || "") : qsTr("(sin asignar)"),
+                                assigneeAccountId: asg ? (asg.accountId || "") : "",
+                                url: c.site + "/browse/" + (r.key || "")
+                            });
+                        }
+                        cb(true, out, "");
+                    } catch (e) {
+                        cb(false, [], qsTr("Error al parsear la respuesta: ") + e);
+                    }
+                } else {
+                    cb(false, [], store._extractErrorMessage(xhr.responseText) || ("HTTP " + xhr.status));
+                }
+            };
+            try { xhr.send(); } catch (e) { cb(false, [], qsTr("Error de red: ") + e); }
+        });
+    }
+
     function matchesJiraCategory(issue, catIndex) {
         if (!plasmoidApi) return false;
         var fields = _cfg("CategoryFilterFields") || [];

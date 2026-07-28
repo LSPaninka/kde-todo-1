@@ -181,6 +181,10 @@
             <label>Custom field id that holds the Sprint on your issues (used for the sprint progress bar). Usually customfield_10020.</label>
             <default>customfield_10020</default>
         </entry>
+        <entry name="jiraShowHuTab" type="Bool">
+            <label>Show the "HU" tab (user stories / parents of the fetched sub-tasks)</label>
+            <default>true</default>
+        </entry>
 
         <entry name="jiraDebug" type="Bool">
             <label>Log Jira fetch / parse / filter details to plasmashell stdout</label>
@@ -254,6 +258,10 @@
         <entry name="jira2SprintField" type="String">
             <label>Jira 2 Sprint custom field id (usually customfield_10020)</label>
             <default>customfield_10020</default>
+        </entry>
+        <entry name="jira2ShowHuTab" type="Bool">
+            <label>Show the Jira 2 "HU" tab (user stories / parents)</label>
+            <default>true</default>
         </entry>
         <entry name="jira2Debug" type="Bool">
             <label>Log Jira 2 fetch / parse / filter details to plasmashell stdout</label>

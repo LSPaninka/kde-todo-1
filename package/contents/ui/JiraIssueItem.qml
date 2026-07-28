@@ -150,11 +150,17 @@ Rectangle {
         id: cardMouse
         anchors.fill: parent
         hoverEnabled: true
-        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
         cursorShape: Qt.PointingHandCursor
         onClicked: {
-            if (mouse.button === Qt.RightButton) item._openContextMenu(mouse.x, mouse.y);
-            else item.activated(issue);
+            if (mouse.button === Qt.MiddleButton) {
+                // Middle click opens the issue directly in the browser.
+                if (issue && issue.url) Qt.openUrlExternally(issue.url);
+            } else if (mouse.button === Qt.RightButton) {
+                item._openContextMenu(mouse.x, mouse.y);
+            } else {
+                item.activated(issue);
+            }
         }
     }
 
