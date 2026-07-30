@@ -11,6 +11,14 @@ El plasmoide *Categorized ToDo* tiene dos modos:
 Este documento explica cómo configurar el modo Jira, qué hace cada
 opción y consideraciones de seguridad.
 
+> **Novedades (v1.9):**
+> - **Buscador** debajo de la barra de pestañas (ancho completo) que filtra
+>   las subtareas de la pestaña activa por código/nombre/estado.
+> - Nueva pestaña **«Hechas»** (última) con **mis subtareas finalizadas**
+>   (`assignee = currentUser() AND statusCategory = Done`), mostradas como en
+>   las categorías. Se activa/desactiva desde *Configurar…* (por defecto:
+>   **Sí**), independiente por instancia (Jira 1 / Jira 2).
+>
 > **Novedades (v1.8):**
 > - **Click central** en una tarjeta abre la incidencia directamente en el
 >   navegador.

@@ -30,6 +30,9 @@ QtObject {
     property string cfgPrefix: "jira"
 
     property var issues: []
+    // My finished sub-tasks (for the "Hechas" tab). Fetched separately since
+    // the main JQL usually excludes done issues.
+    property var doneIssues: []
     property bool loading: false
     property string lastError: ""
     property real lastFetchedAt: 0
@@ -82,6 +85,8 @@ QtObject {
              (lastFetchedAt ? new Date(lastFetchedAt).toISOString() : "never"));
         // Refresh sprint hours if we already know the active sprint (cached).
         if (currentSprint) _fetchSprintHours();
+        // Refresh finished sub-tasks for the "Hechas" tab.
+        if (_cfg("ShowHechasTab") !== false) fetchDone();
     }
 
     // Read a config value for this instance (cfgPrefix + suffix).
@@ -145,6 +150,8 @@ QtObject {
         myAccountId        = database.getSetting(_sk("accountId"), "") || myAccountId;
         sprintConsumedSec  = Number(database.getSetting(_sk("sprintConsumed"),  "0")) || 0;
         sprintAvailableSec = Number(database.getSetting(_sk("sprintAvailable"), "0")) || 0;
+        var dn = database.getSetting(_sk("done"), "");
+        if (dn) { try { doneIssues = JSON.parse(dn); } catch (e) { /* ignore */ } }
     }
 
     function saveCache() {
@@ -310,6 +317,8 @@ QtObject {
                     store._bump();
                     // Refresh the sprint "Quemadas" (my worklogs in the window).
                     store._fetchSprintHours();
+                    // Refresh my finished sub-tasks for the "Hechas" tab.
+                    if (store._cfg("ShowHechasTab") !== false) store.fetchDone();
 
                     store._log("");
                     var more = (data.isLast === false) || (typeof data.nextPageToken === "string"
@@ -701,6 +710,47 @@ QtObject {
     function browseUrl(key) {
         var c = _jiraCreds();
         return (c && key) ? (c.site + "/browse/" + key) : "";
+    }
+
+    // My finished sub-tasks (for the "Hechas" tab). Separate JQL because the
+    // main query usually excludes done issues.
+    function fetchDone(cb) {
+        cb = cb || function() {};
+        var c = _jiraCreds();
+        if (!c) { cb(false); return; }
+        var max = Math.max(10, Math.min(200, _cfg("MaxResults") | 0 || 50));
+        var fields = "summary,status,priority,issuetype,parent,updated,timetracking";
+        var jql = "assignee = currentUser() AND statusCategory = Done ORDER BY updated DESC";
+        var url = c.site + "/rest/api/3/search/jql?jql=" + encodeURIComponent(jql) +
+                  "&maxResults=" + max + "&fields=" + fields;
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", url, true);
+        xhr.setRequestHeader("Authorization", "Basic " + Qt.btoa(c.email + ":" + c.token));
+        xhr.setRequestHeader("Accept", "application/json");
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE) return;
+            if (xhr.status === 200) {
+                try {
+                    var data = JSON.parse(xhr.responseText);
+                    var raw = data.issues || [];
+                    var out = [];
+                    for (var i = 0; i < raw.length; i++) out.push(store._normalize(raw[i], c.site));
+                    store.doneIssues = out;
+                    if (database && database.ready)
+                        database.setSetting(store._sk("done"), JSON.stringify(out));
+                    store._bump();
+                    store._log("Hechas: " + out.length + " subtarea(s) finalizada(s).");
+                    cb(true);
+                } catch (e) {
+                    store._warn("Hechas parse: " + e);
+                    cb(false);
+                }
+            } else {
+                store._warn("Hechas HTTP " + xhr.status);
+                cb(false);
+            }
+        };
+        try { xhr.send(); } catch (e) { store._warn("Hechas send: " + e); cb(false); }
     }
 
     // All sub-tasks of a parent (story) — for the HU modal table.

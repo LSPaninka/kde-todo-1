@@ -185,6 +185,10 @@
             <label>Show the "HU" tab (user stories / parents of the fetched sub-tasks)</label>
             <default>true</default>
         </entry>
+        <entry name="jiraShowHechasTab" type="Bool">
+            <label>Show the "Hechas" tab (my finished sub-tasks)</label>
+            <default>true</default>
+        </entry>
 
         <entry name="jiraDebug" type="Bool">
             <label>Log Jira fetch / parse / filter details to plasmashell stdout</label>
@@ -261,6 +265,10 @@
         </entry>
         <entry name="jira2ShowHuTab" type="Bool">
             <label>Show the Jira 2 "HU" tab (user stories / parents)</label>
+            <default>true</default>
+        </entry>
+        <entry name="jira2ShowHechasTab" type="Bool">
+            <label>Show the Jira 2 "Hechas" tab (my finished sub-tasks)</label>
             <default>true</default>
         </entry>
         <entry name="jira2Debug" type="Bool">

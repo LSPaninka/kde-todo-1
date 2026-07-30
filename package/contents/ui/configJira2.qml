@@ -21,6 +21,7 @@ ColumnLayout {
     property alias  cfg_jira2CategoryCount:   catCountSpin.value
     property alias  cfg_jira2SprintField:     sprintFieldField.text
     property alias  cfg_jira2ShowHuTab:       huTabCheck.checked
+    property alias  cfg_jira2ShowHechasTab:   hechasTabCheck.checked
     property alias  cfg_jira2Debug:           debugCheck.checked
 
     Kirigami.FormLayout {
@@ -101,6 +102,12 @@ ColumnLayout {
             id: huTabCheck
             Kirigami.FormData.label: i18n("Pestaña HU:")
             text: i18n("Mostrar la pestaña «HU» (historias de usuario / padres de las subtareas)")
+        }
+
+        CheckBox {
+            id: hechasTabCheck
+            Kirigami.FormData.label: i18n("Pestaña Hechas:")
+            text: i18n("Mostrar la pestaña «Hechas» (mis subtareas finalizadas)")
         }
 
         CheckBox {

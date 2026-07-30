@@ -28,9 +28,38 @@ Item {
     readonly property int _huW: 46
     readonly property int _huOffset: _showHu ? 1 : 0
 
+    // Optional "Hechas" tab (my finished sub-tasks) shown last; fixed width.
+    readonly property bool _showHechas: plasmoid.configuration[cfgPrefix+"ShowHechasTab"] !== false
+    readonly property int _hechasW: 68
+
     // Each category tab gets a 1/N share of the remaining bar width.
     readonly property real _tabWidth:
-        (tabs.width - (_showHu ? _huW : 0)) / Math.max(1, categoryCount)
+        (tabs.width - (_showHu ? _huW : 0) - (_showHechas ? _hechasW : 0)) / Math.max(1, categoryCount)
+
+    // Per-tab client-side search (filters the current tab's list).
+    property string searchText: ""
+    function _filterIssues(arr) {
+        var q = searchText.trim().toLowerCase();
+        if (!q) return arr;
+        var out = [];
+        for (var i = 0; i < arr.length; i++) {
+            var it = arr[i];
+            var hay = ((it.key || "") + " " + (it.summary || "") + " " +
+                       (it.statusName || "") + " " + (it.parentKey || "")).toLowerCase();
+            if (hay.indexOf(q) >= 0) out.push(it);
+        }
+        return out;
+    }
+    function _filterParents(arr) {
+        var q = searchText.trim().toLowerCase();
+        if (!q) return arr;
+        var out = [];
+        for (var i = 0; i < arr.length; i++) {
+            var p = arr[i];
+            if (((p.key || "") + " " + (p.summary || "")).toLowerCase().indexOf(q) >= 0) out.push(p);
+        }
+        return out;
+    }
 
     function _formatDate(ms) {
         if (!ms) return "";
@@ -204,6 +233,35 @@ Item {
                     }
                 }
             }
+
+            // "Hechas" tab — last, width fits the word.
+            Repeater {
+                model: view._showHechas ? 1 : 0
+                QQC2.TabButton {
+                    width: view._hechasW
+                    leftPadding: 6
+                    rightPadding: 6
+                    contentItem: RowLayout {
+                        spacing: 4
+                        PlasmaComponents3.Label {
+                            text: i18n("Hechas")
+                            elide: Text.ElideRight
+                            Layout.fillWidth: true
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+                }
+            }
+        }
+
+        // -------- Search box (filters the current tab's list) --------
+        PlasmaComponents3.TextField {
+            Layout.fillWidth: true
+            placeholderText: i18n("Buscar subtareas en esta pestaña…")
+            text: view.searchText
+            onTextChanged: view.searchText = text
+            Keys.onEscapePressed: { view.searchText = ""; text = ""; }
         }
 
         // -------- Body: HU list (optional) then a list per category tab --------
@@ -223,7 +281,7 @@ Item {
                         ListView {
                             id: huList
                             spacing: 4
-                            model: (view._v, jira ? jira.parentsFromIssues() : [])
+                            model: (view._v, view.searchText, jira ? view._filterParents(jira.parentsFromIssues()) : [])
                             delegate: Rectangle {
                                 width: huList.width
                                 implicitHeight: huRow.implicitHeight + PlasmaCore.Units.smallSpacing * 2
@@ -300,7 +358,7 @@ Item {
                         ListView {
                             id: list
                             spacing: 4
-                            model: (view._v, jira ? jira.issuesByJiraCategory(index) : [])
+                            model: (view._v, view.searchText, jira ? view._filterIssues(jira.issuesByJiraCategory(index)) : [])
                             delegate: JiraIssueItem {
                                 width: list.width
                                 issue: modelData
@@ -329,6 +387,41 @@ Item {
                                 anchors.centerIn: parent
                                 running: jira && jira.loading && list.count === 0
                                 visible: running
+                            }
+                        }
+                    }
+                }
+            }
+
+            // "Hechas": my finished sub-tasks (separate JQL), same look.
+            Repeater {
+                model: view._showHechas ? 1 : 0
+                Item {
+                    QQC2.ScrollView {
+                        anchors.fill: parent
+                        clip: true
+                        ListView {
+                            id: doneList
+                            spacing: 4
+                            model: (view._v, view.searchText, jira ? view._filterIssues(jira.doneIssues) : [])
+                            delegate: JiraIssueItem {
+                                width: doneList.width
+                                issue: modelData
+                                jira: view.jira
+                                cfgPrefix: view.cfgPrefix
+                                onActivated: function(iss) { issueDialog.openFor(iss); }
+                            }
+
+                            PlasmaComponents3.Label {
+                                anchors.centerIn: parent
+                                visible: doneList.count === 0 && jira && !jira.loading
+                                width: parent.width - 40
+                                horizontalAlignment: Text.AlignHCenter
+                                wrapMode: Text.WordWrap
+                                opacity: 0.55
+                                text: view.searchText.length > 0
+                                      ? i18n("Ninguna subtarea finalizada coincide con la búsqueda.")
+                                      : i18n("No tenés subtareas finalizadas (o aún no se cargaron).")
                             }
                         }
                     }
