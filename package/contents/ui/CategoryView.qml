@@ -186,7 +186,7 @@ Item {
                     width: list.width
                     task: modelData
                     store: view.store
-                    view: view
+                    ownerView: view
                     catColor: cats.color(modelData ? modelData.category : 0)
                     expandSignal: view._expandSeq
                     onEditRequested: view.editTaskRequested(task)

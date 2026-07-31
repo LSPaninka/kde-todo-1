@@ -26,7 +26,7 @@ Rectangle {
 
     property var task             // plain task object snapshot
     property var store
-    property var view             // parent view: owns persistent expand state
+    property var ownerView        // parent view: owns persistent expand state
     property color catColor: "#7f8c8d"
     property bool expanded: false
 
@@ -38,12 +38,12 @@ Rectangle {
     Component.onCompleted: expanded = item._readExpanded()
 
     function _readExpanded() {
-        if (view && task && view._isExpanded) return view._isExpanded(task.id);
+        if (ownerView && task && ownerView._isExpanded) return ownerView._isExpanded(task.id);
         return false;
     }
     function _storeExpanded(v) {
         expanded = v;
-        if (view && task && view._setExpanded) view._setExpanded(task.id, v);
+        if (ownerView && task && ownerView._setExpanded) ownerView._setExpanded(task.id, v);
     }
 
     readonly property bool _hasSubtasks: task && task.subtasks && task.subtasks.length > 0
