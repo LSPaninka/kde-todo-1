@@ -18,6 +18,16 @@ ConfigModel {
         source: "configAppearance.qml"
     }
     ConfigCategory {
+        name: i18n("Prioridades")
+        icon: "flag-red"
+        source: "configPriorities.qml"
+    }
+    ConfigCategory {
+        name: i18n("Datos")
+        icon: "document-save"
+        source: "configData.qml"
+    }
+    ConfigCategory {
         name: i18n("Jira 1")
         icon: "go-bottom"
         source: "configJira.qml"

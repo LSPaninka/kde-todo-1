@@ -10,21 +10,13 @@ Rectangle {
     id: badge
     property string level: "M"
 
-    function _colorFor(p) {
-        switch (p) {
-            case "XS": return "#95a5a6";
-            case "S":  return "#3498db";
-            case "M":  return "#2ecc71";
-            case "L":  return "#f39c12";
-            case "XL": return "#e74c3c";
-        }
-        return "#2ecc71";
-    }
+    // Colors come from the configurable priority scheme.
+    CategoryHelper { id: _prio }
 
     implicitWidth: label.implicitWidth + PlasmaCore.Units.smallSpacing * 2
     implicitHeight: label.implicitHeight + 2
     radius: 3
-    color: _colorFor(level)
+    color: _prio.priorityColor(level)
     border.color: Qt.darker(color, 1.5)
     border.width: 1
 

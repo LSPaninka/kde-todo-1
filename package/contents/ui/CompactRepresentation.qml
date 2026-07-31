@@ -172,7 +172,16 @@ Item {
                 tooltipTitle: cats.name(index)
                 tooltipBody: (compact._vTodo, compact._todoTooltipBody(index))
                 onHoverChanged: function(isHov, m, s) { compact.hoverChanged(isHov, m, s); }
-                onClicked: plasmoid.expanded = !plasmoid.expanded
+                onClicked: {
+                    // Mirror the Jira behaviour: clicking a specific swatch
+                    // opens the popup and jumps to that category's tab.
+                    if (plasmoid.expanded) {
+                        plasmoid.expanded = false;
+                    } else {
+                        if (store) store.requestCategory(index);
+                        plasmoid.expanded = true;
+                    }
+                }
             }
         }
 

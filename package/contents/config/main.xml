@@ -35,6 +35,16 @@
             <default>true</default>
         </entry>
 
+        <entry name="priorityLevels" type="StringList">
+            <label>Priority letters, from lowest to highest. Editable count and text.</label>
+            <default>XS,S,M,L,XL</default>
+        </entry>
+
+        <entry name="priorityColors" type="StringList">
+            <label>Hex color for each priority letter (parallel to priorityLevels).</label>
+            <default>#95a5a6,#3498db,#2ecc71,#f39c12,#e74c3c</default>
+        </entry>
+
         <entry name="confirmDelete" type="Bool">
             <label>Ask for confirmation before deleting archived tasks</label>
             <default>true</default>

@@ -18,13 +18,19 @@ Item {
     property var store
 
     signal editTaskRequested(var task)
-    signal editSubtaskRequested(var task, var subtask)
     signal linkJiraRequested(var task)
     signal openJiraRequested(var task)
 
-    // Expand/collapse-all control (see TaskItem.expandSignal/expandTarget).
+    // ----- Persistent expand state (survives store bumps) -----
     property int _expandSeq: 0
-    property bool _expandTarget: false
+    property bool _expandDefault: false
+    property var _expandOverrides: ({})
+    function _isExpanded(id) {
+        if (_expandOverrides.hasOwnProperty(id)) return _expandOverrides[id];
+        return _expandDefault;
+    }
+    function _setExpanded(id, v) { _expandOverrides[id] = v; }
+    function _expandAll(v) { _expandDefault = v; _expandOverrides = ({}); _expandSeq++; }
 
     CategoryHelper { id: cats }
 
@@ -42,11 +48,10 @@ Item {
             out.push(t);
         }
         // Sort: pending first, then by priority high → low, then by createdAt desc.
-        var prioRank = { "XL": 4, "L": 3, "M": 2, "S": 1, "XS": 0 };
         out.sort(function(a, b) {
             if (a.done !== b.done) return a.done ? 1 : -1;
-            var pa = prioRank[a.priority] === undefined ? 2 : prioRank[a.priority];
-            var pb = prioRank[b.priority] === undefined ? 2 : prioRank[b.priority];
+            var pa = cats.priorityRank(a.priority);
+            var pb = cats.priorityRank(b.priority);
             if (pa !== pb) return pb - pa;
             return (b.createdAt || 0) - (a.createdAt || 0);
         });
@@ -95,14 +100,14 @@ Item {
             // Expand / collapse all tasks (show/hide descriptions).
             PlasmaComponents3.ToolButton {
                 icon.name: "arrow-down-double"
-                onClicked: { view._expandTarget = true; view._expandSeq++; }
+                onClicked: view._expandAll(true)
                 PlasmaComponents3.ToolTip.text: i18n("Expandir todas las tareas")
                 PlasmaComponents3.ToolTip.visible: hovered
                 PlasmaComponents3.ToolTip.delay: 500
             }
             PlasmaComponents3.ToolButton {
                 icon.name: "arrow-up-double"
-                onClicked: { view._expandTarget = false; view._expandSeq++; }
+                onClicked: view._expandAll(false)
                 PlasmaComponents3.ToolTip.text: i18n("Colapsar todas las tareas")
                 PlasmaComponents3.ToolTip.visible: hovered
                 PlasmaComponents3.ToolTip.delay: 500
@@ -164,11 +169,10 @@ Item {
                     width: list.width
                     task: modelData
                     store: view.store
+                    view: view
                     catColor: cats.color(modelData ? (modelData.category | 0) : 0)
                     expandSignal: view._expandSeq
-                    expandTarget: view._expandTarget
                     onEditRequested: view.editTaskRequested(task)
-                    onSubtaskEditRequested: view.editSubtaskRequested(task, subtask)
                     onLinkJiraRequested: view.linkJiraRequested(task)
                     onOpenJiraRequested: view.openJiraRequested(task)
                 }

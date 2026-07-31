@@ -42,6 +42,20 @@ Item {
     readonly property int _tabCount: 2 + cats.count()
     readonly property real _tabWidth: tabs.width / Math.max(1, _tabCount)
 
+    // Jump to the tab requested from a panel swatch click. Category `index`
+    // lives at tab index `index + 1` (tab 0 is the always-on Global tab).
+    Connections {
+        target: store || null
+        function onCategoryRequested(index) {
+            if (index >= 0 && index < cats.count())
+                tabs.currentIndex = index + 1;
+        }
+    }
+    Component.onCompleted: {
+        if (store && store.selectedCategory >= 0 && store.selectedCategory < cats.count())
+            tabs.currentIndex = store.selectedCategory + 1;
+    }
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: PlasmaCore.Units.smallSpacing
@@ -158,7 +172,6 @@ Item {
             GlobalView {
                 store: todoView.store
                 onEditTaskRequested: taskDialog.openEdit(task)
-                onEditSubtaskRequested: subDialog.openFor(task, subtask)
                 onLinkJiraRequested: jiraPicker.openFor(task)
                 onOpenJiraRequested: todoView._openLinkedJira(task)
             }
@@ -170,9 +183,6 @@ Item {
                     catIndex: index
                     onNewTaskRequested: taskDialog.openNew(catIndex)
                     onEditTaskRequested: taskDialog.openEdit(task)
-                    onEditSubtaskRequested: subDialog.openFor(task, subtask)
-                    onExportRequested: exportDialog.openFor(catIndex, categoryName)
-                    onImportRequested: importDialog.openFor(catIndex, categoryName)
                     onLinkJiraRequested: jiraPicker.openFor(task)
                     onOpenJiraRequested: todoView._openLinkedJira(task)
                 }
@@ -271,21 +281,6 @@ Item {
         function onExpandedChanged() {
             if (!plasmoid.expanded && jiraDetail.opened) jiraDetail.close();
         }
-    }
-
-    SubtaskEditDialog {
-        id: subDialog
-        store: todoView.store
-    }
-
-    ExportDialog {
-        id: exportDialog
-        store: todoView.store
-    }
-
-    ImportDialog {
-        id: importDialog
-        store: todoView.store
     }
 
     QQC2.Dialog {

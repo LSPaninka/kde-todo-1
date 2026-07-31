@@ -5,14 +5,15 @@
  *   - Colored stripe on the left (category color)
  *   - Checkbox (toggles done)
  *   - Title + priority badge
- *   - Expand button (shows description and subtasks)
- *   - Edit button (emits editRequested)
+ *   - Expand button (shows description and subtasks) — only when there is
+ *     something to expand (a description and/or subtasks)
+ *   - Edit button (emits editRequested) — subtasks are edited there now
  *   - Archive button (store.archiveTask)
- *   - Subtask rows with their own checkbox/priority/edit/delete buttons
- *   - "Add subtask" inline row
+ *   - Read-only subtask rows (checkbox toggles done; edit happens in the modal)
  *
- * Dialog-less by design: the parent view owns the subtask-edit dialog
- * and this delegate signals back to it via subtaskEditRequested.
+ * Expansion state is owned by the parent view (via _isExpanded/_setExpanded)
+ * so it survives store bumps that recreate delegates — toggling a checkbox no
+ * longer collapses the open cards.
  */
 
 import QtQuick 2.15
@@ -25,19 +26,31 @@ Rectangle {
 
     property var task             // plain task object snapshot
     property var store
+    property var view             // parent view: owns persistent expand state
     property color catColor: "#7f8c8d"
     property bool expanded: false
 
-    // Driven by the view's "expand all / collapse all" buttons: when
-    // expandSignal changes, adopt expandTarget. New delegates adopt the
-    // current target on creation (Component.onCompleted).
+    // Bumped by the view's "expand all / collapse all" buttons. When it
+    // changes, re-read the (now updated) persistent state. New delegates read
+    // the persistent state on creation (Component.onCompleted).
     property int expandSignal: 0
-    property bool expandTarget: false
-    onExpandSignalChanged: expanded = expandTarget
-    Component.onCompleted: expanded = expandTarget
+    onExpandSignalChanged: expanded = item._readExpanded()
+    Component.onCompleted: expanded = item._readExpanded()
+
+    function _readExpanded() {
+        if (view && task && view._isExpanded) return view._isExpanded(task.id);
+        return false;
+    }
+    function _storeExpanded(v) {
+        expanded = v;
+        if (view && task && view._setExpanded) view._setExpanded(task.id, v);
+    }
+
+    readonly property bool _hasSubtasks: task && task.subtasks && task.subtasks.length > 0
+    readonly property bool _hasDescription: task && task.description && task.description.length > 0
+    readonly property bool _hasDetail: _hasSubtasks || _hasDescription
 
     signal editRequested(var task)
-    signal subtaskEditRequested(var task, var subtask)
     // Jira-link feature (only used when plasmoid.configuration.todoJiraLink).
     signal linkJiraRequested(var task)
     signal openJiraRequested(var task)
@@ -114,10 +127,11 @@ Rectangle {
             }
 
             PlasmaComponents3.ToolButton {
+                visible: item._hasDetail
                 icon.name: item.expanded ? "go-up" : "go-down"
-                onClicked: item.expanded = !item.expanded
+                onClicked: item._storeExpanded(!item.expanded)
                 PlasmaComponents3.ToolTip.text: item.expanded
-                        ? i18n("Collapse") : i18n("Expand / add subtasks")
+                        ? i18n("Collapse") : i18n("Expand")
                 PlasmaComponents3.ToolTip.visible: hovered
                 PlasmaComponents3.ToolTip.delay: 500
             }
@@ -145,21 +159,21 @@ Rectangle {
             Layout.leftMargin: PlasmaCore.Units.iconSizes.small
             text: item.task ? item.task.description : ""
             wrapMode: Text.WordWrap
-            visible: item.expanded && item.task && item.task.description.length > 0
+            visible: item.expanded && item._hasDescription
             // Gray tint preserved via opacity, italic removed.
             opacity: 0.75
             font.italic: false
         }
 
-        // -------- Subtasks --------
+        // -------- Subtasks (read-only; edited in the task modal) --------
         ColumnLayout {
             Layout.fillWidth: true
             Layout.leftMargin: PlasmaCore.Units.iconSizes.small
             spacing: 2
-            visible: item.expanded
+            visible: item.expanded && item._hasSubtasks
 
             Repeater {
-                model: item.task ? item.task.subtasks.length : 0
+                model: item._hasSubtasks ? item.task.subtasks.length : 0
                 delegate: RowLayout {
                     Layout.fillWidth: true
                     spacing: PlasmaCore.Units.smallSpacing
@@ -180,54 +194,8 @@ Rectangle {
                         visible: plasmoid.configuration.showPriorityIcons
                         level: sub.priority
                     }
-                    PlasmaComponents3.ToolButton {
-                        icon.name: "document-edit"
-                        onClicked: item.subtaskEditRequested(item.task, sub)
-                        PlasmaComponents3.ToolTip.text: i18n("Edit subtask")
-                        PlasmaComponents3.ToolTip.visible: hovered
-                        PlasmaComponents3.ToolTip.delay: 500
-                    }
-                    PlasmaComponents3.ToolButton {
-                        icon.name: "list-remove"
-                        onClicked: item.store.removeSubtask(item.task.id, sub.id)
-                        PlasmaComponents3.ToolTip.text: i18n("Remove subtask")
-                        PlasmaComponents3.ToolTip.visible: hovered
-                        PlasmaComponents3.ToolTip.delay: 500
-                    }
-                }
-            }
-
-            // Inline add-subtask row.
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: PlasmaCore.Units.smallSpacing
-
-                PlasmaComponents3.TextField {
-                    id: newSubField
-                    Layout.fillWidth: true
-                    placeholderText: i18n("Add subtask and press Enter…")
-                    onAccepted: item._commitNewSub()
-                }
-                PrioritySelector {
-                    id: newSubPrio
-                    value: "M"
-                    Layout.preferredWidth: 90
-                }
-                PlasmaComponents3.Button {
-                    icon.name: "list-add"
-                    text: i18n("Add")
-                    onClicked: item._commitNewSub()
                 }
             }
         }
-    }
-
-    function _commitNewSub() {
-        var t = newSubField.text.trim();
-        if (t.length === 0) return;
-        store.addSubtask(task.id, t, newSubPrio.value);
-        newSubField.text = "";
-        newSubPrio.value = "M";
-        newSubField.forceActiveFocus();
     }
 }

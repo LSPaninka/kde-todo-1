@@ -37,7 +37,19 @@ QtObject {
     property int _nextId: 1
     property bool _loaded: false
 
+    // Which category tab the popup should show. Set by requestCategory() when
+    // the user clicks a panel swatch so the popup jumps to that category.
+    property int selectedCategory: -1
+
     signal changed()
+    // Emitted by requestCategory(); TodoView listens and switches tabs.
+    signal categoryRequested(int index)
+
+    // Ask the popup to jump to a given ToDo category (from a panel swatch).
+    function requestCategory(index) {
+        selectedCategory = index;
+        categoryRequested(index);
+    }
 
     // ------------------------------------------------------------------
     // Lifecycle
@@ -264,6 +276,30 @@ QtObject {
                 return;
             }
         }
+    }
+
+    // Replace a task's whole subtask list in one shot (used by the task edit
+    // dialog, where subtasks are now added/edited/removed). Entries without an
+    // id get a fresh one; blank titles are dropped; `done` is preserved.
+    function setTaskSubtasks(taskId, subs) {
+        var i = _indexOf(tasks, taskId);
+        if (i < 0) return;
+        var out = [];
+        for (var j = 0; j < (subs ? subs.length : 0); j++) {
+            var s = subs[j] || {};
+            var title = ("" + (s.title || "")).trim();
+            if (title.length === 0) continue;
+            out.push({
+                id: s.id ? s.id : _nextId++,
+                title: title,
+                priority: s.priority || "M",
+                done: !!s.done
+            });
+        }
+        tasks[i].subtasks = out;
+        _touch(tasks[i]);
+        if (database) database.saveTask(tasks[i], false);
+        _bump();
     }
 
     function archiveTask(id) {
