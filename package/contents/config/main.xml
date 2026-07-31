@@ -181,6 +181,10 @@
             <label>Custom field id that holds the Sprint on your issues (used for the sprint progress bar). Usually customfield_10020.</label>
             <default>customfield_10020</default>
         </entry>
+        <entry name="jiraRemainingMode" type="String">
+            <label>How the sprint "Disponible" hours are computed: "calculated" = max(0, original - spent); "api" = trust Jira's remaining estimate.</label>
+            <default>calculated</default>
+        </entry>
         <entry name="jiraShowHuTab" type="Bool">
             <label>Show the "HU" tab (user stories / parents of the fetched sub-tasks)</label>
             <default>true</default>
@@ -262,6 +266,10 @@
         <entry name="jira2SprintField" type="String">
             <label>Jira 2 Sprint custom field id (usually customfield_10020)</label>
             <default>customfield_10020</default>
+        </entry>
+        <entry name="jira2RemainingMode" type="String">
+            <label>Jira 2 sprint "Disponible" hours: "calculated" = max(0, original - spent); "api" = Jira's remaining estimate.</label>
+            <default>calculated</default>
         </entry>
         <entry name="jira2ShowHuTab" type="Bool">
             <label>Show the Jira 2 "HU" tab (user stories / parents)</label>

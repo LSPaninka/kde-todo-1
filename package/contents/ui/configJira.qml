@@ -31,6 +31,9 @@ ColumnLayout {
     property alias  cfg_jiraShowHechasTab:   hechasTabCheck.checked
     property alias  cfg_jiraDebug:           debugCheck.checked
 
+    // Scalar string bound manually via the ComboBox below (see onActivated).
+    property string cfg_jiraRemainingMode: "calculated"
+
     Kirigami.FormLayout {
         Layout.fillWidth: true
 
@@ -104,6 +107,20 @@ ColumnLayout {
             Layout.fillWidth: true
             placeholderText: "customfield_10020"
             inputMethodHints: Qt.ImhNoPredictiveText
+        }
+
+        ComboBox {
+            id: remainingModeCombo
+            Kirigami.FormData.label: i18n("Horas restantes:")
+            Layout.fillWidth: true
+            textRole: "text"
+            model: [
+                { value: "calculated", text: i18n("Calculado (original - consumido)") },
+                { value: "api",        text: i18n("Estimación de Jira (remaining)") }
+            ]
+            onActivated: page.cfg_jiraRemainingMode = model[currentIndex].value
+            Component.onCompleted:
+                currentIndex = (page.cfg_jiraRemainingMode === "api") ? 1 : 0
         }
 
         CheckBox {

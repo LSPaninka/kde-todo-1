@@ -83,8 +83,9 @@ QtObject {
         applyRefreshSchedule();
         _log("init: " + issues.length + " cached issue(s); lastFetchedAt=" +
              (lastFetchedAt ? new Date(lastFetchedAt).toISOString() : "never"));
-        // Refresh sprint hours if we already know the active sprint (cached).
-        if (currentSprint) _fetchSprintHours();
+        // Refresh sprint hours (self-sufficient: locates the active sprint
+        // from my sub-tasks, so it works even without a cached sprint).
+        _fetchSprintHours();
         // Refresh finished sub-tasks for the "Hechas" tab.
         if (_cfg("ShowHechasTab") !== false) fetchDone();
     }
@@ -909,17 +910,28 @@ QtObject {
         try { xhr.send(); } catch (e) { store._warn("/myself send: " + e); cb(); }
     }
 
-    // Remaining like the ring's default ("api") strategy: trust Jira's
-    // remainingEstimateSeconds / timeestimate, falling back to the calculated
-    // max(0, original - spent) when Jira doesn't provide a remaining estimate.
+    // Remaining-hours strategy, selectable from config to match the
+    // worklog-calendar. "calculated" (default) = max(0, original - spent),
+    // which is what users want when Jira's remaining estimate hasn't been
+    // kept up to date (fully-consumed issues then contribute 0). "api" trusts
+    // Jira's remainingEstimateSeconds / timeestimate.
     function _remainingSecFromFields(f) {
+        if (!f) return 0;
         var tt = f.timetracking || {};
+        var mode = _cfg("RemainingMode") || "calculated";
+        if (mode === "calculated") {
+            var orig = (typeof f.timeoriginalestimate === "number") ? f.timeoriginalestimate
+                     : (typeof tt.originalEstimateSeconds === "number") ? tt.originalEstimateSeconds : 0;
+            var spent = (typeof tt.timeSpentSeconds === "number") ? tt.timeSpentSeconds : 0;
+            return Math.max(0, orig - spent);
+        }
+        // "api"
         if (typeof tt.remainingEstimateSeconds === "number") return tt.remainingEstimateSeconds;
         if (typeof f.timeestimate === "number") return f.timeestimate;
-        var orig = (typeof f.timeoriginalestimate === "number") ? f.timeoriginalestimate
-                 : (typeof tt.originalEstimateSeconds === "number") ? tt.originalEstimateSeconds : 0;
-        var spent = (typeof tt.timeSpentSeconds === "number") ? tt.timeSpentSeconds : 0;
-        return Math.max(0, orig - spent);
+        var o = (typeof f.timeoriginalestimate === "number") ? f.timeoriginalestimate
+              : (typeof tt.originalEstimateSeconds === "number") ? tt.originalEstimateSeconds : 0;
+        var sp = (typeof tt.timeSpentSeconds === "number") ? tt.timeSpentSeconds : 0;
+        return Math.max(0, o - sp);
     }
 
     // "Disponible": Σ remaining of the fetched issues that are in the active
@@ -944,16 +956,51 @@ QtObject {
         return s;
     }
 
-    // "Quemadas": Σ of MY worklogs whose `started` is inside the sprint window.
-    function _computeSprintConsumed(rawIssues, startMs, endMs) {
-        var consumed = 0, counted = 0, skippedAuthor = 0, skippedDate = 0;
-        for (var k = 0; k < rawIssues.length; k++) {
-            var f = rawIssues[k].fields || {};
+    // Scan a batch of issues for the first sprint object (in `field`) whose
+    // state is active. Returns the raw sprint object (id/name/startDate/endDate)
+    // or null. Mirrors the worklog-calendar's _findActiveSprintIn.
+    function _findActiveSprintIn(issues, field) {
+        if (!field) return null;
+        for (var i = 0; i < issues.length; i++) {
+            var arr = (issues[i].fields || {})[field] || [];
+            if (!Array.isArray(arr)) arr = arr ? [arr] : [];
+            for (var j = 0; j < arr.length; j++) {
+                if (arr[j] && (arr[j].state === "active" || arr[j].state === "ACTIVE"))
+                    return arr[j];
+            }
+        }
+        return null;
+    }
+
+    // Compute BOTH sprint figures over the sub-tasks whose sprint custom
+    // field contains the active sprint id (exactly like the worklog-calendar's
+    // _computeSprintTotalsFromIssues):
+    //   available = Σ _remainingSecFromFields(f)      → "Disponible"
+    //   consumed  = Σ my worklogs with `started` in [start,end] → "Quemadas"
+    function _computeSprintTotalsFromSubtasks(issues, sprint, field) {
+        var sStart = Date.parse(sprint.startDate);
+        var sEnd   = Date.parse(sprint.endDate);
+        if (isNaN(sStart)) sStart = -Infinity;
+        if (isNaN(sEnd))   sEnd   =  Infinity;
+        var available = 0, consumed = 0;
+        var inSprint = 0, counted = 0, skippedAuthor = 0, skippedDate = 0;
+        for (var k = 0; k < issues.length; k++) {
+            var f = issues[k].fields || {};
+            var arr = f[field] || [];
+            if (!Array.isArray(arr)) arr = arr ? [arr] : [];
+            var hit = false;
+            for (var x = 0; x < arr.length; x++) {
+                if (arr[x] && arr[x].id === sprint.id) { hit = true; break; }
+            }
+            if (!hit) continue;
+            inSprint++;
+            available += _remainingSecFromFields(f);
+
             var wls = (f.worklog && f.worklog.worklogs) || [];
             for (var w = 0; w < wls.length; w++) {
                 var wo = wls[w];
                 var sm = new Date(wo.started).getTime();
-                if (isNaN(sm) || sm < startMs || sm > endMs) { skippedDate++; continue; }
+                if (isNaN(sm) || sm < sStart || sm > sEnd) { skippedDate++; continue; }
                 var auth = wo.author || {};
                 // Only MY worklogs count. If we couldn't resolve our own
                 // accountId, count nothing (better than counting the team's).
@@ -962,31 +1009,41 @@ QtObject {
                 counted++;
             }
         }
-        store.sprintConsumedSec = consumed;
-        if (database && database.ready) database.setSetting(_sk("sprintConsumed"), "" + consumed);
+        store.sprintAvailableSec = available;
+        store.sprintConsumedSec  = consumed;
+        if (database && database.ready) {
+            database.setSetting(_sk("sprintConsumed"),  "" + (consumed  | 0));
+            database.setSetting(_sk("sprintAvailable"), "" + (available | 0));
+        }
         store._bump();
-        _log("Sprint quemadas: issues=" + rawIssues.length + ", myAccountId=" +
-             (myAccountId ? myAccountId : "(VACÍO!)") + ", consumed=" + consumed +
-             "s (" + counted + " worklog[s]); skipped: " + skippedDate + " by date, " +
-             skippedAuthor + " by author.");
+        _log("Sprint '" + (sprint.name || sprint.id) + "': " + issues.length +
+             " subtarea(s), " + inSprint + " en el sprint; myAccountId=" +
+             (myAccountId ? myAccountId : "(VACÍO!)") + "; disponible=" + available +
+             "s, quemadas=" + consumed + "s (" + counted + " worklog[s]); skipped: " +
+             skippedDate + " by date, " + skippedAuthor + " by author.");
     }
 
+    // Fetch the sprint "Horas" figures using the subtask + custom-field
+    // strategy, matching the worklog-calendar exactly. We ask for MY sub-tasks
+    // (no statusCategory filter — Done sub-tasks still contribute worklogs to
+    // "Quemadas"), then locate the active sprint via the sprint custom field
+    // and compute both "Disponible" and "Quemadas" over that subset. This is
+    // far more reliable than a `sprint = {id}` JQL, which fails on many
+    // team-managed / next-gen instances.
     function _fetchSprintHours() {
-        if (!currentSprint || !currentSprint.id) { _log("sprint hours: sin sprint id, se omite."); return; }
         if (_sprintHoursLoading) return;
         var c = _jiraCreds();
         if (!c) { _warn("sprint hours: faltan credenciales."); return; }
-        var startMs = Date.parse(currentSprint.startDate);
-        var endMs   = Date.parse(currentSprint.endDate);
-        if (isNaN(startMs) || isNaN(endMs)) { _warn("sprint hours: fechas de sprint inválidas."); return; }
+        var field = _cfg("SprintField") || "customfield_10020";
 
         _sprintHoursLoading = true;
         _resolveAccountId(c, function() {
-            var jql = "sprint = " + currentSprint.id + " AND assignee = currentUser()";
+            var jql = "issuetype in subTaskIssueTypes() AND assignee = currentUser()";
             var url = c.site + "/rest/api/3/search/jql?jql=" + encodeURIComponent(jql) +
                       "&maxResults=200" +
-                      "&fields=summary,worklog,timeoriginalestimate,timeestimate,timetracking";
-            store._log("sprint hours GET (jql=" + jql + ", accountId=" +
+                      "&fields=summary,worklog,timeoriginalestimate,timeestimate,timetracking," +
+                      encodeURIComponent(field);
+            store._log("sprint hours GET (subtask+" + field + ", accountId=" +
                        (store.myAccountId ? "[OK]" : "(VACÍO!)") + ")");
             var xhr = new XMLHttpRequest();
             xhr.open("GET", url, true);
@@ -998,7 +1055,20 @@ QtObject {
                 if (xhr.status === 200) {
                     try {
                         var data = JSON.parse(xhr.responseText);
-                        store._computeSprintConsumed(data.issues || [], startMs, endMs);
+                        var issues = data.issues || [];
+                        store._log("sprint hours: " + issues.length + " subtarea(s) recibidas.");
+                        var active = store._findActiveSprintIn(issues, field);
+                        if (!active) {
+                            store._warn("Ningún sprint activo en el campo '" + field +
+                                        "' de mis subtareas. ¿Cambió el id del custom field? " +
+                                        "Configurá «Campo de Sprint» si hace falta.");
+                            return;
+                        }
+                        store.currentSprint = {
+                            id: active.id, name: active.name || "",
+                            startDate: active.startDate || "", endDate: active.endDate || ""
+                        };
+                        store._computeSprintTotalsFromSubtasks(issues, store.currentSprint, field);
                     } catch (e) {
                         store._warn("sprint hours parse: " + e);
                     }

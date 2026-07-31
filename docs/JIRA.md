@@ -30,16 +30,28 @@ opción y consideraciones de seguridad.
 >   (por defecto: **Sí**). Cada instancia (Jira 1 / Jira 2) tiene su propio
 >   toggle.
 >
+> **Novedades (v1.9.1):**
+> - La **barra de horas del sprint** ahora replica **exactamente** la
+>   estrategia *Subtarea + customfield* del worklog-calendar. En vez de
+>   `sprint = N AND assignee = currentUser()` (que falla en muchos proyectos
+>   team-managed / next-gen), consulta
+>   `issuetype in subTaskIssueTypes() AND assignee = currentUser()` (sin filtro
+>   de estado — las subtareas *Hechas* también aportan horas quemadas), ubica
+>   el **sprint activo** dentro del *Campo de Sprint* de esas subtareas y
+>   calcula **ambas** cifras sobre ese subconjunto: `disponible = Σ restante` y
+>   `quemadas = Σ tus worklogs con `started` dentro del rango del sprint`.
+> - Nueva opción de configuración **«Horas restantes»** (`jiraRemainingMode`,
+>   por defecto `Calculado`) que decide cómo se computa el *disponible*:
+>   *Calculado* = `max(0, original − consumido)` (recomendado, coincide con el
+>   worklog-calendar) o *Estimación de Jira* = `remainingEstimateSeconds`.
+>
 > **Novedades (v1.6):**
 > - Debajo de la lista, una **barra gruesa** de horas. Cuando hay un sprint
 >   activo usa **exactamente** la cuenta del anillo "Horas" del
->   worklog-calendar: `quemadas / (quemadas + disponible)`, donde **quemadas =
->   suma de tus worklogs cuyo `started` cae dentro del rango del sprint** (se
->   consulta `sprint = N AND assignee = currentUser()` con el campo `worklog`,
->   y tu `accountId` vía `/myself`) y `disponible = Σ max(0, original −
->   gastadas)`. Si no hay sprint activo, cae al total de timetracking de todas
->   las incidencias. El indicador va **centrado debajo** con un ícono a la
->   izquierda.
+>   worklog-calendar: `quemadas / (quemadas + disponible)` (ver v1.9.1 arriba
+>   para el detalle de la consulta). Si no hay sprint activo, cae al total de
+>   timetracking de todas las incidencias. El indicador va **centrado debajo**
+>   con un ícono a la izquierda.
 > - Una **barra celeste de progreso del sprint activo** (por tiempo
 >   transcurrido) con el **% centrado debajo** y las fechas de inicio → fin en
 >   formato `ddd d/M hh:mm` (ej. `lun 7/7 21:04`). El sprint se toma del campo
