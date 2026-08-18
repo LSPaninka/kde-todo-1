@@ -98,6 +98,25 @@ struct MonthHeatmap: View {
         return String(format: "%.1f", h)
     }
 
+    // Totales del mes visible (en segundos), con la misma guarda de mes
+    // que los lookups por día: si la data cargada pertenece a otro mes
+    // (respuesta tardía), devolvemos 0 en vez de sumar valores stale.
+    private var monthClockifySec: Int {
+        guard clockifyKey == curKey else { return 0 }
+        return clockifyTotals.values.reduce(0, +)
+    }
+    private var monthJiraSec: Int {
+        guard jiraKey == curKey else { return 0 }
+        return jiraTotals.values.reduce(0, +)
+    }
+    private func fmtHM(_ sec: Int) -> String {
+        if sec <= 0 { return "0h" }
+        let h = sec / 3600, m = (sec % 3600) / 60
+        if h > 0 && m > 0 { return "\(h)h \(m)m" }
+        if h > 0 { return "\(h)h" }
+        return "\(m)m"
+    }
+
     /// Gradiente rojo → amarillo → verde, 0 a 4h.  Más de 4h queda verde.
     private func cellColor(_ h: Double) -> Color {
         if h <= 0 { return Color.white.opacity(0.06) }
@@ -117,10 +136,36 @@ struct MonthHeatmap: View {
         VStack(alignment: .leading, spacing: 4) {
             header
             grid
+            monthTotalsFooter
         }
         .onAppear  { refresh() }
         .onChange(of: monthOffset)   { refresh() }
         .onChange(of: refreshTrigger) { refresh() }
+    }
+
+    /// Pie con el total de horas consumidas en el mes visible, por
+    /// origen (Clockify / Jira).  Mismos íconos que la columna
+    /// izquierda de la grilla.
+    private var monthTotalsFooter: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "clock")
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+            Text(fmtHM(monthClockifySec))
+                .font(.caption2).bold()
+            Spacer().frame(width: 6)
+            Image(systemName: "checkmark.square")
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+            Text(fmtHM(monthJiraSec))
+                .font(.caption2).bold()
+            Spacer()
+            Text("Total del mes")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .opacity(0.55)
+        }
+        .padding(.top, 2)
     }
 
     private var header: some View {

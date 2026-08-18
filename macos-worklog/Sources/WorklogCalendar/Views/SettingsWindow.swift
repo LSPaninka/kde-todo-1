@@ -5,7 +5,9 @@ import SwiftUI
 struct SettingsWindow: View {
     @ObservedObject var settings: AppSettings
     @ObservedObject var jira: JiraWorklogStore
+    @ObservedObject var jira2: JiraWorklogStore
     @ObservedObject var clockify: ClockifyStore
+    @ObservedObject var google: GoogleCalendarStore
     @Binding var presented: Bool
 
     var body: some View {
@@ -13,10 +15,12 @@ struct SettingsWindow: View {
             TabView {
                 generalTab
                     .tabItem { Label("General", systemImage: "gearshape") }
-                JiraTab(settings: settings, jira: jira)
+                JiraTab(settings: settings, jira: jira, jira2: jira2)
                     .tabItem { Label("Jira", systemImage: "ant") }
                 ClockifyTab(settings: settings, clockify: clockify)
                     .tabItem { Label("Clockify", systemImage: "clock") }
+                GoogleSettingsView(google: google, settings: settings)
+                    .tabItem { Label("Google", systemImage: "calendar") }
             }
             HStack {
                 Spacer()
@@ -162,10 +166,20 @@ struct SettingsWindow: View {
 private struct JiraTab: View {
     @ObservedObject var settings: AppSettings
     @ObservedObject var jira: JiraWorklogStore
+    @ObservedObject var jira2: JiraWorklogStore
 
     @State private var showToken = false
+    @State private var showToken2 = false
     @State private var status: (text: String, isError: Bool) = ("", false)
+    @State private var status2: (text: String, isError: Bool) = ("", false)
     @State private var testing: Bool = false
+    @State private var testing2: Bool = false
+
+    /// Paleta compartida para el color de bloque de cada instancia.
+    private let palette: [String] = [
+        "#9b91e6", "#e69b91", "#7fb3d5", "#82c9a0",
+        "#d5a6e0", "#e0c56e", "#8fd3c7", "#c98f8f"
+    ]
 
     var body: some View {
         Form {
@@ -213,8 +227,108 @@ private struct JiraTab: View {
                     }
                 }
             }
+
+            Section("Color de los bloques") {
+                colorRow("Jira 1", binding: $settings.jira1BlockColor)
+                if settings.jira2Enabled {
+                    colorRow("Jira 2", binding: $settings.jira2BlockColor)
+                }
+                Text("Las dos instancias comparten la misma región del calendario y pueden solaparse; el color las distingue.")
+                    .font(.caption2).foregroundColor(.secondary)
+            }
+
+            Section("Segunda instancia de Jira") {
+                Toggle("Habilitar una segunda cuenta / sitio de Jira",
+                       isOn: $settings.jira2Enabled)
+
+                if settings.jira2Enabled {
+                    TextField("Sitio Jira 2 (ej. https://otra.atlassian.net)",
+                              text: $settings.jira2Site)
+                        .textFieldStyle(.roundedBorder)
+                        .autocorrectionDisabled(true)
+                    TextField("Email", text: $settings.jira2Email)
+                        .textFieldStyle(.roundedBorder)
+                        .autocorrectionDisabled(true)
+                    HStack {
+                        if showToken2 {
+                            TextField("API token", text: $settings.jira2Token)
+                                .textFieldStyle(.roundedBorder)
+                        } else {
+                            SecureField("API token", text: $settings.jira2Token)
+                                .textFieldStyle(.roundedBorder)
+                        }
+                        Button { showToken2.toggle() } label: {
+                            Image(systemName: showToken2 ? "eye.slash" : "eye")
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                    Text("Se guarda en el Keychain (cuenta jira2.token). El panel inferior (anillos / subtareas / heatmap) sigue atado a la primera instancia.")
+                        .font(.caption).foregroundColor(.secondary)
+
+                    HStack {
+                        Button {
+                            runTest2()
+                        } label: {
+                            if testing2 {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Label("Probar Jira 2", systemImage: "network")
+                            }
+                        }
+                        .disabled(testing2)
+                        if !status2.text.isEmpty {
+                            Text(status2.text)
+                                .foregroundColor(status2.isError ? .red : .green)
+                                .lineLimit(2)
+                        }
+                    }
+                }
+            }
         }
         .formStyle(.grouped)
+    }
+
+    /// Fila con label + swatch de color elegible desde una paleta.
+    @ViewBuilder
+    private func colorRow(_ label: String, binding: Binding<String>) -> some View {
+        HStack {
+            Text(label)
+            Spacer()
+            Menu {
+                ForEach(palette, id: \.self) { hex in
+                    Button {
+                        binding.wrappedValue = hex
+                    } label: {
+                        Label(hex, systemImage: hex == binding.wrappedValue
+                              ? "checkmark.circle.fill" : "circle.fill")
+                    }
+                }
+            } label: {
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(Color(hex: binding.wrappedValue) ?? .purple)
+                    .frame(width: 26, height: 16)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 3)
+                            .stroke(Color.secondary.opacity(0.5), lineWidth: 1)
+                    )
+            }
+            .menuStyle(.borderlessButton)
+            .frame(width: 50)
+        }
+    }
+
+    private func runTest2() {
+        status2 = ("Conectando…", false)
+        testing2 = true
+        jira2.testConnection(site: settings.jira2Site,
+                             email: settings.jira2Email,
+                             token: settings.jira2Token) { result in
+            testing2 = false
+            switch result {
+            case .success(let name): status2 = ("OK — autenticado como \(name)", false)
+            case .failure(let err):  status2 = (err.message, true)
+            }
+        }
     }
 
     private func runTest() {
@@ -305,6 +419,17 @@ private struct ClockifyTab: View {
                 Toggle("Facturable por defecto", isOn: $settings.clockifyBillableDefault)
             }
 
+            Section("Sync Jira → Clockify") {
+                projectPicker("Proyecto para Jira 1",
+                              selection: $settings.jira1ClockifyProjectId)
+                if settings.jira2Enabled {
+                    projectPicker("Proyecto para Jira 2",
+                                  selection: $settings.jira2ClockifyProjectId)
+                }
+                Text("Cada instancia de Jira sincroniza a su propio proyecto. El chequeo de duplicados y la creación quedan acotados a ese proyecto, así las dos instancias no se pisan.")
+                    .font(.caption2).foregroundColor(.secondary)
+            }
+
             Section("Probar conexión") {
                 HStack {
                     Button {
@@ -326,6 +451,25 @@ private struct ClockifyTab: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    /// Picker de proyecto de Clockify; cae a un campo de texto con el id
+    /// hex cuando todavía no se cargó la lista de proyectos.
+    @ViewBuilder
+    private func projectPicker(_ label: String, selection: Binding<String>) -> some View {
+        if clockify.projects.isEmpty {
+            TextField("\(label) (ID, opcional)", text: selection)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(.body, design: .monospaced))
+        } else {
+            Picker(label, selection: selection) {
+                Text("(sin proyecto)").tag("")
+                ForEach(clockify.projects) { p in
+                    Text(p.name).tag(p.id)
+                }
+            }
+            .pickerStyle(.menu)
+        }
     }
 
     private func runTest() {

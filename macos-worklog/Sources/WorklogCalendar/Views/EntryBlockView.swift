@@ -5,7 +5,7 @@ import SwiftUI
 /// tanto para worklogs Jira como para entries Clockify; cada uno expone
 /// sus textos y colores con sus propios initializers.
 struct CalendarBlock: Identifiable, Equatable {
-    enum Kind { case jira, clockify }
+    enum Kind { case jira, jira2, clockify }
 
     let id: String
     let kind: Kind
@@ -26,9 +26,9 @@ struct CalendarBlock: Identifiable, Equatable {
 }
 
 extension CalendarBlock {
-    init(jira w: JiraWorklog, showSummary: Bool) {
-        self.id = "jira-\(w.id)"
-        self.kind = .jira
+    init(jira w: JiraWorklog, showSummary: Bool, instanceId: Int = 1) {
+        self.id = instanceId == 2 ? "jira2-\(w.id)" : "jira-\(w.id)"
+        self.kind = instanceId == 2 ? .jira2 : .jira
         self.startedMs = w.startedMs
         self.durationSec = w.durationSec
         let top = Self.fmtRange(startMs: w.startedMs, durationSec: w.durationSec)
@@ -125,6 +125,9 @@ struct EntryBlockView: View {
     /// teñimos:  naranja para Jira, amarillo para Clockify, así el
     /// usuario detecta visualmente duplicados pre-sync.
     let overlapping: Bool
+    /// Color base (hex) del bloque cuando es de Jira — depende de la
+    /// instancia (jira1BlockColor / jira2BlockColor).
+    var jiraColorHex: String = "#9b91e6"
     /// Altura de cada fila de 30 min (necesaria para snappear el offset
     /// visual al soltar y para detectar el zonado top/bottom).
     let rowHeight: CGFloat
@@ -167,7 +170,9 @@ struct EntryBlockView: View {
     private var blockFontSize: CGFloat { compactLayout ? 8 : 9 }
 
     private var fillColor: Color {
-        if block.kind == .jira {
+        if block.kind == .jira || block.kind == .jira2 {
+            // Color por instancia (configurable), siempre translúcido.
+            if let c = Color(hex: jiraColorHex) { return c.opacity(0.55) }
             return Color(red: 155/255, green: 145/255, blue: 230/255).opacity(0.55)
         }
         if useProjectColor, let c = Color(hex: block.projectHex) {
@@ -178,11 +183,16 @@ struct EntryBlockView: View {
 
     private var borderColor: Color {
         if overlapping {
-            // Jira → naranja, Clockify → amarillo (warning visual de
-            // dos worklogs / entries que se pisan en el tiempo).
-            return block.kind == .jira ? .orange : .yellow
+            // Warning visual de dos worklogs / entries del mismo origen
+            // que se pisan en el tiempo.  Mismos colores que el
+            // plasmoide KDE: dark orange (#FF8C00) para Jira-Jira,
+            // gold (#FFD700) para Clockify-Clockify.
+            return block.kind == .clockify
+                ? Color(red: 255/255, green: 215/255, blue: 0/255)     // #FFD700 gold
+                : Color(red: 255/255, green: 140/255, blue: 0/255)     // #FF8C00 dark orange
         }
-        if block.kind == .jira {
+        if block.kind == .jira || block.kind == .jira2 {
+            if let c = Color(hex: jiraColorHex) { return c.opacity(0.95) }
             return Color(red: 120/255, green: 110/255, blue: 200/255)
         }
         if useProjectColor, let c = Color(hex: block.projectHex) {

@@ -18,6 +18,16 @@ struct CalendarView: View {
     let weekStart: Date
     let jiraBlocks: [CalendarBlock]      // ya filtrados por modo
     let clockifyBlocks: [CalendarBlock]
+    /// Eventos de Google Calendar — se dibujan como fondo inmóvil detrás
+    /// de los bloques de worklog.  Vacío si el toggle está apagado.
+    /// Bloques de la segunda instancia de Jira (vacío si está apagada).
+    var jira2Blocks: [CalendarBlock] = []
+    /// Colores de bloque por instancia de Jira.
+    var jira1ColorHex: String = "#9b91e6"
+    var jira2ColorHex: String = "#e69b91"
+    var googleEvents: [GoogleCalendarEvent] = []
+    /// Resuelve el color base (hex) de un `calendarId`.
+    var googleColorFor: (String) -> String = { _ in AppSettings.googleDefaultColor }
     let source: WorklogSource
     let viewMode: ViewHourMode
     let dailyTargetHours: Double
@@ -39,6 +49,12 @@ struct CalendarView: View {
     /// Eliminar definitivamente el bloque (menú contextual).
     let onDeleteJira: (CalendarBlock) -> Void
     let onDeleteClockify: (CalendarBlock) -> Void
+
+    // --- Segunda instancia de Jira: mismas acciones, ruteadas a su store.
+    var onEditJira2: (CalendarBlock) -> Void = { _ in }
+    var onMoveJira2: (CalendarBlock, Double, Int) -> Void = { _, _, _ in }
+    var onDuplicateJira2: (CalendarBlock) -> Void = { _ in }
+    var onDeleteJira2: (CalendarBlock) -> Void = { _ in }
 
     private let rowHeight: CGFloat = 22
     private let hourColumnWidth: CGFloat = 56
@@ -85,10 +101,11 @@ struct CalendarView: View {
     /// piso de 10 min de duración (antes 30; bajó con la granularidad
     /// fina por Shift).  No clampea por día: bloques que cruzan la
     /// medianoche son legales en Jira y Clockify.
+    /// El ruteo sale del `kind` del propio bloque, así la segunda
+    /// instancia de Jira se maneja sola sin parámetros extra.
     private func emitChange(block: CalendarBlock,
                             newStartMs: Double,
-                            newDurationSec: Int,
-                            isJira: Bool) {
+                            newDurationSec: Int) {
         let wsMs = weekStart.timeIntervalSince1970 * 1000
         let weMs = wsMs + 7 * 86_400_000
         var start = newStartMs
@@ -97,8 +114,34 @@ struct CalendarView: View {
         if start < wsMs            { start = wsMs }
         if start + durMs > weMs    { start = weMs - durMs }
         if start == block.startedMs && dur == block.durationSec { return }
-        if isJira { onMoveJira(block, start, dur) }
-        else      { onMoveClockify(block, start, dur) }
+        switch block.kind {
+        case .jira:     onMoveJira(block, start, dur)
+        case .jira2:    onMoveJira2(block, start, dur)
+        case .clockify: onMoveClockify(block, start, dur)
+        }
+    }
+
+    /// Ruteo de las acciones no-geométricas según la instancia.
+    private func routeEdit(_ b: CalendarBlock) {
+        switch b.kind {
+        case .jira:     onEditJira(b)
+        case .jira2:    onEditJira2(b)
+        case .clockify: onEditClockify(b)
+        }
+    }
+    private func routeDuplicate(_ b: CalendarBlock) {
+        switch b.kind {
+        case .jira:     onDuplicateJira(b)
+        case .jira2:    onDuplicateJira2(b)
+        case .clockify: onDuplicateClockify(b)
+        }
+    }
+    private func routeDelete(_ b: CalendarBlock) {
+        switch b.kind {
+        case .jira:     onDeleteJira(b)
+        case .jira2:    onDeleteJira2(b)
+        case .clockify: onDeleteClockify(b)
+        }
     }
 
     /// Convierte un offset en píxeles a una cantidad de minutos
@@ -114,7 +157,6 @@ struct CalendarView: View {
     fileprivate func handleMove(block: CalendarBlock,
                                 deltaX: CGFloat, deltaY: CGFloat,
                                 columnWidth: CGFloat,
-                                isJira: Bool,
                                 fine: Bool) {
         let stepMin = pxToSnappedMin(deltaY, fine: fine)
         let days    = columnWidth > 0 ? Int(round(deltaX / columnWidth)) : 0
@@ -124,34 +166,39 @@ struct CalendarView: View {
             + Double(stepMin) * 60_000
         emitChange(block: block,
                    newStartMs: newStart,
-                   newDurationSec: block.durationSec,
-                   isJira: isJira)
+                   newDurationSec: block.durationSec)
     }
 
     /// Resize del borde superior: deltaY positivo = inicio más tarde,
     /// duración baja por la misma cantidad.
     fileprivate func handleResizeTop(block: CalendarBlock, deltaY: CGFloat,
-                                      isJira: Bool, fine: Bool) {
+                                      fine: Bool) {
         let stepMin = pxToSnappedMin(deltaY, fine: fine)
         if stepMin == 0 { return }
         let newStart = block.startedMs + Double(stepMin) * 60_000
         let newDur   = block.durationSec - stepMin * 60
         emitChange(block: block,
                    newStartMs: newStart,
-                   newDurationSec: newDur,
-                   isJira: isJira)
+                   newDurationSec: newDur)
     }
 
     /// Resize del borde inferior: sólo cambia la duración.
     fileprivate func handleResizeBottom(block: CalendarBlock, deltaH: CGFloat,
-                                         isJira: Bool, fine: Bool) {
+                                         fine: Bool) {
         let stepMin = pxToSnappedMin(deltaH, fine: fine)
         if stepMin == 0 { return }
         let newDur = block.durationSec + stepMin * 60
         emitChange(block: block,
                    newStartMs: block.startedMs,
-                   newDurationSec: newDur,
-                   isJira: isJira)
+                   newDurationSec: newDur)
+    }
+
+    /// Eventos de Google que arrancan en el día `idx` (0..6).
+    private func googleEventsForDay(_ idx: Int) -> [GoogleCalendarEvent] {
+        guard !googleEvents.isEmpty else { return [] }
+        let dayStartMs = weekStart.timeIntervalSince1970 * 1000 + Double(idx) * 86_400_000
+        let dayEndMs = dayStartMs + 86_400_000
+        return googleEvents.filter { $0.startedMs >= dayStartMs && $0.startedMs < dayEndMs }
     }
 
     /// Devuelve los bloques que caen en el día `idx` (0..6).
@@ -277,6 +324,7 @@ struct CalendarView: View {
         // (no por columna) — abrimos el cálculo a toda la semana así
         // un overlap que cruza la medianoche también se marca.
         let jiraOverlap = overlappingIds(in: jiraBlocks)
+        let jira2Overlap = overlappingIds(in: jira2Blocks)
         let clockifyOverlap = overlappingIds(in: clockifyBlocks)
         return HStack(spacing: 0) {
             hourColumn
@@ -287,33 +335,32 @@ struct CalendarView: View {
                     viewMode: viewMode,
                     rowHeight: rowHeight,
                     jiraBlocks: showJira ? blocks(jiraBlocks, dayIndex: i) : [],
+                    jira2Blocks: showJira ? blocks(jira2Blocks, dayIndex: i) : [],
                     clockifyBlocks: showClockify ? blocks(clockifyBlocks, dayIndex: i) : [],
+                    googleEvents: googleEventsForDay(i),
+                    googleColorFor: googleColorFor,
                     combined: combined,
                     sourcePure: source,
                     isToday: isToday(i),
                     isWeekend: isWeekend(i),
                     onCreateJira: onCreateJira,
                     onCreateClockify: onCreateClockify,
-                    onEditJira: onEditJira,
-                    onEditClockify: onEditClockify,
-                    onMoveJira: { b, dx, dy, w, fine in
+                    // Acciones genéricas: el ruteo por instancia lo hace
+                    // `routeEdit` / `emitChange` mirando `block.kind`.
+                    onEdit:          { b in routeEdit(b) },
+                    onMove:          { b, dx, dy, w, fine in
                         handleMove(block: b, deltaX: dx, deltaY: dy,
-                                   columnWidth: w, isJira: true, fine: fine)
+                                   columnWidth: w, fine: fine)
                     },
-                    onMoveClockify: { b, dx, dy, w, fine in
-                        handleMove(block: b, deltaX: dx, deltaY: dy,
-                                   columnWidth: w, isJira: false, fine: fine)
-                    },
-                    onResizeTopJira:        { b, dy, fine in handleResizeTop(block: b, deltaY: dy, isJira: true,  fine: fine) },
-                    onResizeTopClockify:    { b, dy, fine in handleResizeTop(block: b, deltaY: dy, isJira: false, fine: fine) },
-                    onResizeBottomJira:     { b, dh, fine in handleResizeBottom(block: b, deltaH: dh, isJira: true,  fine: fine) },
-                    onResizeBottomClockify: { b, dh, fine in handleResizeBottom(block: b, deltaH: dh, isJira: false, fine: fine) },
-                    onDuplicateJira:        onDuplicateJira,
-                    onDuplicateClockify:    onDuplicateClockify,
-                    onDeleteJira:           onDeleteJira,
-                    onDeleteClockify:       onDeleteClockify,
-                    jiraOverlapIds:         jiraOverlap,
-                    clockifyOverlapIds:     clockifyOverlap
+                    onResizeTop:     { b, dy, fine in handleResizeTop(block: b, deltaY: dy, fine: fine) },
+                    onResizeBottom:  { b, dh, fine in handleResizeBottom(block: b, deltaH: dh, fine: fine) },
+                    onDuplicate:     { b in routeDuplicate(b) },
+                    onDelete:        { b in routeDelete(b) },
+                    jiraOverlapIds:     jiraOverlap,
+                    jira2OverlapIds:    jira2Overlap,
+                    clockifyOverlapIds: clockifyOverlap,
+                    jira1ColorHex:      jira1ColorHex,
+                    jira2ColorHex:      jira2ColorHex
                 )
                 .frame(maxWidth: .infinity)
             }
@@ -352,35 +399,35 @@ private struct DayColumnView: View {
     let viewMode: ViewHourMode
     let rowHeight: CGFloat
     let jiraBlocks: [CalendarBlock]
+    let jira2Blocks: [CalendarBlock]
     let clockifyBlocks: [CalendarBlock]
+    let googleEvents: [GoogleCalendarEvent]
+    let googleColorFor: (String) -> String
     let combined: Bool
     let sourcePure: WorklogSource
     let isToday: Bool
     let isWeekend: Bool
     let onCreateJira: (DragSelection) -> Void
     let onCreateClockify: (DragSelection) -> Void
-    let onEditJira: (CalendarBlock) -> Void
-    let onEditClockify: (CalendarBlock) -> Void
+    /// Acciones genéricas — el padre rutea según `block.kind`, así la
+    /// segunda instancia de Jira no necesita callbacks propios acá.
+    let onEdit: (CalendarBlock) -> Void
     /// Drag-to-move:  recibimos `(bloque, dx, dy, anchoColumna, fine)`.
     /// `fine == true` ⇔ Shift estaba apretado al iniciar el drag, lo
     /// que baja la granularidad de 30 min a 10 min.
-    let onMoveJira:     (CalendarBlock, CGFloat, CGFloat, CGFloat, Bool) -> Void
-    let onMoveClockify: (CalendarBlock, CGFloat, CGFloat, CGFloat, Bool) -> Void
+    let onMove: (CalendarBlock, CGFloat, CGFloat, CGFloat, Bool) -> Void
     /// Resize del borde superior / inferior:  `(bloque, delta px, fine)`.
-    let onResizeTopJira:        (CalendarBlock, CGFloat, Bool) -> Void
-    let onResizeTopClockify:    (CalendarBlock, CGFloat, Bool) -> Void
-    let onResizeBottomJira:     (CalendarBlock, CGFloat, Bool) -> Void
-    let onResizeBottomClockify: (CalendarBlock, CGFloat, Bool) -> Void
-    /// Botón "duplicar" del bloque.
-    let onDuplicateJira:        (CalendarBlock) -> Void
-    let onDuplicateClockify:    (CalendarBlock) -> Void
-    /// Menú contextual "Eliminar" del bloque.
-    let onDeleteJira:           (CalendarBlock) -> Void
-    let onDeleteClockify:       (CalendarBlock) -> Void
+    let onResizeTop:    (CalendarBlock, CGFloat, Bool) -> Void
+    let onResizeBottom: (CalendarBlock, CGFloat, Bool) -> Void
+    let onDuplicate:    (CalendarBlock) -> Void
+    let onDelete:       (CalendarBlock) -> Void
     /// IDs de bloques que pisan a otro del mismo origen (overlap visual
     /// para destacar duplicados pre-sync Jira → Clockify).
     let jiraOverlapIds:         Set<String>
+    let jira2OverlapIds:        Set<String>
     let clockifyOverlapIds:     Set<String>
+    let jira1ColorHex:          String
+    let jira2ColorHex:          String
 
     @State private var dragStart: CGPoint? = nil
     @State private var dragCurrent: CGPoint? = nil
@@ -481,6 +528,59 @@ private struct DayColumnView: View {
         let minFromViewStart = (b.startedMs - dayStart) / 60_000 - Double(viewMode.startHour) * 60
         return CGFloat(minFromViewStart / 30) * rowHeight
     }
+    /// Construye un `EntryBlockView` con todos los callbacks genéricos
+    /// ya cableados — evita repetir el bloque tres veces (Jira 1, Jira 2,
+    /// Clockify), que sólo difieren en color, overlap y offset X.
+    @ViewBuilder
+    private func entryBlock(_ b: CalendarBlock,
+                            width: CGFloat,
+                            overlapping: Bool,
+                            colorHex: String,
+                            useProjectColor: Bool) -> some View {
+        EntryBlockView(
+            block: b,
+            compactLayout: combined,
+            useProjectColor: useProjectColor,
+            onTap:           { onEdit(b) },
+            onMove:          { dx, dy, fine in onMove(b, dx, dy, width, fine) },
+            onResizeTop:     { dy, fine in onResizeTop(b, dy, fine) },
+            onResizeBottom:  { dh, fine in onResizeBottom(b, dh, fine) },
+            onDuplicate:     { onDuplicate(b) },
+            onDelete:        { onDelete(b) },
+            overlapping:     overlapping,
+            jiraColorHex:    colorHex,
+            rowHeight: rowHeight,
+            columnWidth: width,
+            columnHeight: totalHeight,
+            blockYInColumn: yFor(b)
+        )
+        .frame(width: combined ? (width / 2) - 3 : width - 4,
+               height: heightFor(b))
+    }
+
+    /// Igual que `yFor` / `heightFor` pero para eventos de Google (mismo
+    /// shape started/durationSec, así que la matemática es idéntica).
+    private func yForEvent(_ e: GoogleCalendarEvent) -> CGFloat {
+        let dayStart = weekStart.timeIntervalSince1970 * 1000 + Double(dayIndex) * 86_400_000
+        let minFromViewStart = (e.startedMs - dayStart) / 60_000 - Double(viewMode.startHour) * 60
+        return CGFloat(minFromViewStart / 30) * rowHeight
+    }
+    private func heightForEvent(_ e: GoogleCalendarEvent) -> CGFloat {
+        Swift.max(rowHeight / 3, CGFloat(Double(e.durationSec) / 1800) * rowHeight)
+    }
+
+    /// `true` si algún bloque de Jira/Clockify visible ese día pisa en el
+    /// tiempo al evento — usado para esconder su etiqueta.
+    private func googleCovered(_ e: GoogleCalendarEvent) -> Bool {
+        let s = e.startedMs
+        let end = s + Double(e.durationSec) * 1000
+        for b in jiraBlocks + jira2Blocks + clockifyBlocks {
+            let bEnd = b.startedMs + Double(b.durationSec) * 1000
+            if s < bEnd && b.startedMs < end { return true }
+        }
+        return false
+    }
+
     private func heightFor(_ b: CalendarBlock) -> CGFloat {
         let h = CGFloat(Double(b.durationSec) / 1800) * rowHeight  // 1800s = 30min = rowHeight
         return Swift.max(rowHeight / 3, h)                         // floor visual ≈ 10 min
@@ -511,6 +611,40 @@ private struct DayColumnView: View {
                             .overlay(Rectangle().stroke(Color.white.opacity(0.06), lineWidth: 1))
                             .frame(height: rowHeight)
                     }
+                }
+
+                // Bloques de Google Calendar — fondo translúcido,
+                // inmóviles y NO interactivos (`allowsHitTesting(false)`),
+                // así se puede arrastrar "por encima" para crear un
+                // worklog sobre una reunión.  En modo combinado ocupan
+                // el ancho completo de la columna (las dos mitades).
+                ForEach(googleEvents) { ev in
+                    let base = Color(hex: googleColorFor(ev.calendarId))
+                        ?? Color(hex: AppSettings.googleDefaultColor)!
+                    ZStack(alignment: .topLeading) {
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(base.opacity(0.18))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 3)
+                                    .stroke(base.opacity(0.45), lineWidth: 1)
+                            )
+                        // El título se oculta cuando un bloque de
+                        // Jira/Clockify lo tapa, así las letras no se
+                        // superponen (el bloque translúcido sí queda).
+                        if !googleCovered(ev) {
+                            Text(ev.summary)
+                                .font(.system(size: 9))
+                                .foregroundColor(.white)
+                                .opacity(0.85)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                                .padding(.horizontal, 3)
+                                .padding(.top, 2)
+                        }
+                    }
+                    .frame(width: width - 4, height: heightForEvent(ev))
+                    .offset(x: 2, y: yForEvent(ev))
+                    .allowsHitTesting(false)
                 }
 
                 // Vertical divider en modo combinado.
@@ -569,50 +703,32 @@ private struct DayColumnView: View {
                         .transition(.opacity)
                 }
 
-                // Jira blocks.
+                // Jira blocks (instancia 1).
                 ForEach(jiraBlocks) { b in
-                    EntryBlockView(
-                        block: b,
-                        compactLayout: combined,
-                        useProjectColor: false,
-                        onTap: { onEditJira(b) },
-                        onMove:          { dx, dy, fine in onMoveJira(b, dx, dy, width, fine) },
-                        onResizeTop:     { dy, fine in onResizeTopJira(b, dy, fine) },
-                        onResizeBottom:  { dh, fine in onResizeBottomJira(b, dh, fine) },
-                        onDuplicate:     { onDuplicateJira(b) },
-                        onDelete:        { onDeleteJira(b) },
-                        overlapping:     jiraOverlapIds.contains(b.id),
-                        rowHeight: rowHeight,
-                        columnWidth: width,
-                        columnHeight: totalHeight,
-                        blockYInColumn: yFor(b)
-                    )
-                    .frame(width: combined ? (width / 2) - 3 : width - 4,
-                           height: heightFor(b))
-                    .offset(x: combined ? 2 : 2, y: yFor(b))
+                    entryBlock(b, width: width,
+                               overlapping: jiraOverlapIds.contains(b.id),
+                               colorHex: jira1ColorHex,
+                               useProjectColor: false)
+                        .offset(x: 2, y: yFor(b))
+                }
+
+                // Jira blocks (instancia 2) — misma región que la 1,
+                // pueden solaparse; se distinguen por color.
+                ForEach(jira2Blocks) { b in
+                    entryBlock(b, width: width,
+                               overlapping: jira2OverlapIds.contains(b.id),
+                               colorHex: jira2ColorHex,
+                               useProjectColor: false)
+                        .offset(x: 2, y: yFor(b))
                 }
 
                 // Clockify blocks.
                 ForEach(clockifyBlocks) { b in
-                    EntryBlockView(
-                        block: b,
-                        compactLayout: combined,
-                        useProjectColor: !combined,
-                        onTap: { onEditClockify(b) },
-                        onMove:          { dx, dy, fine in onMoveClockify(b, dx, dy, width, fine) },
-                        onResizeTop:     { dy, fine in onResizeTopClockify(b, dy, fine) },
-                        onResizeBottom:  { dh, fine in onResizeBottomClockify(b, dh, fine) },
-                        onDuplicate:     { onDuplicateClockify(b) },
-                        onDelete:        { onDeleteClockify(b) },
-                        overlapping:     clockifyOverlapIds.contains(b.id),
-                        rowHeight: rowHeight,
-                        columnWidth: width,
-                        columnHeight: totalHeight,
-                        blockYInColumn: yFor(b)
-                    )
-                    .frame(width: combined ? (width / 2) - 3 : width - 4,
-                           height: heightFor(b))
-                    .offset(x: combined ? (width / 2) + 1 : 2, y: yFor(b))
+                    entryBlock(b, width: width,
+                               overlapping: clockifyOverlapIds.contains(b.id),
+                               colorHex: jira1ColorHex,   // no aplica a Clockify
+                               useProjectColor: !combined)
+                        .offset(x: combined ? (width / 2) + 1 : 2, y: yFor(b))
                 }
             }
             .frame(width: width, height: totalHeight)

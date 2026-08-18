@@ -41,7 +41,16 @@ final class JiraWorklogStore: ObservableObject {
 
     var settings: AppSettings
 
-    init(settings: AppSettings) { self.settings = settings }
+    /// Qué instancia de Jira es este store: 1 usa las credenciales
+    /// compartidas `jiraSite/Email/Token`; 2 usa `jira2*`.  Todo lo demás
+    /// (sprint, JQL de subtareas, remaining mode, debug) queda compartido
+    /// — el panel inferior está atado sólo a la primera instancia.
+    let instanceId: Int
+
+    init(settings: AppSettings, instanceId: Int = 1) {
+        self.settings = settings
+        self.instanceId = instanceId
+    }
 
     // MARK: - API pública
 
@@ -432,11 +441,14 @@ final class JiraWorklogStore: ObservableObject {
     }
 
     private func credentials() -> Credentials? {
-        let site = settings.jiraSite
+        let rawSite  = instanceId == 2 ? settings.jira2Site  : settings.jiraSite
+        let rawEmail = instanceId == 2 ? settings.jira2Email : settings.jiraEmail
+        let rawToken = instanceId == 2 ? settings.jira2Token : settings.jiraToken
+        let site = rawSite
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "/+$", with: "", options: .regularExpression)
-        let email = settings.jiraEmail.trimmingCharacters(in: .whitespacesAndNewlines)
-        let token = settings.jiraToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        let email = rawEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        let token = rawToken.trimmingCharacters(in: .whitespacesAndNewlines)
         if site.isEmpty || email.isEmpty || token.isEmpty {
             lastError = "Faltan credenciales (sitio, email o token). Configurá la pestaña Jira."
             warn("Faltan credenciales: site=\(!site.isEmpty) email=\(!email.isEmpty) token=\(!token.isEmpty)")
@@ -502,11 +514,11 @@ final class JiraWorklogStore: ObservableObject {
 
     private func log(_ msg: String) {
         appendDebug(msg)
-        if settings.debug { NSLog("[JiraWorklog] %@", msg) }
+        if settings.debug { NSLog("[JiraWorklog:%d] %@", instanceId, msg) }
     }
     private func warn(_ msg: String) {
         appendDebug("[!] " + msg)
-        NSLog("[JiraWorklog] %@", msg)
+        NSLog("[JiraWorklog:%d] %@", instanceId, msg)
     }
     private func appendDebug(_ line: String) {
         let next = (debugLog.isEmpty ? "" : debugLog + "\n") + line

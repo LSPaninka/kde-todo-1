@@ -50,7 +50,9 @@ final class StatusBarController: NSObject {
 
     init(settings: AppSettings,
          jira: JiraWorklogStore,
+         jira2: JiraWorklogStore,
          clockify: ClockifyStore,
+         google: GoogleCalendarStore,
          onOpenApp: @escaping () -> Void) {
         self.onOpenApp = onOpenApp
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -78,7 +80,9 @@ final class StatusBarController: NSObject {
         let root = MainView(
             settings: settings,
             jira: jira,
+            jira2: jira2,
             clockify: clockify,
+            google: google,
             onOpenApp: { [weak self] in
                 self?.closePopover()
                 self?.onOpenApp()

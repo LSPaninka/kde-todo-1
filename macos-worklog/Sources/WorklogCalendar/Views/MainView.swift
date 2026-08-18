@@ -8,6 +8,8 @@ struct MainView: View {
     @ObservedObject var settings: AppSettings
     @ObservedObject var jira: JiraWorklogStore
     @ObservedObject var clockify: ClockifyStore
+    @ObservedObject var jira2: JiraWorklogStore
+    @ObservedObject var google: GoogleCalendarStore
 
     /// Si está seteado, estamos dentro del popover de la barra de menús:
     /// mostramos un botón "abrir aplicación" en el header.  En la
@@ -37,10 +39,16 @@ struct MainView: View {
     // (y no leer Preferencias directo en `syncJiraIntoClockify`) hace
     // que muchos workspaces que tienen "project required" activado
     // dejen de devolver HTTP 400 sin tener que volver a Preferencias.
-    @State private var syncProjectId: String = ""
 
     private var jiraBlocks: [CalendarBlock] {
         jira.worklogs.map { CalendarBlock(jira: $0, showSummary: settings.showIssueSummary) }
+    }
+    /// Bloques de la segunda instancia (vacío si está deshabilitada).
+    private var jira2Blocks: [CalendarBlock] {
+        guard settings.jira2Enabled else { return [] }
+        return jira2.worklogs.map {
+            CalendarBlock(jira: $0, showSummary: settings.showIssueSummary, instanceId: 2)
+        }
     }
     private var clockifyBlocks: [CalendarBlock] {
         clockify.entries.map { CalendarBlock(clockify: $0) }
@@ -116,6 +124,11 @@ struct MainView: View {
                 weekStart: weekStart,
                 jiraBlocks: jiraBlocks,
                 clockifyBlocks: clockifyBlocks,
+                jira2Blocks: jira2Blocks,
+                jira1ColorHex: settings.jira1BlockColor,
+                jira2ColorHex: settings.jira2BlockColor,
+                googleEvents: settings.googleCalEnabled ? google.events : [],
+                googleColorFor: { settings.googleColor(for: $0) },
                 source: settings.source,
                 viewMode: settings.viewMode,
                 dailyTargetHours: settings.dailyTargetHours,
@@ -148,7 +161,20 @@ struct MainView: View {
                 onDuplicateJira:     { block in duplicateJira(block) },
                 onDuplicateClockify: { block in duplicateClockify(block) },
                 onDeleteJira:        { block in deleteJira(block) },
-                onDeleteClockify:    { block in deleteClockify(block) }
+                onDeleteClockify:    { block in deleteClockify(block) },
+                onEditJira2: { block in
+                    if let w = jira2.worklogs.first(where: { "jira2-\($0.id)" == block.id }) {
+                        openJiraSheet(editing: w,
+                                      start: Date(timeIntervalSince1970: w.startedMs / 1000),
+                                      end:   Date(timeIntervalSince1970: (w.startedMs + Double(w.durationSec) * 1000) / 1000),
+                                      instanceId: 2)
+                    }
+                },
+                onMoveJira2:      { block, newStartMs, newDur in
+                    applyJira(block, newStartMs: newStartMs, newDurationSec: newDur, instanceId: 2)
+                },
+                onDuplicateJira2: { block in duplicateJira(block, instanceId: 2) },
+                onDeleteJira2:    { block in deleteJira(block, instanceId: 2) }
             )
             .frame(maxHeight: .infinity)
 
@@ -161,12 +187,7 @@ struct MainView: View {
         }
         .padding(8)
         .onAppear {
-            syncProjectId = settings.clockifyDefaultProjectId
             syncNow()
-        }
-        .onChange(of: settings.clockifyDefaultProjectId) {
-            // Si editan el default en Preferencias, reflejarlo acá.
-            syncProjectId = settings.clockifyDefaultProjectId
         }
         // Cambios en Preferencias del bloque "Sprint (experimental)" →
         // re-fetch sin esperar al ↻ (sólo si los rings están visibles).
@@ -180,6 +201,10 @@ struct MainView: View {
         // o config) → refrescar la nueva vista.  El heatmap se refresca
         // sólo via `.onAppear`; rings y subtareas necesitan re-fetch.
         .onChange(of: settings.bottomView) { refreshBottomView() }
+        // Al encender Google Calendar traemos la semana visible.
+        .onChange(of: settings.googleCalEnabled) { _, on in
+            if on { google.fetchWeek(starting: weekStart) }
+        }
         // Si deshabilitan la tabla de subtareas o los anillos mientras
         // están visibles, caemos a la primera vista disponible.
         .onChange(of: settings.showSubtaskTable) { _, on in
@@ -203,6 +228,8 @@ struct MainView: View {
         .sheet(item: $jiraSheetItem) { item in
             JiraEditSheet(
                 store: jira,
+                store2: settings.jira2Enabled ? jira2 : nil,
+                initialInstanceId: item.instanceId,
                 settings: settings,
                 editing: item.editing,
                 start: item.start,
@@ -235,11 +262,11 @@ struct MainView: View {
         }
         // Preferences
         .sheet(isPresented: $showSettings) {
-            SettingsWindow(settings: settings, jira: jira, clockify: clockify, presented: $showSettings)
+            SettingsWindow(settings: settings, jira: jira, jira2: jira2, clockify: clockify, google: google, presented: $showSettings)
         }
         // Debug overlay
         .sheet(isPresented: $showDebug) {
-            DebugSheet(jira: jira, clockify: clockify, presented: $showDebug)
+            DebugSheet(jira: jira, jira2: jira2, clockify: clockify, google: google, presented: $showDebug)
         }
     }
 
@@ -286,6 +313,22 @@ struct MainView: View {
             }
             .disabled(jira.loading || clockify.loading)
 
+            // Toggle de Google Calendar — muestra/oculta los bloques de
+            // eventos de fondo.  Sólo aparece si ya está autorizado.
+            if settings.googleRefreshToken.isEmpty == false {
+                Button {
+                    settings.googleCalEnabled.toggle()
+                } label: {
+                    Image(systemName: settings.googleCalEnabled
+                          ? "calendar.badge.checkmark"
+                          : "calendar")
+                        .foregroundColor(settings.googleCalEnabled ? .accentColor : .primary)
+                }
+                .help(settings.googleCalEnabled
+                      ? "Ocultar eventos de Google Calendar"
+                      : "Mostrar eventos de Google Calendar")
+            }
+
             Button(action: { showDebug = true }) {
                 Image(systemName: "info.circle")
             }
@@ -319,14 +362,17 @@ struct MainView: View {
         let text: String = {
             if !statusBanner.text.isEmpty { return statusBanner.text }
             if jira.loading { return "Jira: cargando…" }
+            if settings.jira2Enabled && jira2.loading { return "Jira 2: cargando…" }
             if clockify.loading { return "Clockify: cargando…" }
             if !jira.lastError.isEmpty { return "Jira: \(jira.lastError)" }
+            if settings.jira2Enabled && !jira2.lastError.isEmpty { return "Jira 2: \(jira2.lastError)" }
             if !clockify.lastError.isEmpty { return "Clockify: \(clockify.lastError)" }
             return ""
         }()
         let isErr: Bool = {
             if !statusBanner.text.isEmpty { return statusBanner.isError }
             return !jira.lastError.isEmpty || !clockify.lastError.isEmpty
+                || (settings.jira2Enabled && !jira2.lastError.isEmpty)
         }()
         return Text(text.isEmpty ? "\u{00A0}" : text)
             .font(.caption)
@@ -473,12 +519,15 @@ struct MainView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             if settings.source == .jiraClockify {
-                projectPicker
+                // El proyecto destino ya no se elige acá: cada instancia
+                // de Jira mapea a su propio proyecto en
+                // Preferencias → Clockify.
                 Button {
                     syncJiraIntoClockify()
                 } label: {
                     Label("Jira → Clockify", systemImage: "doc.on.doc")
                 }
+                .help("Cada Jira sincroniza a su proyecto configurado en Preferencias → Clockify")
             }
 
             Picker("Fuente", selection: $settings.source) {
@@ -495,41 +544,17 @@ struct MainView: View {
     /// ComboBox de proyecto + swatch de color (sólo modo combinado).
     /// Persiste el `id` elegido en `settings.clockifyDefaultProjectId`
     /// para que sobreviva al cierre de la app.
-    @ViewBuilder
-    private var projectPicker: some View {
-        let swatchColor: Color? = {
-            guard let p = clockify.projects.first(where: { $0.id == syncProjectId })
-            else { return nil }
-            return Color(hex: p.color)
-        }()
-        RoundedRectangle(cornerRadius: 2)
-            .fill(swatchColor ?? Color.clear)
-            .overlay(
-                RoundedRectangle(cornerRadius: 2)
-                    .stroke(Color.secondary.opacity(0.4), lineWidth: 1)
-            )
-            .frame(width: 12, height: 12)
-        Picker("", selection: $syncProjectId) {
-            Text("(sin proyecto)").tag("")
-            ForEach(clockify.projects) { p in
-                Text(p.name).tag(p.id)
-            }
-        }
-        .labelsHidden()
-        .pickerStyle(.menu)
-        .frame(width: 200)
-        .help("Proyecto destino del sync Jira → Clockify")
-        .onChange(of: syncProjectId) { _, newValue in
-            // Persistir para próximas sesiones.
-            settings.clockifyDefaultProjectId = newValue
-        }
-    }
 
     private var footerTotals: String {
         var parts: [String] = []
         if settings.source == .jira || settings.source == .jiraClockify {
             let total = jira.worklogs.reduce(0) { $0 + $1.durationSec }
-            parts.append(String(format: "Jira: %dh %dm", total / 3600, (total % 3600) / 60))
+            let label = settings.jira2Enabled ? "Jira 1" : "Jira"
+            parts.append(String(format: "\(label): %dh %dm", total / 3600, (total % 3600) / 60))
+            if settings.jira2Enabled {
+                let t2 = jira2.worklogs.reduce(0) { $0 + $1.durationSec }
+                parts.append(String(format: "Jira 2: %dh %dm", t2 / 3600, (t2 % 3600) / 60))
+            }
         }
         if settings.source == .clockify || settings.source == .jiraClockify {
             let total = clockify.entries.reduce(0) { $0 + $1.durationSec }
@@ -543,9 +568,15 @@ struct MainView: View {
     private func syncNow() {
         if settings.source == .jira || settings.source == .jiraClockify {
             jira.fetchWeek(starting: weekStart)
+            if settings.jira2Enabled { jira2.fetchWeek(starting: weekStart) }
         }
         if settings.source == .clockify || settings.source == .jiraClockify {
             clockify.fetchWeek(starting: weekStart)
+        }
+        // Google Calendar es transversal a los tres modos: si está
+        // habilitado se trae siempre.
+        if settings.googleCalEnabled {
+            google.fetchWeek(starting: weekStart)
         }
         refreshBottomView()
     }
@@ -591,27 +622,49 @@ struct MainView: View {
         }
     }
 
+    /// Sincroniza Jira → Clockify.  Cada instancia mapea a su propio
+    /// proyecto de Clockify (`jira1/jira2ClockifyProjectId`), y tanto el
+    /// dedup como la creación quedan acotados a ese proyecto — así las
+    /// dos instancias no se contaminan entre sí.  Corren en secuencia y
+    /// se reportan los totales combinados.
     private func syncJiraIntoClockify() {
         setStatus("Copiando Jira → Clockify…", isError: false, sticky: true)
-        let pid = syncProjectId
         let bill = settings.clockifyBillableDefault
-        clockify.syncFromJira(jira.worklogs, defaultProjectId: pid, defaultBillable: bill) { created, skipped, failed in
-            setStatus(
-                "Sync terminado: \(created) creadas, \(skipped) ya existían, \(failed) fallaron.",
-                isError: failed > 0
-            )
-            clockify.fetchWeek(starting: weekStart)
+
+        // Segunda pasada (sólo si la instancia 2 está habilitada).
+        let runSecond: (Int, Int, Int) -> Void = { c1, s1, f1 in
+            guard settings.jira2Enabled else {
+                setStatus("Sync terminado: \(c1) creadas, \(s1) ya existían, \(f1) fallaron.",
+                          isError: f1 > 0)
+                clockify.fetchWeek(starting: weekStart)
+                return
+            }
+            clockify.syncFromJira(jira2.worklogs,
+                                  defaultProjectId: settings.jira2ClockifyProjectId,
+                                  defaultBillable: bill) { c2, s2, f2 in
+                setStatus("Sync terminado: \(c1 + c2) creadas, \(s1 + s2) ya existían, \(f1 + f2) fallaron.",
+                          isError: (f1 + f2) > 0)
+                clockify.fetchWeek(starting: weekStart)
+            }
         }
+
+        clockify.syncFromJira(jira.worklogs,
+                              defaultProjectId: settings.jira1ClockifyProjectId,
+                              defaultBillable: bill,
+                              completion: runSecond)
     }
 
     /// Punto único de entrada para mover / redimensionar un bloque Jira.
     /// Preserva el comentario; cambia `started` y `durationSec`.
     private func applyJira(_ block: CalendarBlock,
                            newStartMs: Double,
-                           newDurationSec: Int) {
-        guard let w = jira.worklogs.first(where: { "jira-\($0.id)" == block.id }) else { return }
+                           newDurationSec: Int,
+                           instanceId: Int = 1) {
+        let store = jiraStore(instanceId)
+        let prefix = jiraBlockPrefix(instanceId)
+        guard let w = store.worklogs.first(where: { prefix + $0.id == block.id }) else { return }
         let newStart = Date(timeIntervalSince1970: newStartMs / 1000)
-        jira.updateWorklog(
+        store.updateWorklog(
             issueKey: w.issueKey,
             worklogId: w.id,
             started: newStart,
@@ -634,11 +687,13 @@ struct MainView: View {
     /// (misma issue, mismo started, misma durationSec, mismo comment).
     /// El refetch que dispara `applyJira` en success aparece el nuevo
     /// bloque al lado del original.
-    private func duplicateJira(_ block: CalendarBlock) {
-        guard let w = jira.worklogs.first(where: { "jira-\($0.id)" == block.id }) else { return }
+    private func duplicateJira(_ block: CalendarBlock, instanceId: Int = 1) {
+        let store = jiraStore(instanceId)
+        let prefix = jiraBlockPrefix(instanceId)
+        guard let w = store.worklogs.first(where: { prefix + $0.id == block.id }) else { return }
         let started = Date(timeIntervalSince1970: w.startedMs / 1000)
         setStatus("Duplicando worklog Jira…", isError: false, sticky: true)
-        jira.createWorklog(
+        store.createWorklog(
             issueKey: w.issueKey,
             started: started,
             durationSec: w.durationSec,
@@ -680,10 +735,12 @@ struct MainView: View {
     }
 
     /// Menú contextual → "Eliminar" sobre un bloque Jira.
-    private func deleteJira(_ block: CalendarBlock) {
-        guard let w = jira.worklogs.first(where: { "jira-\($0.id)" == block.id }) else { return }
+    private func deleteJira(_ block: CalendarBlock, instanceId: Int = 1) {
+        let store = jiraStore(instanceId)
+        let prefix = jiraBlockPrefix(instanceId)
+        guard let w = store.worklogs.first(where: { prefix + $0.id == block.id }) else { return }
         setStatus("Eliminando worklog…", isError: false, sticky: true)
-        jira.deleteWorklog(issueKey: w.issueKey, worklogId: w.id) { result in
+        store.deleteWorklog(issueKey: w.issueKey, worklogId: w.id) { result in
             switch result {
             case .success:
                 setStatus("Worklog eliminado.", isError: false)
@@ -758,8 +815,19 @@ struct MainView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 6, execute: task)
     }
 
-    private func openJiraSheet(editing: JiraWorklog?, start: Date, end: Date) {
-        jiraSheetItem = JiraSheetItem(editing: editing, start: start, end: end)
+    /// Store correspondiente a una instancia de Jira.
+    private func jiraStore(_ instanceId: Int) -> JiraWorklogStore {
+        instanceId == 2 ? jira2 : jira
+    }
+    /// Prefijo de id que usan los `CalendarBlock` de esa instancia.
+    private func jiraBlockPrefix(_ instanceId: Int) -> String {
+        instanceId == 2 ? "jira2-" : "jira-"
+    }
+
+    private func openJiraSheet(editing: JiraWorklog?, start: Date, end: Date,
+                               instanceId: Int = 1) {
+        jiraSheetItem = JiraSheetItem(editing: editing, start: start, end: end,
+                                      instanceId: instanceId)
     }
     private func openClockifySheet(editing: ClockifyEntry?, start: Date, end: Date) {
         clockifySheetItem = ClockifySheetItem(editing: editing, start: start, end: end)
@@ -798,6 +866,10 @@ struct JiraSheetItem: Identifiable {
     let editing: JiraWorklog?
     let start: Date
     let end: Date
+    /// Instancia de Jira a la que pertenece.  Al *editar* queda fija
+    /// (el bloque ya vive en un sitio concreto); al *crear* es el tab
+    /// inicial del modal.
+    var instanceId: Int = 1
 }
 
 struct ClockifySheetItem: Identifiable {

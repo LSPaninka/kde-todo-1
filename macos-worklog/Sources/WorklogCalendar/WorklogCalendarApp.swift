@@ -21,18 +21,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var window: NSWindow!
     var settings: AppSettings!
     var jira: JiraWorklogStore!
+    var jira2: JiraWorklogStore!
     var clockify: ClockifyStore!
+    var google: GoogleCalendarStore!
     var statusBar: StatusBarController!
     private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         settings = AppSettings()
         jira = JiraWorklogStore(settings: settings)
+        jira2 = JiraWorklogStore(settings: settings, instanceId: 2)
         clockify = ClockifyStore(settings: settings)
+        google = GoogleCalendarStore(settings: settings)
 
         // Los mismos stores alimentan tanto la ventana como el popover de
         // la barra de menús, así no se duplica el estado ni los fetch.
-        let rootView = MainView(settings: settings, jira: jira, clockify: clockify)
+        let rootView = MainView(settings: settings, jira: jira, jira2: jira2, clockify: clockify, google: google)
 
         let initialSize = NSSize(width: CGFloat(settings.windowWidth),
                                  height: CGFloat(settings.windowHeight))
@@ -68,7 +72,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusBar = StatusBarController(
             settings: settings,
             jira: jira,
+            jira2: jira2,
             clockify: clockify,
+            google: google,
             onOpenApp: { [weak self] in self?.showMainWindow() }
         )
 

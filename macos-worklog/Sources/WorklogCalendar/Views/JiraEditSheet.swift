@@ -3,6 +3,11 @@ import SwiftUI
 /// Sheet para crear / editar / borrar un worklog Jira.
 struct JiraEditSheet: View {
     @ObservedObject var store: JiraWorklogStore
+    /// Segunda instancia (o `nil` si está deshabilitada).  Cuando existe,
+    /// el modal muestra tabs "Jira 1 / Jira 2" al crear.
+    var store2: JiraWorklogStore?
+    /// Instancia activa al abrir.  Al editar queda fija.
+    var initialInstanceId: Int = 1
     @ObservedObject var settings: AppSettings
     /// Cerramos vía Environment.dismiss; el padre usa
     /// `.sheet(item:)` así el item se inyecta sincrónicamente y nunca
@@ -33,7 +38,25 @@ struct JiraEditSheet: View {
     let onSaved: () -> Void
     let onDeleted: () -> Void
 
+    /// Instancia seleccionada por el tab (1 o 2).
+    @State private var activeInstance: Int
+    /// Criterio de orden del picker de issues.
+    enum PickerSort: String, CaseIterable, Identifiable {
+        case hoursDesc, key, status
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .hoursDesc: return "Horas ↓"
+            case .key:       return "Código"
+            case .status:    return "Estado"
+            }
+        }
+    }
+    @State private var pickerSort: PickerSort = .hoursDesc
+
     init(store: JiraWorklogStore,
+         store2: JiraWorklogStore? = nil,
+         initialInstanceId: Int = 1,
          settings: AppSettings,
          editing: JiraWorklog?,
          start: Date,
@@ -41,8 +64,11 @@ struct JiraEditSheet: View {
          onSaved: @escaping () -> Void,
          onDeleted: @escaping () -> Void) {
         self.store = store
+        self.store2 = store2
+        self.initialInstanceId = initialInstanceId
         self.settings = settings
         self.editing = editing
+        self._activeInstance = State(initialValue: initialInstanceId)
         self._startDate = State(initialValue: start)
         self._endDate = State(initialValue: end)
         self._comment = State(initialValue: editing?.comment ?? "")
@@ -58,12 +84,31 @@ struct JiraEditSheet: View {
         max(60, Int(endDate.timeIntervalSince(startDate)))
     }
 
+    /// Store de la instancia activa — todas las llamadas (picker,
+    /// create/update/delete) pasan por acá.
+    private var activeStore: JiraWorklogStore {
+        (activeInstance == 2 ? store2 : store) ?? store
+    }
+    /// `true` cuando hay una segunda instancia y estamos creando (al
+    /// editar el modal queda fijo en la instancia del bloque).
+    private var showsTabs: Bool { store2 != nil && !isEdit }
+
     private var filteredIssues: [JiraAssignableIssue] {
         let q = search.trimmingCharacters(in: .whitespaces).lowercased()
-        if q.isEmpty { return store.assignableIssues }
-        return store.assignableIssues.filter { iss in
-            let hay = "\(iss.key) \(iss.summary) \(iss.issuetype) \(iss.status)".lowercased()
-            return hay.contains(q)
+        var rows = activeStore.assignableIssues
+        if !q.isEmpty {
+            rows = rows.filter { iss in
+                let hay = "\(iss.key) \(iss.summary) \(iss.issuetype) \(iss.status)".lowercased()
+                return hay.contains(q)
+            }
+        }
+        switch pickerSort {
+        case .hoursDesc:
+            return rows.sorted { $0.remainingSec > $1.remainingSec }
+        case .key:
+            return rows.sorted { $0.key.localizedCompare($1.key) == .orderedAscending }
+        case .status:
+            return rows.sorted { $0.status.localizedCompare($1.status) == .orderedAscending }
         }
     }
 
@@ -100,10 +145,28 @@ struct JiraEditSheet: View {
                 Text("[\(e.issueKey)] \(e.issueSummary)")
                     .font(.headline)
             } else {
+                // Tabs de instancia — sólo si la segunda Jira está activa.
+                if showsTabs {
+                    Picker("", selection: $activeInstance) {
+                        Text("Jira 1").tag(1)
+                        Text("Jira 2").tag(2)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                }
                 HStack {
                     Image(systemName: "magnifyingglass")
                     TextField("Filtrar issues por texto…", text: $search)
                         .textFieldStyle(.roundedBorder)
+                    Picker("", selection: $pickerSort) {
+                        ForEach(PickerSort.allCases) { s in
+                            Text(s.label).tag(s)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .frame(width: 110)
+                    .help("Ordenar la lista de issues")
                     Button(action: refreshPicker) {
                         Image(systemName: "arrow.clockwise")
                     }
@@ -158,6 +221,13 @@ struct JiraEditSheet: View {
             minHeight: CGFloat(max(360, settings.modalHeight))
         )
         .onAppear { if !isEdit { refreshPicker() } }
+        // Cambiar de instancia recarga el picker contra su propio store
+        // y limpia la selección (una issue de Jira 1 no existe en Jira 2).
+        .onChange(of: activeInstance) {
+            selectedIssueKey = ""
+            selectedIssueSummary = ""
+            if !isEdit { refreshPicker() }
+        }
         // Cuando los +/- cambian start/endDate, refrescamos el texto
         // pero sólo si el campo no está siendo editado (para no
         // mover el cursor del usuario mientras tipea).
@@ -300,7 +370,7 @@ struct JiraEditSheet: View {
 
     private func refreshPicker() {
         loading = true
-        store.fetchAssignableIssues { result in
+        activeStore.fetchAssignableIssues { result in
             loading = false
             if case .failure(let err) = result {
                 status = (err.message, true)
@@ -312,7 +382,7 @@ struct JiraEditSheet: View {
         loading = true
         status = (isEdit ? "Guardando…" : "Creando…", false)
         if let e = editing {
-            store.updateWorklog(
+            activeStore.updateWorklog(
                 issueKey: e.issueKey,
                 worklogId: e.id,
                 started: startDate,
@@ -329,7 +399,7 @@ struct JiraEditSheet: View {
                 }
             }
         } else {
-            store.createWorklog(
+            activeStore.createWorklog(
                 issueKey: selectedIssueKey,
                 started: startDate,
                 durationSec: durationSec,
@@ -351,7 +421,7 @@ struct JiraEditSheet: View {
         guard let e = editing else { return }
         loading = true
         status = ("Eliminando…", false)
-        store.deleteWorklog(issueKey: e.issueKey, worklogId: e.id) { result in
+        activeStore.deleteWorklog(issueKey: e.issueKey, worklogId: e.id) { result in
             loading = false
             switch result {
             case .success:

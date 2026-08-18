@@ -4,7 +4,9 @@ import SwiftUI
 /// (Jira + Clockify) y permite limpiarlo.
 struct DebugSheet: View {
     @ObservedObject var jira: JiraWorklogStore
+    @ObservedObject var jira2: JiraWorklogStore
     @ObservedObject var clockify: ClockifyStore
+    @ObservedObject var google: GoogleCalendarStore
     @Binding var presented: Bool
 
     var body: some View {
@@ -14,7 +16,9 @@ struct DebugSheet: View {
                 Spacer()
                 Button {
                     jira.clearDebugLog()
+                    jira2.clearDebugLog()
                     clockify.clearDebugLog()
+                    google.clearDebugLog()
                 } label: {
                     Label("Limpiar", systemImage: "trash")
                 }
@@ -39,7 +43,9 @@ struct DebugSheet: View {
 
     private var combined: String {
         let j = jira.debugLog.isEmpty ? "(vacío)" : jira.debugLog
+        let j2 = jira2.debugLog.isEmpty ? "(vacío)" : jira2.debugLog
         let c = clockify.debugLog.isEmpty ? "(vacío)" : clockify.debugLog
-        return "---- JIRA ----\n\(j)\n\n---- CLOCKIFY ----\n\(c)"
+        let g = google.debugLog.isEmpty ? "(vacío)" : google.debugLog
+        return "---- JIRA 1 ----\n\(j)\n\n---- JIRA 2 ----\n\(j2)\n\n---- CLOCKIFY ----\n\(c)\n\n---- GOOGLE ----\n\(g)"
     }
 }

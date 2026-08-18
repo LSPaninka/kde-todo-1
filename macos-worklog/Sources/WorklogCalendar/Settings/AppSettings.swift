@@ -71,6 +71,25 @@ final class AppSettings: ObservableObject {
         { didSet { ud.set(jiraIssueJql, forKey: "worklogIssueJql") } }
     @Published var jiraIssueMax: Int = 50 { didSet { ud.set(jiraIssueMax, forKey: "worklogIssueMax") } }
 
+    // MARK: - Segunda instancia de Jira
+
+    /// Habilita una segunda cuenta/sitio de Jira.  Comparte el grid con
+    /// la primera (los bloques pueden solaparse) y se distingue por color.
+    @Published var jira2Enabled: Bool = false { didSet { ud.set(jira2Enabled, forKey: "jira2Enabled") } }
+    @Published var jira2Site: String = "" { didSet { ud.set(jira2Site, forKey: "jira2Site") } }
+    @Published var jira2Email: String = "" { didSet { ud.set(jira2Email, forKey: "jira2Email") } }
+    @Published var jira2Token: String = "" { didSet { Keychain.set(jira2Token, for: "jira2.token") } }
+
+    /// Color de los bloques por instancia (se dibujan translúcidos).
+    @Published var jira1BlockColor: String = "#9b91e6" { didSet { ud.set(jira1BlockColor, forKey: "jira1BlockColor") } }
+    @Published var jira2BlockColor: String = "#e69b91" { didSet { ud.set(jira2BlockColor, forKey: "jira2BlockColor") } }
+
+    /// Proyecto de Clockify al que sincroniza cada instancia.  El dedup y
+    /// la creación del sync quedan acotados a ese proyecto, así las dos
+    /// instancias no se pisan entre sí.
+    @Published var jira1ClockifyProjectId: String = "" { didSet { ud.set(jira1ClockifyProjectId, forKey: "jira1ClockifyProjectId") } }
+    @Published var jira2ClockifyProjectId: String = "" { didSet { ud.set(jira2ClockifyProjectId, forKey: "jira2ClockifyProjectId") } }
+
     // MARK: - Sprint (experimental)
 
     /// Master toggle del panel inferior (anillos *o* heatmap, según
@@ -88,6 +107,42 @@ final class AppSettings: ObservableObject {
     /// cambia: con anillos = [rings, subtasks, heatmap]; sin anillos
     /// = [subtasks, heatmap, rings-gray].
     @Published var showRingsView: Bool = false { didSet { ud.set(showRingsView, forKey: "worklogShowRingsView") } }
+
+    // MARK: - Google Calendar (read-only)
+
+    /// Muestra los eventos de Google Calendar como bloques de fondo.
+    @Published var googleCalEnabled: Bool = false { didSet { ud.set(googleCalEnabled, forKey: "googleCalEnabled") } }
+    /// OAuth client "TV and Limited Input devices" (device-code flow).
+    @Published var googleClientId: String = "" { didSet { ud.set(googleClientId, forKey: "googleClientId") } }
+    /// El secret y el refresh token viven en el Keychain, no en UserDefaults.
+    @Published var googleClientSecret: String = "" {
+        didSet { Keychain.set(googleClientSecret, for: "google.client-secret") }
+    }
+    @Published var googleRefreshToken: String = "" {
+        didSet { Keychain.set(googleRefreshToken, for: "google.refresh-token") }
+    }
+    /// Calendario legacy (config vieja de un solo calendario).  Se usa
+    /// como fallback si `googleCalendarIds` está vacío.
+    @Published var googleCalendarId: String = "primary" { didSet { ud.set(googleCalendarId, forKey: "googleCalendarId") } }
+    /// Hasta 3 calendarios + su color (arrays paralelos).
+    @Published var googleCalendarIds: [String] = [] { didSet { ud.set(googleCalendarIds, forKey: "googleCalendarIds") } }
+    @Published var googleCalendarColors: [String] = [] { didSet { ud.set(googleCalendarColors, forKey: "googleCalendarColors") } }
+    @Published var googleCalDebug: Bool = true { didSet { ud.set(googleCalDebug, forKey: "googleCalDebug") } }
+
+    /// Color por defecto de los bloques de Google cuando el calendario no
+    /// tiene uno asignado (el rojo translúcido de siempre).
+    static let googleDefaultColor = "#e74c3c"
+
+    /// Color base (hex) para un `calendarId`, resolviendo contra los
+    /// arrays paralelos de configuración.
+    func googleColor(for calendarId: String) -> String {
+        if let idx = googleCalendarIds.firstIndex(of: calendarId),
+           googleCalendarColors.indices.contains(idx) {
+            let c = googleCalendarColors[idx].trimmingCharacters(in: .whitespacesAndNewlines)
+            if !c.isEmpty { return c }
+        }
+        return Self.googleDefaultColor
+    }
     /// Muestra la tercera vista del panel inferior: la tabla de subtareas.
     @Published var showSubtaskTable: Bool = true { didSet { ud.set(showSubtaskTable, forKey: "worklogShowSubtaskTable") } }
     /// JQL que alimenta la tabla de subtareas.
@@ -148,6 +203,15 @@ final class AppSettings: ObservableObject {
         if let s = ud.string(forKey: "worklogIssueJql") { jiraIssueJql = s }
         if let n = ud.object(forKey: "worklogIssueMax") as? Int { jiraIssueMax = n }
 
+        if ud.object(forKey: "jira2Enabled") != nil { jira2Enabled = ud.bool(forKey: "jira2Enabled") }
+        jira2Site  = ud.string(forKey: "jira2Site")  ?? ""
+        jira2Email = ud.string(forKey: "jira2Email") ?? ""
+        jira2Token = Keychain.get("jira2.token") ?? ""
+        if let c = ud.string(forKey: "jira1BlockColor"), !c.isEmpty { jira1BlockColor = c }
+        if let c = ud.string(forKey: "jira2BlockColor"), !c.isEmpty { jira2BlockColor = c }
+        jira1ClockifyProjectId = ud.string(forKey: "jira1ClockifyProjectId") ?? ""
+        jira2ClockifyProjectId = ud.string(forKey: "jira2ClockifyProjectId") ?? ""
+
         if ud.object(forKey: "worklogShowSprintGauges") != nil {
             showSprintGauges = ud.bool(forKey: "worklogShowSprintGauges")
         }
@@ -155,6 +219,18 @@ final class AppSettings: ObservableObject {
            s == "rings" || s == "subtasks" || s == "heatmap" { bottomView = s }
         if ud.object(forKey: "worklogShowRingsView") != nil {
             showRingsView = ud.bool(forKey: "worklogShowRingsView")
+        }
+        if ud.object(forKey: "googleCalEnabled") != nil {
+            googleCalEnabled = ud.bool(forKey: "googleCalEnabled")
+        }
+        googleClientId     = ud.string(forKey: "googleClientId") ?? ""
+        googleClientSecret = Keychain.get("google.client-secret") ?? ""
+        googleRefreshToken = Keychain.get("google.refresh-token") ?? ""
+        if let s = ud.string(forKey: "googleCalendarId"), !s.isEmpty { googleCalendarId = s }
+        googleCalendarIds    = ud.stringArray(forKey: "googleCalendarIds") ?? []
+        googleCalendarColors = ud.stringArray(forKey: "googleCalendarColors") ?? []
+        if ud.object(forKey: "googleCalDebug") != nil {
+            googleCalDebug = ud.bool(forKey: "googleCalDebug")
         }
         if ud.object(forKey: "worklogShowSubtaskTable") != nil {
             showSubtaskTable = ud.bool(forKey: "worklogShowSubtaskTable")

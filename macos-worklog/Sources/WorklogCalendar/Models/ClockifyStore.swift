@@ -317,7 +317,11 @@ final class ClockifyStore: ObservableObject {
                 // mientras exista cualquier Clockify entry con la misma
                 // `description` que pisa el rango horario del worklog
                 // Jira, lo salteamos.
+                // El dedup está acotado al proyecto destino: sólo
+                // miramos entries de ESE proyecto.  Así dos instancias de
+                // Jira que mapean a proyectos distintos no se pisan.
                 let alreadyThere = self.entries.contains { c in
+                    if c.projectId != defaultProjectId { return false }
                     if c.description != desc { return false }
                     let cEndMs = c.startedMs + Double(c.durationSec) * 1000
                     return c.startedMs < jEndMs && j.startedMs < cEndMs
