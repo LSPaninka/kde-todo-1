@@ -310,7 +310,7 @@ namespace Worklog {
             string target_project = default_project_id;
             var to_create = new Gee.ArrayList<Worklog>();
             foreach (var j in jira_worklogs) {
-                string desc = j.issue_key + (j.issue_summary.length > 0 ? ": " + j.issue_summary : "");
+                string desc = sync_description(j);
                 int64 js = j.started;
                 int64 je = j.started + (int64) j.duration_sec * 1000;
                 bool hit = false;
@@ -325,12 +325,19 @@ namespace Worklog {
                 else to_create.add(j);
             }
             foreach (var j in to_create) {
-                string desc = j.issue_key + (j.issue_summary.length > 0 ? ": " + j.issue_summary : "");
+                string desc = sync_description(j);
                 int64 je = j.started + (int64) j.duration_sec * 1000;
                 var r = yield create_entry(j.started, je, desc, default_project_id, {}, default_billable);
                 if (r.ok) created++; else failed++;
             }
             return { created, skipped, failed };
+        }
+
+        // Clockify description for a synced Jira worklog. With sync-bracket-key
+        // on it wraps the issue key in [brackets], e.g. "[CP-3526]: título".
+        private string sync_description(Worklog j) {
+            string key = cfg.sync_bracket_key ? "[" + j.issue_key + "]" : j.issue_key;
+            return key + (j.issue_summary.length > 0 ? ": " + j.issue_summary : "");
         }
 
         // ------------------------------------------------------------------

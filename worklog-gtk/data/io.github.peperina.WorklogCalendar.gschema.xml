@@ -73,6 +73,10 @@
       <default>true</default>
       <summary>Default value of the billable toggle on new Clockify entries</summary>
     </key>
+    <key name="sync-bracket-key" type="b">
+      <default>false</default>
+      <summary>Wrap the issue key in [brackets] in the Jira->Clockify sync description ([CP-3526]: title)</summary>
+    </key>
 
     <!-- ===================== Calendar / view ===================== -->
     <key name="worklog-source" type="s">

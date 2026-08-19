@@ -74,6 +74,7 @@ namespace Worklog {
             set { settings.set_string("clockify-default-project-id", value); }
         }
         public bool clockify_billable_default { get { return settings.get_boolean("clockify-billable-default"); } }
+        public bool sync_bracket_key { get { return settings.get_boolean("sync-bracket-key"); } }
 
         // ---- View / behaviour ----
         public string source {

@@ -50,6 +50,11 @@ comparten la misma región de la grilla (pueden solaparse).
   proyectos distintos **no se pisan**.
 - El botón **Jira → Clockify** sincroniza **ambas instancias secuencialmente** y
   reporta los totales combinados (`creadas / ya existían / fallaron`).
+- **Opción de formato con corchetes** (`sync-bracket-key`, Preferencias →
+  Clockify): cuando está activada, la descripción en Clockify envuelve el código
+  del issue entre corchetes → `[CP-3526]: título` en vez de `CP-3526: título`.
+  El dedup usa el mismo formato, así que es consistente dentro de una misma
+  configuración.
 
 ## 3. Google Calendar (solo lectura)
 
@@ -85,7 +90,7 @@ horas.
 
 `jira2-enabled`, `jira2-site`, `jira2-email`, `jira2-token`,
 `jira1-block-color`, `jira2-block-color`,
-`jira1-clockify-project-id`, `jira2-clockify-project-id`,
+`jira1-clockify-project-id`, `jira2-clockify-project-id`, `sync-bracket-key`,
 `google-cal-enabled`, `google-client-id`, `google-client-secret`,
 `google-refresh-token`, `google-calendar-ids`, `google-calendar-colors`.
 

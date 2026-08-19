@@ -171,6 +171,7 @@ namespace Worklog {
             var map = new Adw.PreferencesGroup();
             map.set_title("Mapeo Jira → Clockify");
             map.set_description("Cada instancia de Jira se sincroniza en su propio proyecto de Clockify (evita que se pisen).");
+            map.add(switch_row("Envolver el código en corchetes ([CP-3526]: título)", "sync-bracket-key"));
             var c1 = new Adw.ComboRow(); c1.set_title("Proyecto para Jira 1");
             var c2 = new Adw.ComboRow(); c2.set_title("Proyecto para Jira 2");
             var ids = new Gee.ArrayList<string>();
