@@ -27,6 +27,8 @@ public sealed partial class MainWindow : Window
     private readonly AppSettings _settings;
     private readonly JiraWorklogStore _jira;
     private readonly ClockifyStore _clockify;
+    private readonly JiraWorklogStore _jira2;
+    private readonly GoogleCalendarStore _google;
     private DateTime _weekStart;
 
     public MainWindow()
@@ -35,12 +37,18 @@ public sealed partial class MainWindow : Window
         // Use the App-level singletons so the tray popup and the main
         // window share the same fetched data.
         _settings = App.Settings;
-        _jira = App.Jira ?? new JiraWorklogStore(_settings);
+        _jira = App.Jira ?? new JiraWorklogStore(_settings, 1);
+        _jira2 = App.Jira2 ?? new JiraWorklogStore(_settings, 2);
         _clockify = App.Clockify ?? new ClockifyStore(_settings);
+        _google = App.Google ?? new GoogleCalendarStore(_settings);
 
         Calendar.Settings = _settings;
         Calendar.JiraStore = _jira;
+        Calendar.Jira2Store = _jira2;
         Calendar.ClockifyStore = _clockify;
+        Calendar.GoogleStore = _google;
+        // The bottom panel (rings / subtasks / heatmap) always follows the
+        // first Jira instance — matching the KDE build.
         Gauges.Store = _jira;
         Heatmap.JiraStore = _jira;
         Heatmap.ClockifyStore = _clockify;
@@ -86,17 +94,20 @@ public sealed partial class MainWindow : Window
 
         // Wire events
         Calendar.CreateJiraRequested += (dayMs, sMs, eMs) => _ = OpenJiraEditAsync(null, sMs, eMs);
-        Calendar.EditJiraRequested += w => _ = OpenJiraEditAsync(w, w.StartedUnixMs, w.StartedUnixMs + w.DurationSec * 1000L);
+        Calendar.EditJiraRequested += w => _ = OpenJiraEditAsync(w, w.StartedUnixMs, w.StartedUnixMs + w.DurationSec * 1000L, 1);
+        Calendar.EditJira2Requested += w => _ = OpenJiraEditAsync(w, w.StartedUnixMs, w.StartedUnixMs + w.DurationSec * 1000L, 2);
         Calendar.CreateClockifyRequested += (dayMs, sMs, eMs) => _ = OpenClockifyEditAsync(null, sMs, eMs);
         Calendar.EditClockifyRequested += c => _ = OpenClockifyEditAsync(c, c.StartedUnixMs, c.StartedUnixMs + c.DurationSec * 1000L);
 
         // Drag-to-move / edge-resize: one handler per source. We update the
         // store; the JiraStore.PropertyChanged hook below triggers a refetch.
-        Calendar.MoveJiraRequested += (w, newStart, newDur) => _ = MoveJiraAsync(w, newStart, newDur);
+        Calendar.MoveJiraRequested += (w, newStart, newDur) => _ = MoveJiraAsync(_jira, w, newStart, newDur);
+        Calendar.MoveJira2Requested += (w, newStart, newDur) => _ = MoveJiraAsync(_jira2, w, newStart, newDur);
         Calendar.MoveClockifyRequested += (c, newStart, newDur) => _ = MoveClockifyAsync(c, newStart, newDur);
 
         // Duplicate buttons (top-right of each block on hover).
-        Calendar.DuplicateJiraRequested += w => _ = DuplicateJiraAsync(w);
+        Calendar.DuplicateJiraRequested += w => _ = DuplicateJiraAsync(_jira, w);
+        Calendar.DuplicateJira2Requested += w => _ = DuplicateJiraAsync(_jira2, w);
         Calendar.DuplicateClockifyRequested += c => _ = DuplicateClockifyAsync(c);
 
         PrevBtn.Click += async (s, e) => { _weekStart = _weekStart.AddDays(-7); await RefreshAsync(); };
@@ -113,7 +124,7 @@ public sealed partial class MainWindow : Window
         };
         DiagOpenMenu.Click += async (s, e) =>
         {
-            var d = new DiagnosticsDialog(_jira, _clockify) { XamlRoot = Content.XamlRoot };
+            var d = new DiagnosticsDialog(_jira, _clockify, _jira2, _google) { XamlRoot = Content.XamlRoot };
             await d.ShowAsync();
         };
         OpenLogFileMenu.Click += (s, e) => OpenLogFile();
@@ -126,14 +137,16 @@ public sealed partial class MainWindow : Window
         };
         SettingsBtn.Click += async (s, e) => await OpenSettingsAsync();
 
-        SyncJiraToClockifyBtn.Click += async (s, e) => await SyncJiraToClockify();
-        SyncProjectCombo.SelectionChanged += (s, e) =>
+        // Google Calendar overlay toggle. Persisted so it survives restarts.
+        GoogleToggleBtn.IsChecked = _settings.GoogleCalEnabled;
+        GoogleToggleBtn.Click += async (s, e) =>
         {
-            var p = SyncProjectCombo.SelectedItem as ClockifyProject;
-            _settings.ClockifyDefaultProjectId = p?.Id ?? "";
+            _settings.GoogleCalEnabled = GoogleToggleBtn.IsChecked == true;
             SettingsService.Save(_settings);
-            UpdateSyncProjectSwatch();
+            await RefreshAsync();
         };
+
+        SyncJiraToClockifyBtn.Click += async (s, e) => await SyncJiraToClockify();
 
         // Store change notifications: rebuild calendar on each property change.
         // CRITICAL: marshal to the UI thread. PropertyChanged can fire from
@@ -151,6 +164,23 @@ public sealed partial class MainWindow : Window
                 DispatcherQueue.TryEnqueue(() => { UpdateStatus(); Calendar.Refresh(); UpdateTotals(); });
             }
         };
+        _jira2.PropertyChanged += (s, e) =>
+        {
+            if (e.PropertyName is nameof(JiraWorklogStore.Worklogs)
+                or nameof(JiraWorklogStore.Loading)
+                or nameof(JiraWorklogStore.LastError))
+            {
+                DispatcherQueue.TryEnqueue(() => { UpdateStatus(); Calendar.Refresh(); UpdateTotals(); });
+            }
+        };
+        _google.PropertyChanged += (s, e) =>
+        {
+            if (e.PropertyName is nameof(GoogleCalendarStore.Events)
+                or nameof(GoogleCalendarStore.LastError))
+            {
+                DispatcherQueue.TryEnqueue(() => { UpdateStatus(); Calendar.Refresh(); });
+            }
+        };
         _clockify.PropertyChanged += (s, e) =>
         {
             if (e.PropertyName is nameof(ClockifyStore.Entries)
@@ -161,7 +191,6 @@ public sealed partial class MainWindow : Window
                 DispatcherQueue.TryEnqueue(() =>
                 {
                     UpdateStatus();
-                    RefillSyncProjectCombo();
                     Calendar.Refresh();
                     UpdateTotals();
                 });
@@ -273,7 +302,9 @@ public sealed partial class MainWindow : Window
         FileLogger.Log("refresh", "RefreshAsync first Calendar.Refresh done; starting fetches");
         var tasks = new List<Task>();
         if (Calendar.ShowJira) tasks.Add(_jira.FetchWeekAsync(_weekStart));
+        if (Calendar.ShowJira2) tasks.Add(_jira2.FetchWeekAsync(_weekStart));
         if (Calendar.ShowClockify) tasks.Add(_clockify.FetchWeekAsync(_weekStart));
+        if (Calendar.ShowGoogle) tasks.Add(_google.FetchWeekAsync(_weekStart));
         if (ShowBottomPanel && BottomIsRings) tasks.Add(_jira.FetchSprintInfoAsync());
         try { await Task.WhenAll(tasks); }
         catch (Exception ex) { FileLogger.Log("refresh", "fetch error: " + ex); }
@@ -437,8 +468,6 @@ public sealed partial class MainWindow : Window
         WeekLabel.Text = FormatWeekLabel(_weekStart);
 
         bool combined = _settings.Source == "jira-clockify";
-        SyncProjectCombo.Visibility = combined ? Visibility.Visible : Visibility.Collapsed;
-        SyncProjectSwatch.Visibility = combined ? Visibility.Visible : Visibility.Collapsed;
         SyncJiraToClockifyBtn.Visibility = combined ? Visibility.Visible : Visibility.Collapsed;
         UpdateBottomPanel();
     }
@@ -455,10 +484,20 @@ public sealed partial class MainWindow : Window
         var parts = new List<string>();
         if (_jira.Loading) parts.Add("Jira: cargando…");
         else if (!string.IsNullOrEmpty(_jira.LastError)) parts.Add($"Jira: {_jira.LastError}");
+        if (_settings.Jira2Enabled)
+        {
+            if (_jira2.Loading) parts.Add("Jira 2: cargando…");
+            else if (!string.IsNullOrEmpty(_jira2.LastError)) parts.Add($"Jira 2: {_jira2.LastError}");
+        }
         if (_clockify.Loading) parts.Add("Clockify: cargando…");
         else if (!string.IsNullOrEmpty(_clockify.LastError)) parts.Add($"Clockify: {_clockify.LastError}");
+        if (_settings.GoogleCalEnabled && !string.IsNullOrEmpty(_google.LastError))
+            parts.Add($"Google: {_google.LastError}");
 
-        bool isError = !string.IsNullOrEmpty(_jira.LastError) || !string.IsNullOrEmpty(_clockify.LastError);
+        bool isError = !string.IsNullOrEmpty(_jira.LastError)
+                       || (_settings.Jira2Enabled && !string.IsNullOrEmpty(_jira2.LastError))
+                       || !string.IsNullOrEmpty(_clockify.LastError)
+                       || (_settings.GoogleCalEnabled && !string.IsNullOrEmpty(_google.LastError));
         ApplyStatus(string.Join("   ·   ", parts), isError);
     }
 
@@ -504,6 +543,11 @@ public sealed partial class MainWindow : Window
             int s = 0; foreach (var w in _jira.Worklogs) s += w.DurationSec;
             parts.Add($"Jira: {s / 3600}h {(s % 3600) / 60}m");
         }
+        if (Calendar.ShowJira2)
+        {
+            int s = 0; foreach (var w in _jira2.Worklogs) s += w.DurationSec;
+            parts.Add($"Jira 2: {s / 3600}h {(s % 3600) / 60}m");
+        }
         if (Calendar.ShowClockify)
         {
             int s = 0; foreach (var w in _clockify.Entries) s += w.DurationSec;
@@ -525,11 +569,21 @@ public sealed partial class MainWindow : Window
 
     // -------- Dialogs --------------------------------------------------------
 
-    private async Task OpenJiraEditAsync(JiraWorklog? existing, long startMs, long endMs)
+    /// <summary>
+    /// Open the Jira worklog modal. <paramref name="instanceId"/> selects
+    /// which store to edit against; when creating (existing == null) and the
+    /// second instance is enabled, the modal also offers a Jira 1 / Jira 2
+    /// switch so you pick the target site there.
+    /// </summary>
+    private async Task OpenJiraEditAsync(JiraWorklog? existing, long startMs, long endMs, int instanceId = 1)
     {
         var s = DateTimeOffset.FromUnixTimeMilliseconds(startMs).LocalDateTime;
         var en = DateTimeOffset.FromUnixTimeMilliseconds(endMs).LocalDateTime;
-        var dlg = new JiraEditDialog(_jira, _settings, s, en, existing) { XamlRoot = Content.XamlRoot };
+        var store = instanceId == 2 ? _jira2 : _jira;
+        bool allowSwitch = existing == null && _settings.Jira2Enabled;
+        var dlg = new JiraEditDialog(store, _settings, s, en, existing,
+                                     store2: _jira2, allowInstanceSwitch: allowSwitch)
+        { XamlRoot = Content.XamlRoot };
         await dlg.ShowAsync();
         if (dlg.Mutated) await RefreshAsync();
     }
@@ -607,35 +661,33 @@ public sealed partial class MainWindow : Window
 
     // -------- Combined sync --------------------------------------------------
 
-    private void RefillSyncProjectCombo()
-    {
-        var list = new List<ClockifyProject> { new() { Id = "", Name = "(sin proyecto)" } };
-        list.AddRange(_clockify.Projects);
-        SyncProjectCombo.ItemsSource = list;
-        int idx = 0;
-        for (int i = 0; i < list.Count; i++)
-            if (list[i].Id == _settings.ClockifyDefaultProjectId) { idx = i; break; }
-        SyncProjectCombo.SelectedIndex = idx;
-        UpdateSyncProjectSwatch();
-    }
 
-    private void UpdateSyncProjectSwatch()
-    {
-        var p = SyncProjectCombo.SelectedItem as ClockifyProject;
-        SolidColorBrush brush = new(Colors.Transparent);
-        if (p != null && !string.IsNullOrEmpty(p.Color) && TryParseHex(p.Color, out var col))
-            brush = new SolidColorBrush(col);
-        SyncProjectSwatch.Background = brush;
-    }
 
+    /// <summary>
+    /// Mirror both Jira instances into Clockify. Each instance writes into
+    /// its own mapped Clockify project (Settings → Clockify), so instance 1
+    /// and 2 can never dedup against or overwrite each other's entries.
+    /// Runs sequentially and reports the combined totals.
+    /// </summary>
     private async Task SyncJiraToClockify()
     {
         SyncJiraToClockifyBtn.IsEnabled = false;
         SetStatus("Copiando Jira → Clockify…", false);
         try
         {
-            var projectId = string.IsNullOrEmpty(_settings.ClockifyDefaultProjectId) ? null : _settings.ClockifyDefaultProjectId;
-            var (created, updated, skipped, failed) = await _clockify.SyncFromJiraAsync(_jira.Worklogs, projectId, _settings.ClockifyBillableDefault);
+            int created = 0, updated = 0, skipped = 0, failed = 0;
+
+            var p1 = string.IsNullOrEmpty(_settings.Jira1ClockifyProjectId) ? null : _settings.Jira1ClockifyProjectId;
+            var r1 = await _clockify.SyncFromJiraAsync(_jira.Worklogs, p1, _settings.ClockifyBillableDefault);
+            created += r1.created; updated += r1.updated; skipped += r1.skipped; failed += r1.failed;
+
+            if (_settings.Jira2Enabled)
+            {
+                var p2 = string.IsNullOrEmpty(_settings.Jira2ClockifyProjectId) ? null : _settings.Jira2ClockifyProjectId;
+                var r2 = await _clockify.SyncFromJiraAsync(_jira2.Worklogs, p2, _settings.ClockifyBillableDefault);
+                created += r2.created; updated += r2.updated; skipped += r2.skipped; failed += r2.failed;
+            }
+
             SetStatus($"Sync: {created} creadas, {updated} actualizadas, {skipped} ya existían, {failed} fallaron.", failed > 0);
             await _clockify.FetchWeekAsync(_weekStart);
         }
@@ -644,21 +696,20 @@ public sealed partial class MainWindow : Window
 
     // -------- Move / duplicate (single Connections-style refetch) -----------
 
-    private async Task MoveJiraAsync(JiraWorklog w, long newStartMs, int newDur)
+    /// <summary>Move / resize on either Jira instance — <paramref name="store"/> picks which.</summary>
+    private async Task MoveJiraAsync(JiraWorklogStore store, JiraWorklog w, long newStartMs, int newDur)
     {
-        FileLogger.Log("move", $"MoveJiraAsync ENTER issue={w.IssueKey} id={w.Id} oldStart={w.StartedUnixMs} oldDur={w.DurationSec} → newStart={newStartMs} newDur={newDur}");
-        SetStatus("Actualizando worklog Jira…", false);
+        FileLogger.Log("move", $"MoveJiraAsync[{store.InstanceId}] ENTER issue={w.IssueKey} id={w.Id} oldStart={w.StartedUnixMs} oldDur={w.DurationSec} → newStart={newStartMs} newDur={newDur}");
+        SetStatus($"Actualizando worklog Jira {store.InstanceId}…", false);
         var start = DateTimeOffset.FromUnixTimeMilliseconds(newStartMs).LocalDateTime;
-        var (ok, err) = await _jira.UpdateWorklogAsync(w.IssueKey, w.Id, start, newDur, w.Comment ?? "");
-        FileLogger.Log("move", $"MoveJiraAsync UpdateWorklogAsync returned ok={ok} err={err}");
+        var (ok, err) = await store.UpdateWorklogAsync(w.IssueKey, w.Id, start, newDur, w.Comment ?? "");
+        FileLogger.Log("move", $"MoveJiraAsync[{store.InstanceId}] UpdateWorklogAsync returned ok={ok} err={err}");
         if (ok)
         {
-            _jira.UpdateLocalWorklog(w.Id, start, newDur);
-            FileLogger.Log("move", $"MoveJiraAsync UpdateLocalWorklog done; calling RefreshAsync");
+            store.UpdateLocalWorklog(w.Id, start, newDur);
             await RefreshAsync();
-            FileLogger.Log("move", $"MoveJiraAsync RefreshAsync returned");
         }
-        else SetStatus($"Jira: no se pudo guardar — {err}", true);
+        else SetStatus($"Jira {store.InstanceId}: no se pudo guardar — {err}", true);
     }
 
     private async Task MoveClockifyAsync(ClockifyEntry c, long newStartMs, int newDur)
@@ -680,13 +731,13 @@ public sealed partial class MainWindow : Window
         else SetStatus($"Clockify: no se pudo guardar — {err}", true);
     }
 
-    private async Task DuplicateJiraAsync(JiraWorklog w)
+    private async Task DuplicateJiraAsync(JiraWorklogStore store, JiraWorklog w)
     {
-        SetStatus("Duplicando worklog Jira…", false);
+        SetStatus($"Duplicando worklog Jira {store.InstanceId}…", false);
         var start = DateTimeOffset.FromUnixTimeMilliseconds(w.StartedUnixMs).LocalDateTime;
-        var (ok, err) = await _jira.CreateWorklogAsync(w.IssueKey, start, w.DurationSec, w.Comment ?? "");
+        var (ok, err) = await store.CreateWorklogAsync(w.IssueKey, start, w.DurationSec, w.Comment ?? "");
         if (ok) await RefreshAsync();
-        else SetStatus($"Jira: no se pudo duplicar — {err}", true);
+        else SetStatus($"Jira {store.InstanceId}: no se pudo duplicar — {err}", true);
     }
 
     private async Task DuplicateClockifyAsync(ClockifyEntry c)

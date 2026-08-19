@@ -16,7 +16,10 @@ public partial class App : Application
     // the same stores so a fetch driven by either UI updates both.
     public static AppSettings Settings { get; private set; } = new();
     public static JiraWorklogStore? Jira { get; private set; }
+    /// <summary>Second Jira instance — always constructed; only used when enabled.</summary>
+    public static JiraWorklogStore? Jira2 { get; private set; }
     public static ClockifyStore? Clockify { get; private set; }
+    public static GoogleCalendarStore? Google { get; private set; }
 
     private TaskbarIcon? _tray;
     private TrayPopupWindow? _trayPopup;
@@ -40,9 +43,11 @@ public partial class App : Application
             FileLogger.Section($"App start {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
             FileLogger.Log("app", $"BaseDir={AppContext.BaseDirectory}");
             Settings = SettingsService.Load();
-            Jira = new JiraWorklogStore(Settings);
+            Jira = new JiraWorklogStore(Settings, instanceId: 1);
+            Jira2 = new JiraWorklogStore(Settings, instanceId: 2);
             Clockify = new ClockifyStore(Settings);
             Clockify.Init();
+            Google = new GoogleCalendarStore(Settings);
 
             MainWindow = new MainWindow();
             MainWindow.Activate();
@@ -138,7 +143,7 @@ public partial class App : Application
         // recreating sidesteps stale state for both the popup body and
         // the slide-in animation.
         try { _trayPopup?.Close(); } catch { /* already gone */ }
-        _trayPopup = new TrayPopupWindow(Settings, Jira, Clockify)
+        _trayPopup = new TrayPopupWindow(Settings, Jira, Clockify, Jira2, Google)
         {
             OpenMainRequested = BringMainToFront
         };

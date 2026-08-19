@@ -124,6 +124,22 @@
                                Minimum="10" Maximum="200" SpinButtonPlacementMode="Inline" />
                     <CheckBox x:Name="JiraShowSummary" Content="Mostrar el título del issue además de la key" />
                     <CheckBox x:Name="JiraDebug" Content="Loguear cada request a Debug Output" />
+
+                    <TextBox x:Name="Jira1Color" Header="Color de los bloques (hex #rrggbb)"
+                             PlaceholderText="#9b91e6" />
+
+                    <!-- Second instance -->
+                    <TextBlock Text="Segunda instancia de Jira" FontWeight="SemiBold"
+                               Margin="0,16,0,4" Opacity="0.85" />
+                    <TextBlock Text="Muestra los worklogs de un segundo sitio Jira en la misma región del calendario, distinguidos por color. Se pueden solapar."
+                               Opacity="0.6" FontSize="11" TextWrapping="Wrap" />
+                    <CheckBox x:Name="Jira2Enabled" Content="Habilitar la segunda instancia" />
+                    <TextBox x:Name="Jira2Site" Header="Site URL"
+                             PlaceholderText="https://otra-empresa.atlassian.net" />
+                    <TextBox x:Name="Jira2Email" Header="Email" />
+                    <PasswordBox x:Name="Jira2Token" Header="API token" PasswordRevealMode="Peek" />
+                    <TextBox x:Name="Jira2Color" Header="Color de los bloques (hex #rrggbb)"
+                             PlaceholderText="#26a69a" />
                 </StackPanel>
             </ScrollViewer>
         </PivotItem>
@@ -134,9 +150,85 @@
                     <PasswordBox x:Name="ClockifyKey" Header="API key (Profile → Settings → API)"
                                  PasswordRevealMode="Peek" />
                     <TextBox x:Name="ClockifyWorkspace" Header="Workspace ID (opcional, se autoresuelve)" />
-                    <TextBox x:Name="ClockifyDefaultProject" Header="Proyecto por defecto (ID) — usado por el sync Jira→Clockify" />
+                    <TextBox x:Name="ClockifyDefaultProject" Header="Proyecto por defecto (ID) — preseleccionado al crear una entrada" />
                     <CheckBox x:Name="ClockifyBillable" Content="Marcar como facturable por defecto" />
                     <CheckBox x:Name="ClockifyDebug" Content="Loguear cada request a Debug Output" />
+
+                    <!-- Per-instance sync mapping -->
+                    <TextBlock Text="Destino del sync Jira → Clockify" FontWeight="SemiBold"
+                               Margin="0,16,0,4" Opacity="0.85" />
+                    <TextBlock Text="Cada instancia de Jira escribe en su propio proyecto de Clockify, así el dedup nunca cruza entre instancias. Vacío = sin proyecto."
+                               Opacity="0.6" FontSize="11" TextWrapping="Wrap" />
+                    <ComboBox x:Name="Jira1ProjectCombo" Header="Proyecto para Jira 1"
+                              DisplayMemberPath="DisplayName" HorizontalAlignment="Stretch" />
+                    <ComboBox x:Name="Jira2ProjectCombo" Header="Proyecto para Jira 2"
+                              DisplayMemberPath="DisplayName" HorizontalAlignment="Stretch" />
+                    <Button x:Name="LoadProjectsBtn" Content="Cargar proyectos de Clockify" />
+                    <TextBlock x:Name="ProjectsStatus" FontSize="11" Opacity="0.75" TextWrapping="Wrap" />
+                </StackPanel>
+            </ScrollViewer>
+        </PivotItem>
+
+        <PivotItem Header="Google">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Spacing="8" Padding="4,8,4,16">
+                    <TextBlock Text="Muestra tus eventos de Google Calendar como bloques de fondo (solo lectura), para poder cargar horas «encima» de una reunión."
+                               Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
+                    <CheckBox x:Name="GoogleEnabled" Content="Mostrar eventos de Google Calendar" />
+
+                    <TextBlock Text="1 · Credenciales OAuth" FontWeight="SemiBold" Margin="0,12,0,0" />
+                    <TextBlock TextWrapping="Wrap" Opacity="0.6" FontSize="11"
+                               Text="Creá un cliente OAuth gratuito en Google Cloud Console del tipo «TV y dispositivos de entrada limitada», habilitá la Google Calendar API y pegá acá el Client ID y el secret. Solo se pide el scope calendar.readonly." />
+                    <TextBox x:Name="GoogleClientId" Header="Client ID" />
+                    <PasswordBox x:Name="GoogleClientSecret" Header="Client secret" PasswordRevealMode="Peek" />
+
+                    <TextBlock Text="2 · Autorización" FontWeight="SemiBold" Margin="0,12,0,0" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="GoogleAuthBtn" Content="Autorizar…" />
+                        <Button x:Name="GoogleAuthCancelBtn" Content="Cancelar" IsEnabled="False" />
+                    </StackPanel>
+                    <Border x:Name="GoogleCodeBox" Visibility="Collapsed"
+                            Background="#22FFFFFF" CornerRadius="4" Padding="10">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Ingresá este código en la página de Google:" FontSize="11" Opacity="0.8" />
+                            <TextBlock x:Name="GoogleUserCode" FontSize="22" FontWeight="Bold"
+                                       FontFamily="Consolas" IsTextSelectionEnabled="True" />
+                            <TextBlock x:Name="GoogleVerifUrl" FontSize="11" Opacity="0.8"
+                                       IsTextSelectionEnabled="True" />
+                        </StackPanel>
+                    </Border>
+                    <TextBlock x:Name="GoogleAuthStatus" FontSize="11" TextWrapping="Wrap" Opacity="0.85" />
+                    <PasswordBox x:Name="GoogleRefreshToken" Header="Refresh token (se completa solo)"
+                                 PasswordRevealMode="Peek" />
+
+                    <TextBlock Text="3 · Calendarios (hasta 3)" FontWeight="SemiBold" Margin="0,12,0,0" />
+                    <Button x:Name="GoogleLoadCalsBtn" Content="Cargar calendarios" />
+                    <TextBlock x:Name="GoogleCalStatus" FontSize="11" Opacity="0.75" TextWrapping="Wrap" />
+
+                    <Grid ColumnSpacing="8" RowSpacing="6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="130" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <ComboBox x:Name="GoogleCal1" Header="Calendario 1" DisplayMemberPath="Label"
+                                  HorizontalAlignment="Stretch" Grid.Row="0" Grid.Column="0" />
+                        <TextBox x:Name="GoogleCal1Color" Header="Color" PlaceholderText="#e74c3c"
+                                 Grid.Row="0" Grid.Column="1" />
+                        <ComboBox x:Name="GoogleCal2" Header="Calendario 2" DisplayMemberPath="Label"
+                                  HorizontalAlignment="Stretch" Grid.Row="1" Grid.Column="0" />
+                        <TextBox x:Name="GoogleCal2Color" Header="Color" PlaceholderText="#3498db"
+                                 Grid.Row="1" Grid.Column="1" />
+                        <ComboBox x:Name="GoogleCal3" Header="Calendario 3" DisplayMemberPath="Label"
+                                  HorizontalAlignment="Stretch" Grid.Row="2" Grid.Column="0" />
+                        <TextBox x:Name="GoogleCal3Color" Header="Color" PlaceholderText="#9b59b6"
+                                 Grid.Row="2" Grid.Column="1" />
+                    </Grid>
+                    <CheckBox x:Name="GoogleDebug" Content="Loguear cada request a worklog.log" />
                 </StackPanel>
             </ScrollViewer>
         </PivotItem>

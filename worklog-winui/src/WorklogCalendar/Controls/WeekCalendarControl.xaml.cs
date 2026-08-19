@@ -42,15 +42,31 @@ public sealed partial class WeekCalendarControl : UserControl
     public event Action<ClockifyEntry, long, int>? MoveClockifyRequested;
     public event Action<JiraWorklog>? DuplicateJiraRequested;
     public event Action<ClockifyEntry>? DuplicateClockifyRequested;
+    // Second Jira instance — same gestures, routed to its own store.
+    public event Action<JiraWorklog>? EditJira2Requested;
+    public event Action<JiraWorklog, long, int>? MoveJira2Requested;
+    public event Action<JiraWorklog>? DuplicateJira2Requested;
 
     public AppSettings? Settings { get; set; }
     public JiraWorklogStore? JiraStore { get; set; }
+    /// <summary>Optional second Jira instance; shares the Jira region.</summary>
+    public JiraWorklogStore? Jira2Store { get; set; }
     public ClockifyStore? ClockifyStore { get; set; }
+    /// <summary>Optional read-only Google Calendar events, drawn behind everything.</summary>
+    public GoogleCalendarStore? GoogleStore { get; set; }
     public DateTime WeekStart { get; set; } = DateTime.Today;
     public string Source => Settings?.Source ?? "jira";
     public bool IsCombined => Source == "jira-clockify";
     public bool ShowJira => Source is "jira" or "jira-clockify";
     public bool ShowClockify => Source is "clockify" or "jira-clockify";
+    /// <summary>The 2nd instance rides along with the 1st, when enabled.</summary>
+    public bool ShowJira2 => ShowJira && (Settings?.Jira2Enabled ?? false) && Jira2Store != null;
+    public bool ShowGoogle => (Settings?.GoogleCalEnabled ?? false) && GoogleStore != null;
+
+    // Block kinds. Used by BlockTag / BuildBlock / EmitChange routing.
+    private const string KindJira = "jira";
+    private const string KindJira2 = "jira2";
+    private const string KindClockify = "clockify";
 
     private const double RowHeight = 22;
     private const double HourColWidth = 64;
@@ -375,41 +391,136 @@ public sealed partial class WeekCalendarControl : UserControl
             var canvas = _dayCanvases[day];
             long dayStart = ToMs(WeekStart.AddDays(day));
             long dayEnd = ToMs(WeekStart.AddDays(day + 1));
+
+            // Google events go in FIRST so they sit behind every worklog
+            // block. They carry no pointer handlers, so drag-to-create still
+            // works right on top of a meeting.
+            if (ShowGoogle && GoogleStore != null)
+            {
+                foreach (var ev in GoogleStore.Events)
+                    if (ev.StartedUnixMs >= dayStart && ev.StartedUnixMs < dayEnd)
+                        canvas.Children.Add(BuildGoogleBlock(ev, day));
+            }
             if (ShowJira && JiraStore != null)
             {
                 foreach (var w in JiraStore.Worklogs)
                     if (w.StartedUnixMs >= dayStart && w.StartedUnixMs < dayEnd)
-                        canvas.Children.Add(BuildBlock(w, isJira: true));
+                        canvas.Children.Add(BuildBlock(w, KindJira));
+            }
+            if (ShowJira2 && Jira2Store != null)
+            {
+                foreach (var w in Jira2Store.Worklogs)
+                    if (w.StartedUnixMs >= dayStart && w.StartedUnixMs < dayEnd)
+                        canvas.Children.Add(BuildBlock(w, KindJira2));
             }
             if (ShowClockify && ClockifyStore != null)
             {
                 foreach (var e in ClockifyStore.Entries)
                     if (e.StartedUnixMs >= dayStart && e.StartedUnixMs < dayEnd)
-                        canvas.Children.Add(BuildBlock(e, isJira: false));
+                        canvas.Children.Add(BuildBlock(e, KindClockify));
             }
             if (canvas.ActualWidth > 0)
                 LayoutEntryBlocks(canvas, canvas.ActualWidth);
         }
     }
 
+    /// <summary>
+    /// A read-only Google Calendar event: a translucent block tinted with
+    /// its calendar's colour, no pointer handlers (immovable, unselectable).
+    /// In combined mode it spans the FULL column, not just one half.
+    /// Its label is hidden while a worklog block covers it so the meeting
+    /// title doesn't bleed through the text on top.
+    /// </summary>
+    private Border BuildGoogleBlock(GoogleEvent ev, int day)
+    {
+        var baseCol = ParseHexOr(GoogleStore!.ColorFor(ev.CalendarId),
+                                 ParseHexOr(GoogleCalendarStore.DefaultColor, Color.FromArgb(255, 231, 76, 60)));
+        var label = new TextBlock
+        {
+            Text = ev.Summary ?? "",
+            Foreground = new SolidColorBrush(Colors.White),
+            Opacity = 0.85,
+            FontSize = 10,
+            Margin = new Thickness(3, 2, 3, 0),
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            TextWrapping = TextWrapping.NoWrap,
+            VerticalAlignment = VerticalAlignment.Top,
+            Visibility = IsGoogleCovered(ev, day) ? Visibility.Collapsed : Visibility.Visible
+        };
+        var block = new Border
+        {
+            Background = new SolidColorBrush(Color.FromArgb(0x2E, baseCol.R, baseCol.G, baseCol.B)), // a≈0.18
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0x73, baseCol.R, baseCol.G, baseCol.B)), // a≈0.45
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(3),
+            IsHitTestVisible = false,
+            Child = label,
+            Tag = new GoogleTag(ev)
+        };
+        Canvas.SetZIndex(block, -1);
+        return block;
+    }
+
+    /// <summary>Marker tag so layout can tell Google blocks from worklog cards.</summary>
+    private sealed class GoogleTag
+    {
+        public readonly GoogleEvent Event;
+        public GoogleTag(GoogleEvent ev) { Event = ev; }
+    }
+
+    /// <summary>True if any visible worklog block on that day overlaps the event.</summary>
+    private bool IsGoogleCovered(GoogleEvent ev, int day)
+    {
+        long s = ev.StartedUnixMs, e = s + ev.DurationSec * 1000L;
+        long dayStart = ToMs(WeekStart.AddDays(day)), dayEnd = ToMs(WeekStart.AddDays(day + 1));
+
+        bool Covers(long aS, int aDur)
+        {
+            if (aS < dayStart || aS >= dayEnd) return false;
+            long aE = aS + aDur * 1000L;
+            return s < aE && aS < e;
+        }
+        if (ShowJira && JiraStore != null)
+            foreach (var w in JiraStore.Worklogs) if (Covers(w.StartedUnixMs, w.DurationSec)) return true;
+        if (ShowJira2 && Jira2Store != null)
+            foreach (var w in Jira2Store.Worklogs) if (Covers(w.StartedUnixMs, w.DurationSec)) return true;
+        if (ShowClockify && ClockifyStore != null)
+            foreach (var c in ClockifyStore.Entries) if (Covers(c.StartedUnixMs, c.DurationSec)) return true;
+        return false;
+    }
+
+    /// <summary>Parse "#rrggbb"; fall back when the string is missing or malformed.</summary>
+    private static Color ParseHexOr(string? hex, Color fallback) =>
+        TryParseHex(hex ?? "", out var c) ? c : fallback;
+
+    private static Color Darken(Color c, double factor) => Color.FromArgb(
+        c.A, (byte)(c.R * factor), (byte)(c.G * factor), (byte)(c.B * factor));
+
     private void ClearEntryBlocks(Canvas canvas)
     {
         for (int i = canvas.Children.Count - 1; i >= 0; i--)
-            if (canvas.Children[i] is FrameworkElement fe && fe.Tag is BlockTag) canvas.Children.RemoveAt(i);
+            if (canvas.Children[i] is FrameworkElement fe && (fe.Tag is BlockTag || fe.Tag is GoogleTag))
+                canvas.Children.RemoveAt(i);
     }
 
-    private ContentPresenter BuildBlock(object entry, bool isJira)
+    private ContentPresenter BuildBlock(object entry, string kind)
     {
         long startedMs; int durSec; string title; string subtitle; SolidColorBrush fill; SolidColorBrush border;
-        if (isJira)
+        if (kind is KindJira or KindJira2)
         {
             var w = (JiraWorklog)entry;
             startedMs = w.StartedUnixMs; durSec = w.DurationSec;
             title = FormatTimeRange(w.StartedUnixMs, w.DurationSec);
             bool showSummary = Settings?.ShowJiraSummary ?? false;
             subtitle = showSummary && !string.IsNullOrEmpty(w.IssueSummary) ? $"{w.IssueKey}: {w.IssueSummary}" : w.IssueKey;
-            fill = (SolidColorBrush)Application.Current.Resources["JiraFillBrush"];
-            border = (SolidColorBrush)Application.Current.Resources["JiraBorderBrush"];
+            // Per-instance colour, drawn translucent so overlapping blocks
+            // from the two instances stay readable through each other.
+            var baseHex = kind == KindJira2
+                ? (Settings?.Jira2BlockColor ?? "#26a69a")
+                : (Settings?.Jira1BlockColor ?? "#9b91e6");
+            var c0 = ParseHexOr(baseHex, Color.FromArgb(255, 0x9b, 0x91, 0xe6));
+            fill = new SolidColorBrush(Color.FromArgb(0x8C, c0.R, c0.G, c0.B));
+            border = new SolidColorBrush(Darken(c0, 0.78));
         }
         else
         {
@@ -496,7 +607,7 @@ public sealed partial class WeekCalendarControl : UserControl
             // this block as a scroll/pan gesture (preventStealing in QML).
             ManipulationMode = ManipulationModes.None
         };
-        var tag = new BlockTag(isJira, startedMs, durSec, entry) { DefaultBorderBrush = border };
+        var tag = new BlockTag(kind, startedMs, durSec, entry) { DefaultBorderBrush = border };
         card.Tag = tag;
 
         // Show / hide the duplicate button on hover. PointerEntered fires
@@ -510,7 +621,8 @@ public sealed partial class WeekCalendarControl : UserControl
         dupBtn.PointerPressed += (s, e) =>
         {
             e.Handled = true;
-            if (isJira) DuplicateJiraRequested?.Invoke((JiraWorklog)entry);
+            if (kind == KindJira) DuplicateJiraRequested?.Invoke((JiraWorklog)entry);
+            else if (kind == KindJira2) DuplicateJira2Requested?.Invoke((JiraWorklog)entry);
             else DuplicateClockifyRequested?.Invoke((ClockifyEntry)entry);
         };
 
@@ -528,7 +640,9 @@ public sealed partial class WeekCalendarControl : UserControl
     /// <summary>Per-block interaction state.</summary>
     private sealed class BlockTag
     {
-        public bool IsJira;
+        /// <summary>"jira", "jira2" or "clockify" — drives colour + routing.</summary>
+        public string Kind = KindJira;
+        public bool IsJira => Kind is KindJira or KindJira2;
         public long StartedMs;
         public int DurationSec;
         public object Entry;
@@ -545,15 +659,16 @@ public sealed partial class WeekCalendarControl : UserControl
         /// <summary>Default brush set in BuildBlock; used to restore the
         /// border after an overlap highlight is removed.</summary>
         public Brush? DefaultBorderBrush;
-        public BlockTag(bool isJira, long startedMs, int durationSec, object entry)
-        { IsJira = isJira; StartedMs = startedMs; DurationSec = durationSec; Entry = entry; }
+        public BlockTag(string kind, long startedMs, int durationSec, object entry)
+        { Kind = kind; StartedMs = startedMs; DurationSec = durationSec; Entry = entry; }
     }
 
-    // Overlap-highlight colours.
+    // Overlap-highlight colours — matched to the KDE plasmoid so both
+    // builds flag the same condition identically.
     private static readonly SolidColorBrush OverlapJiraBrush =
-        new(Color.FromArgb(0xFF, 0xFF, 0x9D, 0x33));   // orange
+        new(Color.FromArgb(0xFF, 0xFF, 0x8C, 0x00));   // dark orange #FF8C00
     private static readonly SolidColorBrush OverlapClockifyBrush =
-        new(Color.FromArgb(0xFF, 0xFF, 0xD9, 0x00));   // yellow
+        new(Color.FromArgb(0xFF, 0xFF, 0xD7, 0x00));   // gold #FFD700
 
     private void LayoutEntryBlocks(Canvas canvas, double width)
     {
@@ -561,6 +676,16 @@ public sealed partial class WeekCalendarControl : UserControl
         if (day < 0) return;
         foreach (var child in canvas.Children)
         {
+            // Google events always span the FULL column (both halves in
+            // combined mode) — they're context, not a logged entry.
+            if (child is FrameworkElement gfe && gfe.Tag is GoogleTag gt)
+            {
+                Canvas.SetLeft(gfe, 2);
+                Canvas.SetTop(gfe, YForMs(gt.Event.StartedUnixMs, day));
+                gfe.Width = Math.Max(0, width - 4);
+                gfe.Height = Math.Max(0, Math.Max(RowHeight / 3.0, gt.Event.DurationSec / 1800.0 * RowHeight) - 2);
+                continue;
+            }
             if (child is not ContentPresenter b || b.Tag is not BlockTag t) continue;
             if (t.IsDragging) continue;   // don't yank a block out from under the cursor
             // Minute-precise positioning so 10-min blocks render at their
@@ -570,6 +695,7 @@ public sealed partial class WeekCalendarControl : UserControl
             double left, w;
             if (IsCombined)
             {
+                // Both Jira instances share the left half; Clockify the right.
                 if (t.IsJira) { left = 2; w = width / 2 - 4; }
                 else { left = width / 2 + 1; w = width / 2 - 3; }
             }
@@ -600,9 +726,13 @@ public sealed partial class WeekCalendarControl : UserControl
             {
                 var (cpA, tA) = blocks[i];
                 var (cpB, tB) = blocks[j];
-                if (tA.IsJira != tB.IsJira) continue;   // only same-source overlaps highlighted
+                // Only same-SOURCE overlaps are a problem worth flagging.
+                // Jira 1 vs Jira 2 is expected (two instances share the
+                // region), and Jira vs Clockify is the normal combined view.
+                if (tA.Kind != tB.Kind) continue;
                 long aS = tA.StartedMs, aE = aS + tA.DurationSec * 1000L;
                 long bS = tB.StartedMs, bE = bS + tB.DurationSec * 1000L;
+                // Half-open: touching ranges (aE == bS) do NOT count.
                 if (aS < bE && bS < aE)
                 {
                     overlap.Add(cpA);
@@ -646,7 +776,7 @@ public sealed partial class WeekCalendarControl : UserControl
         else if (pt.Position.Y > card.ActualHeight - EdgePx) tag.Mode = 3;
         else tag.Mode = 1;
 
-        FileLogger.Log("drag", $"PRESSED mode={tag.Mode} kind={(tag.IsJira ? "jira" : "clk")} " +
+        FileLogger.Log("drag", $"PRESSED mode={tag.Mode} kind={tag.Kind} " +
             $"id={GetEntryId(tag)} startedMs={tag.StartedMs} dur={tag.DurationSec}s " +
             $"OrigLeft={tag.OrigLeft:F1} OrigTop={tag.OrigTop:F1} " +
             $"ActualW={card.ActualWidth:F1} ActualH={card.ActualHeight:F1} " +
@@ -700,7 +830,7 @@ public sealed partial class WeekCalendarControl : UserControl
         if (tag.Mode == 1)
         {
             if (!tag.Dragged && Math.Abs(dx) < 4 && Math.Abs(dy) < 4) return;
-            if (!tag.Dragged) FileLogger.Log("drag", $"DRAG-START kind={(tag.IsJira ? "jira" : "clk")} dx={dx:F1} dy={dy:F1}");
+            if (!tag.Dragged) FileLogger.Log("drag", $"DRAG-START kind={tag.Kind} dx={dx:F1} dy={dy:F1}");
             tag.Dragged = true;
             double colW = canvas.ActualWidth;
             double snappedDx = colW > 0 ? Math.Round(dx / colW) * colW : 0;
@@ -755,7 +885,8 @@ public sealed partial class WeekCalendarControl : UserControl
         if (!dragged)
         {
             FileLogger.Log("drag", "RELEASED → click→edit (not dragged)");
-            if (tag.IsJira) EditJiraRequested?.Invoke((JiraWorklog)tag.Entry);
+            if (tag.Kind == KindJira) EditJiraRequested?.Invoke((JiraWorklog)tag.Entry);
+            else if (tag.Kind == KindJira2) EditJira2Requested?.Invoke((JiraWorklog)tag.Entry);
             else EditClockifyRequested?.Invoke((ClockifyEntry)tag.Entry);
             return;
         }
@@ -844,7 +975,8 @@ public sealed partial class WeekCalendarControl : UserControl
             Refresh();
             return;
         }
-        if (tag.IsJira) MoveJiraRequested?.Invoke((JiraWorklog)tag.Entry, newStartMs, newDurationSec);
+        if (tag.Kind == KindJira2) MoveJira2Requested?.Invoke((JiraWorklog)tag.Entry, newStartMs, newDurationSec);
+        else if (tag.Kind == KindJira) MoveJiraRequested?.Invoke((JiraWorklog)tag.Entry, newStartMs, newDurationSec);
         else MoveClockifyRequested?.Invoke((ClockifyEntry)tag.Entry, newStartMs, newDurationSec);
     }
 

@@ -53,6 +53,29 @@ public sealed class JiraSprint
     public string EndDate { get; set; } = "";
 }
 
+/// <summary>
+/// One Google Calendar event, shaped like the worklog entries so the
+/// calendar can position it with the same math. Read-only: these blocks
+/// are drawn behind the worklog blocks and can't be moved or selected.
+/// </summary>
+public sealed class GoogleEvent
+{
+    public string Id { get; set; } = "";
+    public string Summary { get; set; } = "";
+    public long StartedUnixMs { get; set; }
+    public int DurationSec { get; set; }
+    /// <summary>Which configured calendar this came from — drives the block colour.</summary>
+    public string CalendarId { get; set; } = "";
+}
+
+/// <summary>A calendar returned by the Google calendarList endpoint.</summary>
+public sealed class GoogleCalendarInfo
+{
+    public string Id { get; set; } = "";
+    public string Label { get; set; } = "";
+    public override string ToString() => Label;
+}
+
 /// <summary>One issue's contribution to the sprint's "Disponible" hours.</summary>
 public sealed class SprintAvailableItem
 {

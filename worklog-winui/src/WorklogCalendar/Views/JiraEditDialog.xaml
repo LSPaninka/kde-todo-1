@@ -40,7 +40,21 @@
                        Margin="6,0,0,8" Opacity="0.7" />
         </Grid>
 
-        <TextBlock Grid.Row="1" Text="Issue" Opacity="0.7" Margin="0,10,0,4" />
+        <!-- Instance selector: only shown when the 2nd Jira is enabled AND
+             we're creating (an edit is locked to the block's instance). -->
+        <Grid Grid.Row="1" x:Name="InstanceRow" Visibility="Collapsed" Margin="0,8,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="Instancia" Opacity="0.7" VerticalAlignment="Center" Margin="0,0,10,0" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                <ToggleButton x:Name="InstanceBtn1" Content="Jira 1" IsChecked="True" MinWidth="90" />
+                <ToggleButton x:Name="InstanceBtn2" Content="Jira 2" MinWidth="90" />
+            </StackPanel>
+        </Grid>
+
+        <TextBlock x:Name="IssueHeader" Grid.Row="1" Text="Issue" Opacity="0.7" Margin="0,10,0,4" />
         <TextBlock x:Name="LockedIssue" Grid.Row="1" FontWeight="SemiBold"
                    TextWrapping="Wrap" Visibility="Collapsed" Margin="0,28,0,0" />
 
@@ -48,10 +62,17 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <AutoSuggestBox x:Name="IssueSearch" PlaceholderText="Filtrar issues..."
                             QueryIcon="Find" Grid.Column="0" />
-            <Button x:Name="ReloadBtn" Content="↻" Grid.Column="1" ToolTipService.ToolTip="Recargar JQL" />
+            <ComboBox x:Name="SortCombo" Grid.Column="1" MinWidth="150"
+                      ToolTipService.ToolTip="Orden de la lista">
+                <ComboBoxItem Content="Horas (desc)" IsSelected="True" />
+                <ComboBoxItem Content="Código" />
+                <ComboBoxItem Content="Estado" />
+            </ComboBox>
+            <Button x:Name="ReloadBtn" Content="↻" Grid.Column="2" ToolTipService.ToolTip="Recargar JQL" />
         </Grid>
 
         <ListView x:Name="IssueList" Grid.Row="4" SelectionMode="Single"

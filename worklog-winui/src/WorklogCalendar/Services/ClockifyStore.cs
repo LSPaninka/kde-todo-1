@@ -416,42 +416,64 @@ public sealed class ClockifyStore : INotifyPropertyChanged
     // ----- Sync from Jira --------------------------------------------------
 
     /// <summary>
-    /// For each Jira worklog: if a Clockify entry already exists with the
-    /// SAME description on that same calendar day, decide whether it's
-    /// already in sync (skip) or needs to be re-aligned (update its start +
-    /// duration). Only when there's no description match on that day do we
-    /// create a fresh entry. This avoids the old behaviour where bumping a
-    /// Jira worklog by 10 minutes produced a duplicate Clockify entry next
-    /// to the original one.
+    /// Mirror a Jira instance's worklogs into Clockify, scoped to one
+    /// Clockify project so two Jira instances can never cross-contaminate
+    /// each other's entries.
+    ///
+    /// Matching an existing entry (same project + same description) is done
+    /// in two passes:
+    ///   1. time-range overlap — half-open, so touching ranges (one ends
+    ///      exactly where the next starts) do NOT match. This is what makes
+    ///      a resized Jira block update its Clockify twin instead of
+    ///      stacking a duplicate on top of it.
+    ///   2. otherwise same calendar day — catches a block that was moved
+    ///      far enough within the day that it no longer overlaps.
+    /// A match whose start and duration already agree (±60 s) is skipped;
+    /// otherwise its time window is re-aligned (project / tags / billable
+    /// are preserved). Only an unmatched worklog creates a new entry.
     /// </summary>
     public async Task<(int created, int updated, int skipped, int failed)> SyncFromJiraAsync(
-        IReadOnlyList<JiraWorklog> jiraWorklogs, string? defaultProjectId, bool defaultBillable)
+        IReadOnlyList<JiraWorklog> jiraWorklogs, string? targetProjectId, bool defaultBillable)
     {
         if (jiraWorklogs.Count == 0) return (0, 0, 0, 0);
         if (!await EnsureContextAsync()) return (0, 0, 0, 0);
 
+        string project = targetProjectId ?? "";
         var toCreate = new List<(DateTime start, DateTime end, string desc)>();
         var toUpdate = new List<(ClockifyEntry existing, DateTime start, DateTime end)>();
         int skipped = 0;
-        // Per-day match index — first wins. Mark a matched entry so a
-        // second Jira worklog with the same description on the same day
-        // (rare but possible) doesn't fight over it.
+        // Claim each matched entry so two Jira worklogs on the same day
+        // can't both pair with it.
         var consumed = new HashSet<string>();
 
         foreach (var j in jiraWorklogs)
         {
             var desc = j.IssueKey + (string.IsNullOrEmpty(j.IssueSummary) ? "" : ": " + j.IssueSummary);
             var jStart = DateTimeOffset.FromUnixTimeMilliseconds(j.StartedUnixMs).LocalDateTime;
+            long jS = j.StartedUnixMs, jE = jS + j.DurationSec * 1000L;
             var jDay = jStart.Date;
 
             ClockifyEntry? match = null;
+            // Pass 1 — overlap.
             foreach (var c in Entries)
             {
                 if (consumed.Contains(c.Id)) continue;
+                if ((c.ProjectId ?? "") != project) continue;
                 if (c.Description != desc) continue;
-                var cDay = DateTimeOffset.FromUnixTimeMilliseconds(c.StartedUnixMs).LocalDateTime.Date;
-                if (cDay != jDay) continue;
-                match = c; break;
+                long cS = c.StartedUnixMs, cE = cS + c.DurationSec * 1000L;
+                if (jS < cE && cS < jE) { match = c; break; }
+            }
+            // Pass 2 — same day (block moved out of its old range).
+            if (match == null)
+            {
+                foreach (var c in Entries)
+                {
+                    if (consumed.Contains(c.Id)) continue;
+                    if ((c.ProjectId ?? "") != project) continue;
+                    if (c.Description != desc) continue;
+                    if (DateTimeOffset.FromUnixTimeMilliseconds(c.StartedUnixMs).LocalDateTime.Date != jDay) continue;
+                    match = c; break;
+                }
             }
 
             if (match != null)
@@ -467,13 +489,12 @@ public sealed class ClockifyStore : INotifyPropertyChanged
                 toCreate.Add((jStart, jStart.AddSeconds(j.DurationSec), desc));
             }
         }
-        Log($"Sync: create={toCreate.Count} update={toUpdate.Count} skip={skipped}");
+        Log($"Sync[project={(project.Length == 0 ? "(none)" : project)}]: " +
+            $"create={toCreate.Count} update={toUpdate.Count} skip={skipped}");
 
         int created = 0, updated = 0, failed = 0;
         foreach (var (exist, st, en) in toUpdate)
         {
-            // Preserve the existing project / tags / billable so we only
-            // re-align the time window — the user already set those.
             var (ok, err) = await UpdateEntryAsync(exist.Id, st, en, exist.Description,
                 string.IsNullOrEmpty(exist.ProjectId) ? null : exist.ProjectId,
                 exist.TagIds, exist.Billable);
@@ -482,7 +503,8 @@ public sealed class ClockifyStore : INotifyPropertyChanged
         }
         foreach (var (start, end, desc) in toCreate)
         {
-            var (ok, err) = await CreateEntryAsync(start, end, desc, defaultProjectId, null, defaultBillable);
+            var (ok, err) = await CreateEntryAsync(start, end, desc,
+                string.IsNullOrEmpty(project) ? null : project, null, defaultBillable);
             if (ok) created++;
             else { failed++; Warn($"Sync create failed ({desc}) — {err}"); }
         }

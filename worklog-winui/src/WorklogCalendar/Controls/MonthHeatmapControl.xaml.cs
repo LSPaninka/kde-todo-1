@@ -90,14 +90,14 @@ public sealed partial class MonthHeatmapControl : UserControl
         try
         {
             var clk = await clkTask;
-            if (req == _reqId) { _clockifyTotals = clk; _clockifyKey = key; BuildGrid(); }
+            if (req == _reqId) { _clockifyTotals = clk; _clockifyKey = key; BuildGrid(); UpdateMonthTotals(); }
         }
         catch (Exception ex) { System.Diagnostics.Debug.WriteLine("[Heatmap] clk: " + ex.Message); }
 
         try
         {
             var jira = await jiraTask;
-            if (req == _reqId) { _jiraTotals = jira; _jiraKey = key; BuildGrid(); }
+            if (req == _reqId) { _jiraTotals = jira; _jiraKey = key; BuildGrid(); UpdateMonthTotals(); }
         }
         catch (Exception ex) { System.Diagnostics.Debug.WriteLine("[Heatmap] jira: " + ex.Message); }
     }
@@ -107,6 +107,37 @@ public sealed partial class MonthHeatmapControl : UserControl
         MonthLabel.Text = $"{MonthNames[Month - 1]} {Year}";
         PrevMonthBtn.IsEnabled = _monthOffset > -1;
         NextMonthBtn.IsEnabled = _monthOffset < 0;
+        UpdateMonthTotals();
+    }
+
+    /// <summary>
+    /// Footer summing the visible month's consumed hours per source.
+    /// Month-guarded by the same clockifyKey / jiraKey stamps the cells use,
+    /// so a late response for another month can never leak into the total.
+    /// </summary>
+    private void UpdateMonthTotals()
+    {
+        if (MonthTotalsLabel == null) return;
+        int clkSec = _clockifyKey == CurKey ? SumDict(_clockifyTotals) : 0;
+        int jiraSec = _jiraKey == CurKey ? SumDict(_jiraTotals) : 0;
+        MonthTotalsLabel.Text =
+            $"Total del mes — Clockify: {FormatHours(clkSec)}   ·   Jira: {FormatHours(jiraSec)}";
+    }
+
+    private static int SumDict(Dictionary<int, int> d)
+    {
+        int total = 0;
+        foreach (var v in d.Values) total += v;
+        return total;
+    }
+
+    private static string FormatHours(int sec)
+    {
+        if (sec <= 0) return "0h";
+        int h = sec / 3600, m = (sec % 3600) / 60;
+        if (h > 0 && m > 0) return $"{h}h {m}m";
+        if (h > 0) return $"{h}h";
+        return $"{m}m";
     }
 
     private void BuildGrid()

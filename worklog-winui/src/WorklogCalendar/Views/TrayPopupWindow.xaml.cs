@@ -38,18 +38,23 @@ public sealed partial class TrayPopupWindow : Window
 
     private readonly AppSettings _settings;
     private readonly JiraWorklogStore _jira;
+    private readonly JiraWorklogStore _jira2;
     private readonly ClockifyStore _clockify;
+    private readonly GoogleCalendarStore? _google;
     private DateTime _weekStart;
     private int _dialogDepth;     // skip auto-hide while > 0
     private CancellationTokenSource? _statusCts;
     private bool _statusOverrideActive;
 
-    public TrayPopupWindow(AppSettings settings, JiraWorklogStore jira, ClockifyStore clockify)
+    public TrayPopupWindow(AppSettings settings, JiraWorklogStore jira, ClockifyStore clockify,
+                           JiraWorklogStore? jira2 = null, GoogleCalendarStore? google = null)
     {
         this.InitializeComponent();
         _settings = settings;
         _jira = jira;
+        _jira2 = jira2 ?? new JiraWorklogStore(settings, 2);
         _clockify = clockify;
+        _google = google;
 
         // ---- Frame-less window setup ----
         var hwnd = WindowNative.GetWindowHandle(this);
@@ -72,7 +77,9 @@ public sealed partial class TrayPopupWindow : Window
         // ---- Wire calendar + gauges to the App-level stores ----
         Calendar.Settings = _settings;
         Calendar.JiraStore = _jira;
+        Calendar.Jira2Store = _jira2;
         Calendar.ClockifyStore = _clockify;
+        Calendar.GoogleStore = _google;
         Gauges.Store = _jira;
 
         _weekStart = WeekStartOf(DateTime.Today);
@@ -80,12 +87,15 @@ public sealed partial class TrayPopupWindow : Window
 
         // Calendar interactions reuse the same handlers as MainWindow.
         Calendar.CreateJiraRequested += (dayMs, sMs, eMs) => _ = OpenJiraEditAsync(null, sMs, eMs);
-        Calendar.EditJiraRequested += w => _ = OpenJiraEditAsync(w, w.StartedUnixMs, w.StartedUnixMs + w.DurationSec * 1000L);
+        Calendar.EditJiraRequested += w => _ = OpenJiraEditAsync(w, w.StartedUnixMs, w.StartedUnixMs + w.DurationSec * 1000L, 1);
+        Calendar.EditJira2Requested += w => _ = OpenJiraEditAsync(w, w.StartedUnixMs, w.StartedUnixMs + w.DurationSec * 1000L, 2);
         Calendar.CreateClockifyRequested += (dayMs, sMs, eMs) => _ = OpenClockifyEditAsync(null, sMs, eMs);
         Calendar.EditClockifyRequested += c => _ = OpenClockifyEditAsync(c, c.StartedUnixMs, c.StartedUnixMs + c.DurationSec * 1000L);
-        Calendar.MoveJiraRequested += (w, newStart, newDur) => _ = MoveJiraAsync(w, newStart, newDur);
+        Calendar.MoveJiraRequested += (w, newStart, newDur) => _ = MoveJiraAsync(_jira, w, newStart, newDur);
+        Calendar.MoveJira2Requested += (w, newStart, newDur) => _ = MoveJiraAsync(_jira2, w, newStart, newDur);
         Calendar.MoveClockifyRequested += (c, newStart, newDur) => _ = MoveClockifyAsync(c, newStart, newDur);
-        Calendar.DuplicateJiraRequested += w => _ = DuplicateJiraAsync(w);
+        Calendar.DuplicateJiraRequested += w => _ = DuplicateJiraAsync(_jira, w);
+        Calendar.DuplicateJira2Requested += w => _ = DuplicateJiraAsync(_jira2, w);
         Calendar.DuplicateClockifyRequested += c => _ = DuplicateClockifyAsync(c);
 
         // Store change notifications.
@@ -193,7 +203,9 @@ public sealed partial class TrayPopupWindow : Window
         Calendar.Refresh();
         var tasks = new List<Task>();
         if (Calendar.ShowJira) tasks.Add(_jira.FetchWeekAsync(_weekStart));
+        if (Calendar.ShowJira2) tasks.Add(_jira2.FetchWeekAsync(_weekStart));
         if (Calendar.ShowClockify) tasks.Add(_clockify.FetchWeekAsync(_weekStart));
+        if (Calendar.ShowGoogle && _google != null) tasks.Add(_google.FetchWeekAsync(_weekStart));
         if (ShowGauges) tasks.Add(_jira.FetchSprintInfoAsync());
         try { await Task.WhenAll(tasks); }
         catch (Exception ex) { System.Diagnostics.Debug.WriteLine("[Popup] refresh: " + ex); }
@@ -292,11 +304,15 @@ public sealed partial class TrayPopupWindow : Window
 
     // -------- Dialogs --------------------------------------------------
 
-    private async Task OpenJiraEditAsync(JiraWorklog? existing, long startMs, long endMs)
+    private async Task OpenJiraEditAsync(JiraWorklog? existing, long startMs, long endMs, int instanceId = 1)
     {
         var s = DateTimeOffset.FromUnixTimeMilliseconds(startMs).LocalDateTime;
         var en = DateTimeOffset.FromUnixTimeMilliseconds(endMs).LocalDateTime;
-        var dlg = new JiraEditDialog(_jira, _settings, s, en, existing) { XamlRoot = Content.XamlRoot };
+        var store = instanceId == 2 ? _jira2 : _jira;
+        bool allowSwitch = existing == null && _settings.Jira2Enabled;
+        var dlg = new JiraEditDialog(store, _settings, s, en, existing,
+                                     store2: _jira2, allowInstanceSwitch: allowSwitch)
+            { XamlRoot = Content.XamlRoot };
         _dialogDepth++;
         try { await dlg.ShowAsync(); }
         finally { _dialogDepth--; }
@@ -316,13 +332,13 @@ public sealed partial class TrayPopupWindow : Window
 
     // -------- Move / duplicate / sync ---------------------------------
 
-    private async Task MoveJiraAsync(JiraWorklog w, long newStartMs, int newDur)
+    private async Task MoveJiraAsync(JiraWorklogStore store, JiraWorklog w, long newStartMs, int newDur)
     {
-        SetStatus("Actualizando worklog Jira…", false);
+        SetStatus($"Actualizando worklog Jira {store.InstanceId}…", false);
         var start = DateTimeOffset.FromUnixTimeMilliseconds(newStartMs).LocalDateTime;
-        var (ok, err) = await _jira.UpdateWorklogAsync(w.IssueKey, w.Id, start, newDur, w.Comment ?? "");
-        if (ok) { _jira.UpdateLocalWorklog(w.Id, start, newDur); await RefreshAsync(); }
-        else SetStatus($"Jira: no se pudo guardar — {err}", true);
+        var (ok, err) = await store.UpdateWorklogAsync(w.IssueKey, w.Id, start, newDur, w.Comment ?? "");
+        if (ok) { store.UpdateLocalWorklog(w.Id, start, newDur); await RefreshAsync(); }
+        else SetStatus($"Jira {store.InstanceId}: no se pudo guardar — {err}", true);
     }
 
     private async Task MoveClockifyAsync(ClockifyEntry c, long newStartMs, int newDur)
@@ -337,13 +353,13 @@ public sealed partial class TrayPopupWindow : Window
         else SetStatus($"Clockify: no se pudo guardar — {err}", true);
     }
 
-    private async Task DuplicateJiraAsync(JiraWorklog w)
+    private async Task DuplicateJiraAsync(JiraWorklogStore store, JiraWorklog w)
     {
-        SetStatus("Duplicando worklog Jira…", false);
+        SetStatus($"Duplicando worklog Jira {store.InstanceId}…", false);
         var start = DateTimeOffset.FromUnixTimeMilliseconds(w.StartedUnixMs).LocalDateTime;
-        var (ok, err) = await _jira.CreateWorklogAsync(w.IssueKey, start, w.DurationSec, w.Comment ?? "");
+        var (ok, err) = await store.CreateWorklogAsync(w.IssueKey, start, w.DurationSec, w.Comment ?? "");
         if (ok) await RefreshAsync();
-        else SetStatus($"Jira: no se pudo duplicar — {err}", true);
+        else SetStatus($"Jira {store.InstanceId}: no se pudo duplicar — {err}", true);
     }
 
     private async Task DuplicateClockifyAsync(ClockifyEntry c)

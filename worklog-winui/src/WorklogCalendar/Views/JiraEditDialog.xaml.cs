@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -15,21 +16,29 @@ namespace WorklogCalendar.Views;
 /// </summary>
 public sealed partial class JiraEditDialog : ContentDialog
 {
-    private readonly JiraWorklogStore _store;
+    // Both instances are handed in; _store points at whichever is active.
+    private readonly JiraWorklogStore _store1;
+    private readonly JiraWorklogStore? _store2;
+    private JiraWorklogStore _store;
     private List<JiraIssue> _allIssues = new();
     public bool IsEdit { get; }
     public JiraWorklog? EditingEntry { get; }
+    /// <summary>Which Jira instance the dialog ended up writing to (1 or 2).</summary>
+    public int InstanceId => _store.InstanceId;
 
     /// <summary>True if the dialog completed a save/delete and the caller should refresh.</summary>
     public bool Mutated { get; private set; }
 
-    public JiraEditDialog(JiraWorklogStore store, AppSettings settings, DateTime start, DateTime end, JiraWorklog? existing)
+    public JiraEditDialog(JiraWorklogStore store, AppSettings settings, DateTime start, DateTime end,
+                          JiraWorklog? existing, JiraWorklogStore? store2 = null, bool allowInstanceSwitch = false)
     {
         this.InitializeComponent();
+        _store1 = store;
+        _store2 = store2;
         _store = store;
         IsEdit = existing != null;
         EditingEntry = existing;
-        Title = IsEdit ? "Editar worklog Jira" : "Nuevo worklog Jira";
+        Title = IsEdit ? $"Editar worklog Jira {store.InstanceId}" : "Nuevo worklog Jira";
         // Apply configurable modal size, clamped to the window so the
         // dialog never overflows on small screens.
         ApplyModalSize(settings);
@@ -43,6 +52,8 @@ public sealed partial class JiraEditDialog : ContentDialog
 
         if (IsEdit && existing != null)
         {
+            // Editing is locked to the instance the block came from — Jira's
+            // API can't move a worklog between issues, let alone sites.
             PickerSearchRow.Visibility = Visibility.Collapsed;
             IssueList.Visibility = Visibility.Collapsed;
             LockedIssue.Visibility = Visibility.Visible;
@@ -52,9 +63,18 @@ public sealed partial class JiraEditDialog : ContentDialog
         else
         {
             SecondaryButtonText = ""; // hide delete on create
+            // Creating with two instances configured → offer the switch.
+            if (allowInstanceSwitch && _store2 != null)
+            {
+                InstanceRow.Visibility = Visibility.Visible;
+                IssueHeader.Margin = new Thickness(0, 48, 0, 4);
+                InstanceBtn1.Click += async (s, e) => await SelectInstance(1);
+                InstanceBtn2.Click += async (s, e) => await SelectInstance(2);
+            }
         }
 
         IssueSearch.TextChanged += (s, e) => ApplyFilter();
+        SortCombo.SelectionChanged += (s, e) => ApplyFilter();
         ReloadBtn.Click += async (s, e) => await ReloadIssues();
 
         this.PrimaryButtonClick += async (s, e) =>
@@ -97,17 +117,40 @@ public sealed partial class JiraEditDialog : ContentDialog
         IsPrimaryButtonEnabled = true;
     }
 
+    /// <summary>Point the picker at instance 1 or 2 and reload its issues.</summary>
+    private async Task SelectInstance(int id)
+    {
+        var target = id == 2 ? _store2 : _store1;
+        if (target == null) return;
+        InstanceBtn1.IsChecked = id == 1;
+        InstanceBtn2.IsChecked = id == 2;
+        if (ReferenceEquals(_store, target)) return;
+        _store = target;
+        _allIssues.Clear();
+        IssueList.ItemsSource = null;
+        await ReloadIssues();
+    }
+
     private void ApplyFilter()
     {
         var q = (IssueSearch.Text ?? "").Trim().ToLowerInvariant();
-        if (string.IsNullOrEmpty(q)) { IssueList.ItemsSource = _allIssues; return; }
-        var filtered = new List<JiraIssue>();
-        foreach (var it in _allIssues)
+        IEnumerable<JiraIssue> rows = _allIssues;
+        if (!string.IsNullOrEmpty(q))
         {
-            var hay = $"{it.Key} {it.Summary} {it.IssueType} {it.Status}".ToLowerInvariant();
-            if (hay.Contains(q)) filtered.Add(it);
+            rows = rows.Where(it =>
+                $"{it.Key} {it.Summary} {it.IssueType} {it.Status}".ToLowerInvariant().Contains(q));
         }
-        IssueList.ItemsSource = filtered;
+        // 0 = remaining hours desc (default — what you're most likely to log
+        // against), 1 = issue code, 2 = status.
+        rows = (SortCombo?.SelectedIndex ?? 0) switch
+        {
+            1 => rows.OrderBy(it => it.Key, StringComparer.OrdinalIgnoreCase),
+            2 => rows.OrderBy(it => it.Status, StringComparer.OrdinalIgnoreCase)
+                     .ThenBy(it => it.Key, StringComparer.OrdinalIgnoreCase),
+            _ => rows.OrderByDescending(it => it.RemainingSec)
+                     .ThenBy(it => it.Key, StringComparer.OrdinalIgnoreCase),
+        };
+        IssueList.ItemsSource = rows.ToList();
     }
 
     private async Task<bool> SaveAsync()

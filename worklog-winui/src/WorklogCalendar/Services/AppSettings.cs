@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
@@ -13,7 +14,7 @@ namespace WorklogCalendar.Services;
 /// </summary>
 public sealed class AppSettings : INotifyPropertyChanged
 {
-    // -------- Jira --------
+    // -------- Jira (instance 1) --------
     public string JiraSite { get; set; } = "";
     public string JiraEmail { get; set; } = "";
     public string JiraToken { get; set; } = "";
@@ -23,6 +24,19 @@ public sealed class AppSettings : INotifyPropertyChanged
     public bool ShowJiraSummary { get; set; } = false;
     public bool JiraDebug { get; set; } = true;
 
+    // -------- Jira (instance 2) --------
+    /// <summary>Turn the second Jira instance on. Its blocks share the Jira
+    /// region of the calendar and are told apart by their own colour.</summary>
+    public bool Jira2Enabled { get; set; } = false;
+    public string Jira2Site { get; set; } = "";
+    public string Jira2Email { get; set; } = "";
+    public string Jira2Token { get; set; } = "";
+
+    /// <summary>Block fill colour for Jira instance 1 (hex #rrggbb).</summary>
+    public string Jira1BlockColor { get; set; } = "#9b91e6";
+    /// <summary>Block fill colour for Jira instance 2 (hex #rrggbb).</summary>
+    public string Jira2BlockColor { get; set; } = "#26a69a";
+
     // -------- Clockify --------
     public string ClockifyApiKey { get; set; } = "";
     public string ClockifyWorkspaceId { get; set; } = "";
@@ -30,6 +44,23 @@ public sealed class AppSettings : INotifyPropertyChanged
     public string ClockifyDefaultProjectId { get; set; } = "";
     public bool ClockifyBillableDefault { get; set; } = true;
     public bool ClockifyDebug { get; set; } = true;
+    /// <summary>Clockify project that Jira instance 1 syncs into. Empty = no project.</summary>
+    public string Jira1ClockifyProjectId { get; set; } = "";
+    /// <summary>Clockify project that Jira instance 2 syncs into. Empty = no project.</summary>
+    public string Jira2ClockifyProjectId { get; set; } = "";
+
+    // -------- Google Calendar (read-only) --------
+    /// <summary>Show Google Calendar events as background blocks.</summary>
+    public bool GoogleCalEnabled { get; set; } = false;
+    public string GoogleClientId { get; set; } = "";
+    public string GoogleClientSecret { get; set; } = "";
+    /// <summary>Long-lived refresh token from the device-code authorization.</summary>
+    public string GoogleRefreshToken { get; set; } = "";
+    /// <summary>Up to 3 calendar ids to display.</summary>
+    public List<string> GoogleCalendarIds { get; set; } = new();
+    /// <summary>Per-calendar base colours, parallel to GoogleCalendarIds.</summary>
+    public List<string> GoogleCalendarColors { get; set; } = new();
+    public bool GoogleCalDebug { get; set; } = true;
 
     // -------- View / behaviour --------
     /// <summary>"9h" (09:00-18:00) or "24h" (00:00-24:00).</summary>

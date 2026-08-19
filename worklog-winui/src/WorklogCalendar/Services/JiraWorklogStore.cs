@@ -23,9 +23,17 @@ public sealed class JiraWorklogStore : INotifyPropertyChanged
     private readonly AppSettings _settings;
     private readonly HttpClient _http;
 
-    public JiraWorklogStore(AppSettings settings)
+    /// <summary>
+    /// Which credential set this store reads: 1 = JiraSite/Email/Token,
+    /// 2 = Jira2Site/Email/Token. Both instances are otherwise identical
+    /// and are told apart on the calendar by their configured colour.
+    /// </summary>
+    public int InstanceId { get; }
+
+    public JiraWorklogStore(AppSettings settings, int instanceId = 1)
     {
         _settings = settings;
+        InstanceId = instanceId;
         _http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
     }
 
@@ -861,9 +869,9 @@ public sealed class JiraWorklogStore : INotifyPropertyChanged
 
     private bool HasCredentials(out Creds creds)
     {
-        var site = (_settings.JiraSite ?? "").Trim().TrimEnd('/');
-        var email = (_settings.JiraEmail ?? "").Trim();
-        var token = (_settings.JiraToken ?? "").Trim();
+        var site = ((InstanceId == 2 ? _settings.Jira2Site : _settings.JiraSite) ?? "").Trim().TrimEnd('/');
+        var email = ((InstanceId == 2 ? _settings.Jira2Email : _settings.JiraEmail) ?? "").Trim();
+        var token = ((InstanceId == 2 ? _settings.Jira2Token : _settings.JiraToken) ?? "").Trim();
         if (site.Length == 0 || email.Length == 0 || token.Length == 0)
         {
             creds = new Creds("", "", "");
@@ -989,15 +997,17 @@ public sealed class JiraWorklogStore : INotifyPropertyChanged
 
     public void ClearDebugLog() { _log.Clear(); Raise(nameof(DebugLog)); Raise(nameof(HasDebugLog)); }
 
+    private string LogTag => InstanceId == 2 ? "jira2" : "jira";
+
     private void Log(string msg)
     {
         AppendDebug(msg + "\n");
-        if (_settings.JiraDebug) System.Diagnostics.Debug.WriteLine("[JiraWorklog] " + msg);
+        if (_settings.JiraDebug) FileLogger.Log(LogTag, msg);
     }
     private void Warn(string msg)
     {
         AppendDebug("[!] " + msg + "\n");
-        System.Diagnostics.Debug.WriteLine("[JiraWorklog] " + msg);
+        FileLogger.Log(LogTag, "[!] " + msg);
     }
     private void AppendDebug(string s)
     {

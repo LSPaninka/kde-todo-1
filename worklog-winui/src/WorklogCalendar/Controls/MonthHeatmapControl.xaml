@@ -7,6 +7,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <!-- Header: title + month label + prev/next -->
@@ -30,5 +31,9 @@
 
         <!-- Grid built in code-behind -->
         <Grid x:Name="HeatGrid" Grid.Row="1" />
+
+        <!-- Month totals: sums the visible month's consumed hours per source. -->
+        <TextBlock x:Name="MonthTotalsLabel" Grid.Row="2" Margin="0,6,0,0"
+                   FontSize="11" Opacity="0.75" />
     </Grid>
 </UserControl>
