@@ -18,7 +18,7 @@ namespace Worklog {
         private Config cfg;
         private WorklogView view;
 
-        public MainWindow(App app, Config cfg, JiraStore jira, ClockifyStore clockify) {
+        public MainWindow(App app, Config cfg, JiraStore jira, JiraStore jira2, ClockifyStore clockify, GoogleStore google) {
             Object(application: app);
             this.app = app;
             this.cfg = cfg;
@@ -34,7 +34,7 @@ namespace Worklog {
             header.pack_end(menu_btn);
             toolbar.add_top_bar(header);
 
-            view = new WorklogView(cfg, jira, clockify, false);
+            view = new WorklogView(cfg, jira, jira2, clockify, google, false);
             view.open_prefs_requested.connect(() => app.open_prefs(this));
             toolbar.set_content(view);
             set_content(toolbar);
@@ -73,7 +73,7 @@ namespace Worklog {
             about.set_transient_for(this);
             about.set_application_name("Worklog Calendar");
             about.set_application_icon("io.github.peperina.WorklogCalendar");
-            about.set_version("1.0.0");
+            about.set_version("2.0.0");
             about.set_developer_name("Peperina");
             about.set_comments("Vista semanal de worklogs de Jira y Clockify para GNOME / Ubuntu 24.");
             about.set_license_type(Gtk.License.MIT_X11);
@@ -92,7 +92,7 @@ namespace Worklog {
         private WorklogView view;
         private uint hide_check_id = 0;
 
-        public PopupWindow(App app, Config cfg, JiraStore jira, ClockifyStore clockify) {
+        public PopupWindow(App app, Config cfg, JiraStore jira, JiraStore jira2, ClockifyStore clockify, GoogleStore google) {
             Object(application: app);
             this.app = app;
             this.cfg = cfg;
@@ -106,7 +106,7 @@ namespace Worklog {
             set_resizable(false);
             add_css_class("worklog-popup");
 
-            view = new WorklogView(cfg, jira, clockify, true);
+            view = new WorklogView(cfg, jira, jira2, clockify, google, true);
             view.open_app_requested.connect(() => { app.show_main(); set_visible(false); });
             view.open_prefs_requested.connect(() => app.open_prefs(this));
 

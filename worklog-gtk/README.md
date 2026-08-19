@@ -38,6 +38,16 @@ hamburguesa de la app → *Salir*).
 El panel inferior (anillos / subtareas / heatmap) se cambia con la tira de
 botones verticales a su derecha.
 
+### Novedades de la Release 2
+
+Ver [NOTES_REL_2.md](NOTES_REL_2.md) para el detalle.
+
+| Feature | Descripción |
+|---|---|
+| **Segunda instancia de Jira** | Dos cuentas de Jira a la vez, cada una con su color; modal con pestañas *Jira 1 / Jira 2*; sync por-instancia a proyectos de Clockify distintos. |
+| **Google Calendar (solo lectura)** | Tus eventos como bloques translúcidos detrás del worklog (hasta 3 calendarios con color). Toggle en el header; autorización por código de dispositivo en *Preferencias → Google*. Ver [docs/GOOGLE_CALENDAR.md](docs/GOOGLE_CALENDAR.md). |
+| **Contornos de solape** | Bloques que se pisan el mismo día se marcan con contorno **naranja** (Jira) / **dorado** (Clockify). |
+
 ---
 
 ## Instalación

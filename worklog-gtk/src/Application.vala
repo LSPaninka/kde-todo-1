@@ -13,7 +13,9 @@ namespace Worklog {
         private Config cfg;
         private Http http;
         private JiraStore jira;
+        private JiraStore jira2;
         private ClockifyStore clockify;
+        private GoogleStore google;
         private TrayIcon? tray = null;
         private MainWindow? main_window = null;
         private PopupWindow? popup = null;
@@ -28,8 +30,10 @@ namespace Worklog {
         construct {
             cfg = new Config();
             http = new Http();
-            jira = new JiraStore(cfg, http);
+            jira = new JiraStore(cfg, http, 1);
+            jira2 = new JiraStore(cfg, http, 2);
             clockify = new ClockifyStore(cfg, http);
+            google = new GoogleStore(cfg, http);
         }
 
         public override void startup() {
@@ -66,7 +70,7 @@ namespace Worklog {
 
         public void show_clock() {
             if (popup == null) {
-                popup = new PopupWindow(this, cfg, jira, clockify);
+                popup = new PopupWindow(this, cfg, jira, jira2, clockify, google);
             }
             popup.present();
             popup.sync();
@@ -74,7 +78,7 @@ namespace Worklog {
 
         public void show_main() {
             if (main_window == null) {
-                main_window = new MainWindow(this, cfg, jira, clockify);
+                main_window = new MainWindow(this, cfg, jira, jira2, clockify, google);
             }
             main_window.present();
             main_window.sync();
@@ -82,7 +86,7 @@ namespace Worklog {
 
         public void open_prefs(Gtk.Window parent) {
             if (prefs == null) {
-                prefs = new PreferencesWindow(parent, cfg, jira, clockify);
+                prefs = new PreferencesWindow(parent, cfg, jira, jira2, clockify, google);
                 prefs.close_request.connect(() => { prefs = null; return false; });
             }
             prefs.present();

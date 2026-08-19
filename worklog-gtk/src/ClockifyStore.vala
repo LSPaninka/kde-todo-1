@@ -304,6 +304,10 @@ namespace Worklog {
             if (jira_worklogs.size == 0) return { 0, 0, 0 };
             if (!yield ensure_context()) return { 0, 0, 0 };
 
+            // Dedup + creation are BOTH scoped to default_project_id so two
+            // Jira instances that map to different Clockify projects can't
+            // interfere with each other's sync.
+            string target_project = default_project_id;
             var to_create = new Gee.ArrayList<Worklog>();
             foreach (var j in jira_worklogs) {
                 string desc = j.issue_key + (j.issue_summary.length > 0 ? ": " + j.issue_summary : "");
@@ -311,6 +315,7 @@ namespace Worklog {
                 int64 je = j.started + (int64) j.duration_sec * 1000;
                 bool hit = false;
                 foreach (var c in entries) {
+                    if (c.project_id != target_project) continue;
                     if (c.description != desc) continue;
                     int64 cs = c.started;
                     int64 ce_end = c.started + (int64) c.duration_sec * 1000;
