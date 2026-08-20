@@ -31,7 +31,16 @@ namespace Worklog {
         private int last_width = 800;
 
         private const double HOUR_W = 56;
-        private const double ROW_H = 22;
+        private const double MIN_ROW = 22;   // minimum 30-min slot height (px)
+        private int last_height = 400;
+        // Row height stretches to fill the viewport (so the 9h grid has no empty
+        // band below it); clamped to MIN_ROW so the 24h grid scrolls instead.
+        private double ROW_H {
+            get {
+                double h = (last_height - GRID_TOP) / (double) slots_per_day();
+                return double.max(MIN_ROW, h);
+            }
+        }
         private const double HEADER_H = 22;
         private const double TOTALS_H = 22;
         private const double GRID_TOP = HEADER_H + TOTALS_H;
@@ -79,7 +88,8 @@ namespace Worklog {
 
             area = new Gtk.DrawingArea();
             area.hexpand = true;
-            area.set_content_height((int) (GRID_TOP + slots_per_day() * ROW_H));
+            area.vexpand = true;   // fill the viewport; rows stretch (see ROW_H)
+            area.set_content_height((int) (GRID_TOP + slots_per_day() * MIN_ROW));
             area.set_draw_func(draw);
             scroller.set_child(area);
 
@@ -105,7 +115,7 @@ namespace Worklog {
         public void refresh() { update_height(); area.queue_draw(); }
 
         private void update_height() {
-            area.set_content_height((int) (GRID_TOP + slots_per_day() * ROW_H));
+            area.set_content_height((int) (GRID_TOP + slots_per_day() * MIN_ROW));
         }
 
         // ---- geometry helpers ----
@@ -167,6 +177,7 @@ namespace Worklog {
         // ---- drawing ----
         private void draw(Gtk.DrawingArea da, Cairo.Context cr, int width, int height) {
             last_width = width;
+            last_height = height;
             cr.select_font_face("Sans", Cairo.FontSlant.NORMAL, Cairo.FontWeight.NORMAL);
             cr.set_font_size(9);
             double cw = col_w();

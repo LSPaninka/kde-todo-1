@@ -184,6 +184,10 @@ namespace Worklog {
         private void build_bottom_panel() {
             bottom_panel = new Gtk.Box(Gtk.Orientation.HORIZONTAL, 6);
             bottom_panel.set_valign(Gtk.Align.START);
+            // Explicitly non-expanding so the calendar (which fills) gets ALL
+            // the vertical slack — otherwise the subtask scroller's vexpand
+            // propagates up and this panel would grab half the empty space.
+            bottom_panel.set_vexpand(false);
 
             bottom_stack = new Gtk.Stack();
             bottom_stack.set_transition_type(Gtk.StackTransitionType.SLIDE_UP_DOWN);
