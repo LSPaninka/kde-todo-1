@@ -196,8 +196,8 @@
       <summary>Keep running in the background (tray) when windows are closed</summary>
     </key>
     <key name="show-tray-icon" type="b">
-      <default>true</default>
-      <summary>Show the top-bar clock indicator</summary>
+      <default>false</default>
+      <summary>Show the top-bar clock indicator (temporarily disabled by default)</summary>
     </key>
     <key name="debug" type="b">
       <default>true</default>

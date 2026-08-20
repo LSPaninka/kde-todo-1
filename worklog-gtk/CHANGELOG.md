@@ -16,6 +16,13 @@ Port de las features que la versión KDE sumó después del primer port
 - **Contornos de solape**: naranja (Jira/Jira 2) / dorado (Clockify).
 - También: la ventanita flotante pasó a ser un widget desplegable que se cierra
   al perder foco, y el panel inferior se achicó a la mitad.
+- **Panel inferior más compacto**: el `Gtk.Stack` ya no reserva la altura de la
+  vista más alta (`vhomogeneous = false`), la tabla de subtareas quedó acotada y
+  el heatmap se achicó — se elimina el gran hueco vacío bajo «Horas del mes».
+- **Indicador de bandeja desactivado por defecto** (`show-tray-icon = false`) por
+  ahora, hasta pulir el comportamiento del app-indicator. Con la bandeja apagada
+  la app funciona como un programa normal: cerrar la ventana la cierra de verdad
+  (no queda en segundo plano). Se puede reactivar en Preferencias → General.
 
 ## 1.0.0
 

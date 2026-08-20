@@ -40,12 +40,15 @@ namespace Worklog {
             base.startup();
             load_css();
 
-            // Keep the process alive even with no visible windows so the
-            // indicator can re-open them. Released on quit_app().
-            hold();
-            held = true;
-
-            if (cfg.show_tray_icon) setup_tray();
+            // Only run headless (tray-backed) when the indicator is enabled.
+            // With the tray off the app behaves like a normal window app:
+            // closing the last window quits it (see Windows.vala), so we must
+            // NOT hold() — otherwise it would linger with no window and no tray.
+            if (cfg.show_tray_icon) {
+                setup_tray();
+                hold();
+                held = true;
+            }
 
             // Application-wide actions.
             var quit = new SimpleAction("quit", null);

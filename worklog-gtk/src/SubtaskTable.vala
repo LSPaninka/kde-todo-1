@@ -45,6 +45,11 @@ namespace Worklog {
 
             var scroller = new Gtk.ScrolledWindow();
             scroller.vexpand = true;
+            // Keep the subtask view compact and scrolled rather than letting it
+            // inflate the whole bottom panel.
+            scroller.set_min_content_height(96);
+            scroller.set_max_content_height(150);
+            scroller.set_propagate_natural_height(false);
             scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC);
             list = new Gtk.ListBox();
             list.add_css_class("boxed-list");

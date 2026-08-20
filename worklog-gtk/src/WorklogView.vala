@@ -183,11 +183,14 @@ namespace Worklog {
 
         private void build_bottom_panel() {
             bottom_panel = new Gtk.Box(Gtk.Orientation.HORIZONTAL, 6);
-            bottom_panel.set_size_request(-1, 105);
+            bottom_panel.set_valign(Gtk.Align.START);
 
             bottom_stack = new Gtk.Stack();
             bottom_stack.set_transition_type(Gtk.StackTransitionType.SLIDE_UP_DOWN);
             bottom_stack.hexpand = true;
+            // Size the panel to the CURRENT view, not the tallest one — the
+            // subtask table's scroller would otherwise inflate the whole panel.
+            bottom_stack.set_vhomogeneous(false);
             gauges = new SprintGauges(jira);
             gauges.set_valign(Gtk.Align.CENTER);
             bottom_stack.add_named(gauges, "rings");

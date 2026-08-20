@@ -53,7 +53,8 @@ namespace Worklog {
             close_request.connect(() => {
                 cfg.settings.set_int("window-width", get_width());
                 cfg.settings.set_int("window-height", get_height());
-                if (cfg.run_in_background) { set_visible(false); return true; }
+                // Only hide to background when the tray can bring it back.
+                if (cfg.run_in_background && cfg.show_tray_icon) { set_visible(false); return true; }
                 return false;
             });
         }
