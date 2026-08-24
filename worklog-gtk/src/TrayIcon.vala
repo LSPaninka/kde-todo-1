@@ -24,7 +24,11 @@ namespace Worklog {
         public string title { owned get { return "Worklog Calendar"; } }
         public string status { owned get { return "Active"; } }
         public string icon_name { owned get { return "io.github.peperina.WorklogCalendar-symbolic"; } }
-        public string icon_theme_path { owned get { return ""; } }
+        // Directory that actually contains the icon file. Handing this to the
+        // host lets the indicator render our clock even when the app runs
+        // uninstalled (e.g. straight out of build/), where the icon is not in
+        // the XDG icon theme yet. Empty = rely on the installed theme.
+        public string icon_theme_path { owned get { return TrayIcon.resolve_icon_dir(); } }
         public bool item_is_menu { get { return false; } }
         public ObjectPath menu { owned get { return new ObjectPath("/MenuBar"); } }
 
@@ -98,6 +102,40 @@ namespace Worklog {
             sni.owner = this;
             dmenu = new DbusMenu();
             dmenu.owner = this;
+        }
+
+        // Cached lookup of a directory holding the symbolic icon file.
+        private static string? icon_dir_cache = null;
+        public static string resolve_icon_dir() {
+            if (icon_dir_cache != null) return icon_dir_cache;
+            string file = "io.github.peperina.WorklogCalendar-symbolic.svg";
+            var candidates = new Gee.ArrayList<string>();
+
+            // Relative to the running binary: <prefix>/bin/app -> <prefix>/share/…
+            // and <src>/build/src/app -> <src>/data (uninstalled dev runs).
+            try {
+                string exe = FileUtils.read_link("/proc/self/exe");
+                string bindir = Path.get_dirname(exe);
+                string prefix = Path.get_dirname(bindir);
+                candidates.add(Path.build_filename(prefix, "share", "icons", "hicolor", "symbolic", "apps"));
+                // build/src/app -> ../../data
+                candidates.add(Path.build_filename(Path.get_dirname(prefix), "data"));
+                candidates.add(Path.build_filename(prefix, "data"));
+            } catch (Error e) { /* /proc unavailable: fall through */ }
+
+            foreach (string d in GLib.Environment.get_system_data_dirs())
+                candidates.add(Path.build_filename(d, "icons", "hicolor", "symbolic", "apps"));
+            candidates.add(Path.build_filename(GLib.Environment.get_user_data_dir(),
+                                               "icons", "hicolor", "symbolic", "apps"));
+
+            foreach (string d in candidates) {
+                if (FileUtils.test(Path.build_filename(d, file), FileTest.EXISTS)) {
+                    icon_dir_cache = d;
+                    return icon_dir_cache;
+                }
+            }
+            icon_dir_cache = "";
+            return icon_dir_cache;
         }
 
         // Called from the D-Bus service objects.

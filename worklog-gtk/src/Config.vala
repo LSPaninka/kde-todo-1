@@ -106,6 +106,8 @@ namespace Worklog {
 
         public bool run_in_background { get { return settings.get_boolean("run-in-background"); } }
         public bool show_tray_icon { get { return settings.get_boolean("show-tray-icon"); } }
+        public bool popup_anchor_top_right { get { return settings.get_boolean("popup-anchor-top-right"); } }
+        public int popup_anchor_margin { get { return settings.get_int("popup-anchor-margin"); } }
         public bool debug { get { return settings.get_boolean("debug"); } }
 
         // ---- Google Calendar ----

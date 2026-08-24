@@ -135,6 +135,44 @@ namespace Worklog {
             });
         }
 
+        // Ask for the popup to be placed near the tray icon. Called right after
+        // present(); the surface only exists once mapped, so retry briefly.
+        public void anchor_now() {
+            int tries = 0;
+            Timeout.add(40, () => {
+                tries++;
+                if (anchor_to_tray()) return Source.REMOVE;
+                return (tries < 5) ? Source.CONTINUE : Source.REMOVE;
+            });
+        }
+
+        // Place the popup under the top-right corner of the monitor, next to the
+        // indicator. X11 only: on Wayland a client cannot position its own
+        // window (GTK4 removed the API and Mutter does not allow it), so there
+        // the compositor decides where it lands. See docs/SYSTEM_TRAY.md.
+        private bool anchor_to_tray() {
+            if (!cfg.popup_anchor_top_right) return true;   // nothing to do
+            var surface = get_surface();
+            if (surface == null) return false;              // not mapped yet
+            var xsurf = surface as Gdk.X11.Surface;
+            var xdisp = get_display() as Gdk.X11.Display;
+            if (xsurf == null || xdisp == null) return true; // not X11: give up quietly
+
+            var mon = get_display().get_monitor_at_surface(surface);
+            if (mon == null) return true;
+            Gdk.Rectangle geo = mon.get_geometry();
+            if (geo.width <= 0) return true;
+
+            int w = cfg.settings.get_int("popup-width");
+            int h = cfg.settings.get_int("popup-height");
+            int x = geo.x + geo.width - w - 8;
+            int y = geo.y + cfg.popup_anchor_margin;
+            if (x < geo.x) x = geo.x;
+            if (y + h > geo.y + geo.height) y = int.max(geo.y, geo.y + geo.height - h);
+            xdisp.get_xdisplay().move_window(xsurf.get_xid(), x, y);
+            return true;
+        }
+
         private void on_active_changed() {
             if (is_active) return;
             if (hide_check_id != 0) Source.remove(hide_check_id);

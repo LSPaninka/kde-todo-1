@@ -76,6 +76,7 @@ namespace Worklog {
                 popup = new PopupWindow(this, cfg, jira, jira2, clockify, google);
             }
             popup.present();
+            popup.anchor_now();
             popup.sync();
         }
 

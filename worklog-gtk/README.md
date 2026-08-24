@@ -64,8 +64,15 @@ sudo apt install meson ninja-build valac \
 
 > El reloj en la barra superior usa el protocolo **StatusNotifierItem**. En
 > GNOME hace falta la extensión **Ubuntu AppIndicators** (paquete
-> `gnome-shell-extension-appindicator`, ya viene en Ubuntu). Activala con
-> *Extensiones* / *GNOME Tweaks* y reiniciá la sesión si hiciera falta.
+> `gnome-shell-extension-appindicator`, ya viene en Ubuntu):
+>
+> ```bash
+> gnome-extensions enable ubuntu-appindicators@ubuntu.com
+> ```
+>
+> y reiniciar GNOME Shell (`Alt+F2` → `r` en X11; cerrar sesión en Wayland).
+> **Guía completa, verificación y troubleshooting en
+> [docs/SYSTEM_TRAY.md](docs/SYSTEM_TRAY.md).**
 
 ### Compilar e instalar
 
@@ -166,8 +173,13 @@ La documentación detallada está en [`docs/`](docs/):
   y **Salir**.
 - *Salir* (o `Ctrl+Q`, o el menú de la app) cierra el proceso de verdad.
 
-Si desactivás *Seguir en segundo plano*, cerrar la última ventana termina la app
-como cualquier programa normal.
+El **tamaño de la ventanita es configurable** (*Preferencias → General*). En
+sesiones **X11** además se **ancla arriba a la derecha**, al lado del ícono; en
+**Wayland** la posición la decide el compositor (GTK4 no permite que un cliente
+se posicione solo). Detalles en [docs/SYSTEM_TRAY.md](docs/SYSTEM_TRAY.md).
+
+Si desactivás *Seguir en segundo plano*, o el ícono de la barra, cerrar la
+última ventana termina la app como cualquier programa normal.
 
 ---
 

@@ -196,8 +196,17 @@
       <summary>Keep running in the background (tray) when windows are closed</summary>
     </key>
     <key name="show-tray-icon" type="b">
-      <default>false</default>
-      <summary>Show the top-bar clock indicator (temporarily disabled by default)</summary>
+      <default>true</default>
+      <summary>Show the top-bar clock indicator (StatusNotifierItem)</summary>
+    </key>
+    <key name="popup-anchor-top-right" type="b">
+      <default>true</default>
+      <summary>Anchor the popup under the top-right of the screen, near the tray icon (X11 only; on Wayland the compositor places the window)</summary>
+    </key>
+    <key name="popup-anchor-margin" type="i">
+      <range min="0" max="200"/>
+      <default>44</default>
+      <summary>Top margin used when anchoring the popup, to clear the panel (px)</summary>
     </key>
     <key name="debug" type="b">
       <default>true</default>

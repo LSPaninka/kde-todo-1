@@ -22,10 +22,19 @@ Port de las features que la versión KDE sumó después del primer port
   (`vexpand` explícito en off + `Gtk.Stack` `vhomogeneous = false` + tabla de
   subtareas acotada + heatmap más chico). El panel queda pegado al pie, sin
   bandas vacías arriba ni abajo.
-- **Indicador de bandeja desactivado por defecto** (`show-tray-icon = false`) por
-  ahora, hasta pulir el comportamiento del app-indicator. Con la bandeja apagada
-  la app funciona como un programa normal: cerrar la ventana la cierra de verdad
-  (no queda en segundo plano). Se puede reactivar en Preferencias → General.
+- **Indicador de bandeja reactivado** (`show-tray-icon = true`) y pulido:
+  - El ícono ahora se resuelve aunque la app corra **sin instalar** (se publica
+    `IconThemePath` apuntando a la carpeta que contiene el SVG).
+  - **Clic izquierdo** abre la ventanita (`ItemIsMenu = false` ⇒ `Activate`),
+    **clic derecho** el menú con **Salir**, clic del medio la ventanita.
+  - La ventanita se **ancla arriba a la derecha** junto al ícono en sesiones
+    **X11** (`popup-anchor-top-right`, `popup-anchor-margin`); en Wayland la
+    posición la decide el compositor (limitación de GTK4/Mutter).
+  - Nueva guía [docs/SYSTEM_TRAY.md](docs/SYSTEM_TRAY.md): qué extensión hace
+    falta en GNOME, cómo activarla, X11 vs Wayland, verificación por D-Bus y
+    troubleshooting.
+  - Con la bandeja **apagada** la app sigue funcionando como un programa normal
+    (cerrar la última ventana la termina).
 
 ## 1.0.0
 

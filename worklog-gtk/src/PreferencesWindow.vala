@@ -86,6 +86,10 @@ namespace Worklog {
             win.add(switch_row("Seguir en segundo plano al cerrar", "run-in-background"));
             win.add(spin_row("Ancho de la ventanita (popup)", "popup-width", 600, 2200, 10, false));
             win.add(spin_row("Alto de la ventanita (popup)", "popup-height", 400, 1500, 10, false));
+            var anchor = switch_row("Anclar la ventanita arriba a la derecha", "popup-anchor-top-right");
+            anchor.set_subtitle("Solo en sesiones X11: en Wayland la posición la decide el compositor.");
+            win.add(anchor);
+            win.add(spin_row("Margen superior del anclaje (px)", "popup-anchor-margin", 0, 200, 2, false));
             win.add(switch_row("Registrar peticiones en stdout (debug)", "debug"));
             page.add(win);
 

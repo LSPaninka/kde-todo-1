@@ -18,6 +18,10 @@ deps = [
   dependency('libsoup-3.0'),
   dependency('json-glib-1.0'),
   dependency('gee-0.8'),
+  # Used only to anchor the popup next to the tray icon on X11 sessions
+  # (Gdk.X11 surface xid + XMoveWindow). On Wayland the code path is skipped.
+  dependency('gtk4-x11'),
+  dependency('x11'),
   meson.get_compiler('c').find_library('m', required: false),
 ]
 
