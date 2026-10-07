@@ -14,7 +14,7 @@
  * so editing them in either widget updates both.
  */
 
-import QtQuick 2.15
+import QtQuick
 
 QtObject {
     id: store
@@ -56,6 +56,21 @@ QtObject {
     // ------------------------------------------------------------------
     // Public API
     // ------------------------------------------------------------------
+
+    // Basic-auth header value. Base64 of the UTF-8 bytes of "user:pass"
+    // (Qt 6 deprecates Qt.btoa(string), so it's done by hand).
+    function _basicAuth(user, pass) {
+        var s = unescape(encodeURIComponent(user + ":" + pass));
+        var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        var out = "";
+        for (var i = 0; i < s.length; i += 3) {
+            var n = (s.charCodeAt(i) << 16) | ((s.charCodeAt(i + 1) || 0) << 8) | (s.charCodeAt(i + 2) || 0);
+            out += chars[(n >> 18) & 63] + chars[(n >> 12) & 63]
+                 + (i + 1 < s.length ? chars[(n >> 6) & 63] : "=")
+                 + (i + 2 < s.length ? chars[n & 63] : "=");
+        }
+        return "Basic " + out;
+    }
 
     function init() {
         if (!plasmoidApi) {
@@ -883,7 +898,7 @@ QtObject {
     function _jiraSend(method, url, creds, body, callback) {
         var xhr = new XMLHttpRequest();
         xhr.open(method, url, true);
-        xhr.setRequestHeader("Authorization", "Basic " + Qt.btoa(creds.email + ":" + creds.token));
+        xhr.setRequestHeader("Authorization", _basicAuth(creds.email, creds.token));
         xhr.setRequestHeader("Accept", "application/json");
         if (body) xhr.setRequestHeader("Content-Type", "application/json");
         xhr.onreadystatechange = function() {

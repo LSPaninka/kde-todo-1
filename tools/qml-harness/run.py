@@ -41,6 +41,20 @@ ISSUES = [
     ("CP-106", "Escribir pruebas de integración", "Subtarea", "To Do", "new", "Medium", True),
 ]
 
+def _week_worklogs():
+    import datetime
+    today = datetime.datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
+    out = []
+    for n, (back, hours, key) in enumerate([(0, 2, "CP-101"), (1, 3, "CP-102"), (2, 1, "CP-103"), (0, 1, "CP-104")]):
+        d = today - datetime.timedelta(days=back) + datetime.timedelta(hours=(3 if n == 3 else 0))
+        out.append({"id": str(1000 + n), "author": {"accountId": "me-123"},
+                    "started": d.strftime("%Y-%m-%dT%H:%M:%S.000+0000"),
+                    "timeSpentSeconds": hours * 3600,
+                    "comment": {"type": "doc", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "Trabajo " + key}]}]}})
+    return out
+
+WORKLOGS = _week_worklogs()
+
 class FakeJira(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     def _send(self, obj):
@@ -58,7 +72,12 @@ class FakeJira(BaseHTTPRequestHandler):
                     "summary": s, "status": {"name": st, "statusCategory": {"key": cat}},
                     "priority": {"name": pr}, "issuetype": {"name": t, "subtask": sub},
                     "updated": "2026-10-01T10:00:00.000+0000",
-                    "timetracking": {"originalEstimateSeconds": 14400, "timeSpentSeconds": 3600}}})
+                    "timetracking": {"originalEstimateSeconds": 14400, "timeSpentSeconds": 3600,
+                                     "remainingEstimateSeconds": 10800},
+                    "timeoriginalestimate": 14400, "timeestimate": 10800,
+                    "worklog": {"worklogs": [w for w in WORKLOGS if (int(w["id"]) - 1000) % len(ISSUES) == (len(issues) % len(ISSUES))]},
+                    "customfield_10020": [{"id": 7, "name": "Sprint 7", "state": "active",
+                                           "startDate": "2026-09-28T09:00:00.000Z", "endDate": "2026-10-12T17:00:00.000Z"}]}})
             self._send({"issues": issues, "isLast": True})
         elif self.path.endswith("/myself"):
             self._send({"accountId": "me-123", "displayName": "Test"})
@@ -84,6 +103,7 @@ def build_plasmoid_module(main_xml, dest):
         raw = (d.text or "") if d is not None else ""
         if typ == "Bool": val = raw.strip().lower() == "true"
         elif typ == "Int": val = int(raw.strip() or 0)
+        elif typ == "Double": val = float(raw.strip() or 0)
         elif typ == "StringList": val = [x for x in raw.split(",")] if raw else []
         else: val = raw
         props.append("        property var %s: %s" % (name, js(val)))
@@ -105,6 +125,21 @@ def build_plasmoid_module(main_xml, dest):
         "    property real switchWidth: 0\n    property real switchHeight: 0\n"
         "    property string toolTipMainText\n    property string toolTipSubText\n"
         "    property int toolTipTextFormat: 0\n    property bool hideOnWindowDeactivate: true\n}\n")
+
+# Copia de trabajo del paquete: se quitan las líneas `Kirigami.Theme.colorSet/inherit`
+# (propiedades adjuntas de C++, no simulables aquí).
+import re as _re
+src_pkg = pkg
+pkg = os.path.join(tmp, "package")
+shutil.copytree(src_pkg, pkg)
+for _dp, _dn, _fn in os.walk(pkg):
+    for _f in _fn:
+        if _f.endswith(".qml"):
+            _p = os.path.join(_dp, _f)
+            _t = open(_p, encoding="utf-8").read()
+            _n = _re.sub(r"^[ \t]*Kirigami\.Theme\.(colorSet|inherit):.*\n", "", _t, flags=_re.M)
+            if _n != _t:
+                open(_p, "w", encoding="utf-8").write(_n)
 
 gen = os.path.join(tmp, "gen")
 build_plasmoid_module(os.path.join(pkg, "contents/config/main.xml"),
@@ -198,41 +233,6 @@ def ev(js_code):
 call("start", QUrl.fromLocalFile(os.path.join(pkg, "contents/ui/main.qml")).toString())
 pump(800)
 
-# ---- ToDo: datos de ejemplo
-ev("""(function(){
-  var s = host.store();
-  var t1 = s.addTask('Comprar leche', 0, 'M', 'Del súper de la esquina');
-  s.addTask('Terminar informe', 1, 'XL', 'Entrega el viernes');
-  s.addTask('Estudiar Qt 6', 2, 'L', '');
-  s.addTask('Llamar al médico', 4, 'S', '');
-  s.addTask('Tarea hecha', 0, 'XS', '');
-  return 1;
-})()""")
-pump(300)
-ev("host.store().tasks.length")
-snap("01-todo")
-# Un par de ciclos de rueda / clic en la compacta
-ev("host.app.expanded = true")
-ev("host.store().requestCategory(1)")
-snap("02-todo-categoria")
-
-# ---- Jira 1
-ev("host.cfg('jiraSite', '%s'); host.cfg('jiraEmail', 'a@b.c'); host.cfg('jiraToken', 'tok'); host.cfg('jiraJql', 'assignee = currentUser()')" % jira_url)
-ev("host.cfg('jira2Site', '%s'); host.cfg('jira2Email', 'a@b.c'); host.cfg('jira2Token', 'tok'); host.cfg('jira2Jql', 'assignee = currentUser()')" % jira_url)
-ev("host.setMode('jira')")
-pump(1500)
-snap("03-jira")
-ev("host.setMode('jira2')")
-pump(1500)
-snap("04-jira2")
-ev("host.setMode('gh')")
-snap("05-gh")
-ev("host.setMode('todo')")
-snap("06-todo-vuelta")
-ev("host.app.expanded = false")
-pump(300)
-
-
 # ---- Interacciones con eventos reales de ratón / teclado / rueda
 from PySide6.QtTest import QTest
 from PySide6.QtCore import Qt, QPoint, QPointF
@@ -255,57 +255,168 @@ def wheel(x, y, dy):
 def state():
     return ev("JSON.stringify({expanded: host.app.expanded, mode: host.cfg_get('mode')})")
 
-ev("host.setMode('todo')")
-ev("host.app.expanded = false")
-pump(300)
-print("estado inicial:", state())
-click(443, 31)                      # swatch 2 (Trabajo) de la compacta
-print("tras clic en swatch 2 (debe abrir y saltar a Trabajo):", state(),
-      "store.selectedCategory:", ev("host.store().selectedCategory"))
-snap("07a-todo-tras-clic-swatch")
-click(443, 31)
-print("tras segundo clic (debe cerrar):", state())
-wheel(443, 31, 120)
-print("rueda arriba sobre la compacta (todo -> jira):", state())
-wheel(443, 31, -120)
-print("rueda abajo (jira -> todo):", state())
-wheel(443, 31, -120)
-print("rueda sobre un swatch:", state())
-ev("host.setMode('todo')")
-ev("host.app.expanded = true")
-ev("host.store().requestCategory(1)")
-pump(300)
-click(925, 104)                     # botón "New…" de la categoría
-snap("07-todo-dialogo-nueva-tarea")
-key(Qt.Key_Escape)
-click(925, 736)                     # "Configure…"
-ev("host.setMode('jira')")
-pump(1500)
-click(400, 160)                     # tarjeta CP-101 -> JiraIssueDialog
-snap("08-jira-detalle")
-key(Qt.Key_Escape)
-click(400, 211, Qt.RightButton)     # menú contextual de CP-102
-snap("09-jira-menu-contextual")
-key(Qt.Key_Escape)
-ev("host.app.expanded = false")
-pump(300)
-print("popup colapsado con diálogos abiertos:", state())
+
+def scenario_todo():
+    # ---- ToDo: datos de ejemplo
+    ev("""(function(){
+      var s = host.store();
+      var t1 = s.addTask('Comprar leche', 0, 'M', 'Del súper de la esquina');
+      s.addTask('Terminar informe', 1, 'XL', 'Entrega el viernes');
+      s.addTask('Estudiar Qt 6', 2, 'L', '');
+      s.addTask('Llamar al médico', 4, 'S', '');
+      s.addTask('Tarea hecha', 0, 'XS', '');
+      return 1;
+    })()""")
+    pump(300)
+    ev("host.store().tasks.length")
+    snap("01-todo")
+    # Un par de ciclos de rueda / clic en la compacta
+    ev("host.app.expanded = true")
+    ev("host.store().requestCategory(1)")
+    snap("02-todo-categoria")
+
+    # ---- Jira 1
+    ev("host.cfg('jiraSite', '%s'); host.cfg('jiraEmail', 'a@b.c'); host.cfg('jiraToken', 'tok'); host.cfg('jiraJql', 'assignee = currentUser()')" % jira_url)
+    ev("host.cfg('jira2Site', '%s'); host.cfg('jira2Email', 'a@b.c'); host.cfg('jira2Token', 'tok'); host.cfg('jira2Jql', 'assignee = currentUser()')" % jira_url)
+    ev("host.setMode('jira')")
+    pump(1500)
+    snap("03-jira")
+    ev("host.setMode('jira2')")
+    pump(1500)
+    snap("04-jira2")
+    ev("host.setMode('gh')")
+    snap("05-gh")
+    ev("host.setMode('todo')")
+    snap("06-todo-vuelta")
+    ev("host.app.expanded = false")
+    pump(300)
 
 
-# ---- Páginas de configuración que no usan Kirigami.FormData (adjunta, en C++)
-import glob
-for f in sorted(glob.glob(os.path.join(pkg, "contents/ui/config*.qml"))):
-    name = os.path.basename(f)
-    if "Kirigami.FormData" in open(f, encoding="utf-8").read() or "Kirigami.FormLayout" in open(f, encoding="utf-8").read():
-        print("config omitida (usa Kirigami.FormData/FormLayout): " + name)
-        continue
-    r = ev("host.loadPage('%s')" % QUrl.fromLocalFile(f).toString())
-    print("config", name, "->", r[0] if r and r[0] else "OK")
-    snap("cfg-" + name.replace(".qml", ""))
-ev("host.loadPage('data:,')")
+    ev("host.setMode('todo')")
+    ev("host.app.expanded = false")
+    pump(300)
+    print("estado inicial:", state())
+    click(443, 31)                      # swatch 2 (Trabajo) de la compacta
+    print("tras clic en swatch 2 (debe abrir y saltar a Trabajo):", state(),
+          "store.selectedCategory:", ev("host.store().selectedCategory"))
+    snap("07a-todo-tras-clic-swatch")
+    click(443, 31)
+    print("tras segundo clic (debe cerrar):", state())
+    wheel(443, 31, 120)
+    print("rueda arriba sobre la compacta (todo -> jira):", state())
+    wheel(443, 31, -120)
+    print("rueda abajo (jira -> todo):", state())
+    wheel(443, 31, -120)
+    print("rueda sobre un swatch:", state())
+    ev("host.setMode('todo')")
+    ev("host.app.expanded = true")
+    ev("host.store().requestCategory(1)")
+    pump(300)
+    click(925, 104)                     # botón "New…" de la categoría
+    snap("07-todo-dialogo-nueva-tarea")
+    key(Qt.Key_Escape)
+    click(925, 736)                     # "Configure…"
+    ev("host.setMode('jira')")
+    pump(1500)
+    click(400, 160)                     # tarjeta CP-101 -> JiraIssueDialog
+    snap("08-jira-detalle")
+    key(Qt.Key_Escape)
+    click(400, 211, Qt.RightButton)     # menú contextual de CP-102
+    snap("09-jira-menu-contextual")
+    key(Qt.Key_Escape)
+    ev("host.app.expanded = false")
+    pump(300)
+    print("popup colapsado con diálogos abiertos:", state())
+
+
+    # ---- Páginas de configuración que no usan Kirigami.FormData (adjunta, en C++)
+    import glob
+    for f in sorted(glob.glob(os.path.join(pkg, "contents/ui/config*.qml"))):
+        name = os.path.basename(f)
+        if "Kirigami.FormData" in open(f, encoding="utf-8").read() or "Kirigami.FormLayout" in open(f, encoding="utf-8").read():
+            print("config omitida (usa Kirigami.FormData/FormLayout): " + name)
+            continue
+        r = ev("host.loadPage('%s')" % QUrl.fromLocalFile(f).toString())
+        print("config", name, "->", r[0] if r and r[0] else "OK")
+        snap("cfg-" + name.replace(".qml", ""))
+    ev("host.loadPage('data:,')")
+
+
+
+
+def scenario_worklog():
+    ev("host.cfg('jiraSite', '%s'); host.cfg('jiraEmail', 'a@b.c'); host.cfg('jiraToken', 'tok')" % jira_url)
+    ev("host.app.expanded = true")
+    pump(500)
+    snap("w01-inicial")
+    ev("host.fullItem.syncNow()")
+    pump(1800)
+    snap("w02-con-worklogs")
+    print("worklogs cargados:", ev("host.fullItem.jiraStore.worklogs.length"))
+    for view_name in ("subtasks", "heatmap", "rings"):
+        ev("host.cfg('worklogBottomView', '%s')" % view_name)
+        pump(800)
+        snap("w03-vista-" + view_name)
+    ev("host.cfg('worklogViewMode', '24h')")
+    snap("w04-24h")
+    ev("host.cfg('worklogViewMode', '9h')")
+    ev("host.cfg('worklogSource', 'jira-clockify')")
+    snap("w05-jira-clockify")
+    ev("host.cfg('worklogSource', 'jira')")
+    # fijar/soltar el popup: debe cambiar hideOnWindowDeactivate
+    ev("host.cfg('worklogPinned', true)")
+    print("pinned -> hideOnWindowDeactivate:", ev("host.app.hideOnWindowDeactivate"))
+    ev("host.cfg('worklogPinned', false)")
+    print("unpinned -> hideOnWindowDeactivate:", ev("host.app.hideOnWindowDeactivate"))
+    # clic en la compacta alterna expanded
+    ev("host.app.expanded = false")
+    pump(200)
+    click(505, 31)
+    print("clic en compacta -> expanded:", ev("host.app.expanded"))
+    ev("host.app.expanded = true")
+    pump(300)
+    # arrastrar en una columna del calendario para crear un worklog
+    QTest.mousePress(view, Qt.LeftButton, Qt.NoModifier, QPoint(300, 330)); pump(150)
+    QTest.mouseMove(view, QPoint(300, 380)); pump(150)
+    QTest.mouseMove(view, QPoint(300, 420)); pump(150)
+    snap("w06-arrastrando")
+    QTest.mouseRelease(view, Qt.LeftButton, Qt.NoModifier, QPoint(300, 420)); pump(500)
+    snap("w07-dialogo-crear")
+    key(Qt.Key_Escape)
+    # clic en un bloque existente -> diálogo de edición
+    click(390, 230)
+    snap("w08-dialogo-editar")
+    key(Qt.Key_Escape)
+    # arrastrar un bloque a otro día (mover): debe lanzar updateWorklog
+    n0 = len(messages)
+    QTest.mousePress(view, Qt.LeftButton, Qt.NoModifier, QPoint(520, 200)); pump(150)
+    for xx in (540, 580, 640): QTest.mouseMove(view, QPoint(xx, 200)); pump(120)
+    QTest.mouseRelease(view, Qt.LeftButton, Qt.NoModifier, QPoint(640, 200)); pump(600)
+    print("tras mover bloque:", [m[3][:70] for m in messages[n0:] if "updat" in m[3].lower() or "Actualiz" in m[3]][:3])
+    snap("w09-tras-mover")
+    # botón Configure…
+    click(925, 736)
+    ev("host.cfg('worklogBottomView', 'subtasks')")
+    pump(600)
+    # páginas de configuración sin Kirigami.FormData
+    import glob
+    for f in sorted(glob.glob(os.path.join(pkg, "contents/ui/config*.qml"))):
+        name = os.path.basename(f)
+        txt = open(f, encoding="utf-8").read()
+        if "Kirigami.FormData" in txt or "Kirigami.FormLayout" in txt:
+            print("config omitida (usa Kirigami.FormData/FormLayout): " + name)
+            continue
+        r = ev("host.loadPage('%s')" % QUrl.fromLocalFile(f).toString())
+        print("config", name, "->", r[0] if r and r[0] else "OK")
+        snap("wcfg-" + name.replace(".qml", ""))
+
+if os.path.exists(os.path.join(pkg, "contents/ui/WorklogCalendar.qml")):
+    scenario_worklog()
+else:
+    scenario_todo()
 
 import re
-APP_LOG = re.compile(r"^\[(JiraStore|GhStore|NotionStore|NotionSyncStore)\]")
+APP_LOG = re.compile(r"^\[(JiraStore|GhStore|NotionStore|NotionSyncStore|JiraWorklog|Clockify|GoogleCal[A-Za-z]*)\]")
 all_w = [m for m in messages if m[0] in ("WARNING", "CRITICAL", "FATAL")]
 app_logs = [m for m in all_w if APP_LOG.match(m[3])]   # console.warn() deliberados de las stores
 errs = [m for m in all_w if not APP_LOG.match(m[3])]  # avisos del motor QML / del código

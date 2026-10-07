@@ -10,11 +10,12 @@
  *     worklog between issues from the API), and a Delete button is shown.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Controls 2.15 as QQC2
-import org.kde.plasma.core 2.0 as PlasmaCore
-import org.kde.plasma.components 3.0 as PlasmaComponents3
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls as QQC2
+import org.kde.plasma.components as PlasmaComponents3
+import org.kde.kirigami as Kirigami
+import org.kde.plasma.plasmoid
 
 Item {
     id: dlg
@@ -30,7 +31,7 @@ Item {
 
     property bool loading: false
     property string statusText: ""
-    property color statusColor: PlasmaCore.Theme.textColor
+    property color statusColor: Kirigami.Theme.textColor
 
     signal saved()
     signal deleted()
@@ -83,7 +84,7 @@ Item {
             dlg.loading = false;
             if (!ok) {
                 statusText = i18n("No se pudo cargar la lista de issues.");
-                statusColor = PlasmaCore.Theme.negativeTextColor;
+                statusColor = Kirigami.Theme.negativeTextColor;
             }
         });
     }
@@ -143,12 +144,12 @@ Item {
     // modal never spills outside the popup.
     Rectangle {
         anchors.centerIn: parent
-        width: Math.min(plasmoid.configuration.worklogModalWidth || 720,
+        width: Math.min(Plasmoid.configuration.worklogModalWidth || 720,
                         Math.max(420, parent.width  - 24))
-        height: Math.min(plasmoid.configuration.worklogModalHeight || 520,
+        height: Math.min(Plasmoid.configuration.worklogModalHeight || 520,
                         Math.max(360, parent.height - 36))
-        color: PlasmaCore.Theme.backgroundColor
-        border.color: PlasmaCore.Theme.textColor
+        color: Kirigami.Theme.backgroundColor
+        border.color: Kirigami.Theme.textColor
         border.width: 1
         radius: 4
 
@@ -157,7 +158,7 @@ Item {
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: 10
-            spacing: PlasmaCore.Units.smallSpacing
+            spacing: Kirigami.Units.smallSpacing
 
             // Header
             RowLayout {
@@ -177,7 +178,7 @@ Item {
             // Date + time bar
             RowLayout {
                 Layout.fillWidth: true
-                spacing: PlasmaCore.Units.smallSpacing
+                spacing: Kirigami.Units.smallSpacing
                 PlasmaComponents3.Label {
                     text: {
                         if (!dlg.startMs) return "";
@@ -274,7 +275,7 @@ Item {
                 horizontalAlignment: Text.AlignRight
                 text: i18n("Duración: %1", dlg._fmtDuration(dlg._durationSec()))
                 opacity: 0.65
-                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
             }
 
             // Issue picker (create mode) or fixed label (edit mode).
@@ -292,9 +293,9 @@ Item {
             RowLayout {
                 Layout.fillWidth: true
                 visible: !dlg.isEdit
-                spacing: PlasmaCore.Units.smallSpacing
+                spacing: Kirigami.Units.smallSpacing
 
-                PlasmaCore.IconItem {
+                Kirigami.Icon {
                     source: "search"
                     Layout.preferredWidth: 16
                     Layout.preferredHeight: 16
@@ -340,9 +341,9 @@ Item {
                         width: pickerList.width
                         height: row.implicitHeight + 6
                         color: dlg.selectedIssueKey === modelData.key
-                               ? Qt.rgba(PlasmaCore.Theme.highlightColor.r,
-                                         PlasmaCore.Theme.highlightColor.g,
-                                         PlasmaCore.Theme.highlightColor.b, 0.35)
+                               ? Qt.rgba(Kirigami.Theme.highlightColor.r,
+                                         Kirigami.Theme.highlightColor.g,
+                                         Kirigami.Theme.highlightColor.b, 0.35)
                                : (rowMouse.containsMouse
                                   ? Qt.rgba(1, 1, 1, 0.06)
                                   : "transparent")
@@ -373,7 +374,7 @@ Item {
                                     return parts.join(" · ");
                                 }
                                 opacity: 0.6
-                                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                             }
                         }
                         MouseArea {
@@ -470,7 +471,7 @@ Item {
                     onClicked: {
                         dlg.loading = true;
                         dlg.statusText = dlg.isEdit ? i18n("Guardando…") : i18n("Creando…");
-                        dlg.statusColor = PlasmaCore.Theme.textColor;
+                        dlg.statusColor = Kirigami.Theme.textColor;
                         var dur = dlg._durationSec();
                         if (dlg.isEdit) {
                             store.updateWorklog(
@@ -501,24 +502,24 @@ Item {
             dlg.loading = false;
             if (ok) {
                 dlg.statusText = i18n("Creado.");
-                dlg.statusColor = PlasmaCore.Theme.positiveTextColor;
+                dlg.statusColor = Kirigami.Theme.positiveTextColor;
                 dlg.visible = false;
                 dlg.saved();
             } else {
                 dlg.statusText = i18n("Error: %1", err);
-                dlg.statusColor = PlasmaCore.Theme.negativeTextColor;
+                dlg.statusColor = Kirigami.Theme.negativeTextColor;
             }
         }
         function onUpdateFinished(ok, err) {
             dlg.loading = false;
             if (ok) {
                 dlg.statusText = i18n("Guardado.");
-                dlg.statusColor = PlasmaCore.Theme.positiveTextColor;
+                dlg.statusColor = Kirigami.Theme.positiveTextColor;
                 dlg.visible = false;
                 dlg.saved();
             } else {
                 dlg.statusText = i18n("Error: %1", err);
-                dlg.statusColor = PlasmaCore.Theme.negativeTextColor;
+                dlg.statusColor = Kirigami.Theme.negativeTextColor;
             }
         }
         function onDeleteFinished(ok, err) {
@@ -528,7 +529,7 @@ Item {
                 dlg.deleted();
             } else {
                 dlg.statusText = i18n("Error al eliminar: %1", err);
-                dlg.statusColor = PlasmaCore.Theme.negativeTextColor;
+                dlg.statusColor = Kirigami.Theme.negativeTextColor;
             }
         }
     }

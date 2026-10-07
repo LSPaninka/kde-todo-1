@@ -1,4 +1,4 @@
-# Jira / Clockify Worklog Calendar — KDE Plasma 5 plasmoid
+# Jira / Clockify Worklog Calendar — KDE Plasma 6 plasmoid
 
 Plasmoide independiente que muestra **una vista semanal** (Domingo a Sábado)
 con los **worklogs** del usuario, permitiendo trabajar con tres fuentes
@@ -16,8 +16,14 @@ correspondiente (Jira: issue picker + comment; Clockify: project + tags +
 billable + description). Las credenciales de Jira se comparten con el
 plasmoide *Categorized ToDo* (mismo `categorizedtodorc`).
 
-Compatible con Kubuntu 24.04 / Plasma 5.27 / Qt 5.15. QML puro, sin
-librerías nativas.
+Compatible con Kubuntu 26.04 / Plasma 6.6 / Qt 6.10. QML puro, sin
+librerías nativas. Necesita los módulos QML de Qt 6 `QtQuick.Controls` y
+`QtQuick.Layouts` (paquetes `qml6-module-qtquick-controls` y
+`qml6-module-qtquick-layouts` en Debian/Ubuntu).
+
+> Esta rama es el port a Plasma 6 (versión 1.0.0, mismo `Id` de plugin y mismas
+> claves de configuración). La versión para Plasma 5.27 / Qt 5.15 sigue en la rama
+> `claude/todo-notion-jira-enhancements`.
 
 ---
 
@@ -160,8 +166,19 @@ cd worklog-plasmoid
 ./install.sh --uninstall # remover
 
 # Recargar Plasma:
-kquitapp5 plasmashell && kstart5 plasmashell
+systemctl --user restart plasma-plasmashell
 ```
+
+O a mano, sin el script (paquete `plasma-sdk` para `plasmoidviewer`):
+
+```bash
+kpackagetool6 -t Plasma/Applet -u package   # o -i si no estaba instalado
+plasmoidviewer -a package                   # prueba aislada
+journalctl --user -f | grep -iE "qml|plasma"
+```
+
+Como el `Id` del plugin no cambió, al actualizar desde la versión de Plasma 5 el
+widget conserva su configuración.
 
 ---
 

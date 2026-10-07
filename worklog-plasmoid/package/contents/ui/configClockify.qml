@@ -10,14 +10,20 @@
  * a hex id by hand.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Controls 2.15
-import org.kde.kirigami 2.5 as Kirigami
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls
+import org.kde.kirigami as Kirigami
+import org.kde.kcmutils as KCM
 
-ColumnLayout {
+KCM.SimpleKCM {
     id: page
-    spacing: Kirigami.Units.largeSpacing
+
+    // Plasma 6 also assigns cfg_<key>Default; declare them to avoid warnings.
+    property var cfg_clockifyApiKeyDefault
+    property var cfg_clockifyWorkspaceIdDefault
+    property var cfg_clockifyDefaultProjectIdDefault
+    property var cfg_clockifyBillableDefaultDefault
 
     property alias  cfg_clockifyApiKey:           keyField.text
     property alias  cfg_clockifyWorkspaceId:      workspaceField.text
@@ -33,134 +39,6 @@ ColumnLayout {
         }
         return -1;
     }
-
-    Label {
-        Layout.fillWidth: true
-        wrapMode: Text.WordWrap
-        opacity: 0.75
-        text: i18n("Clockify se autentica con un API key personal. Generalo en "
-                 + "Clockify → Perfil → Settings → API y pegalo abajo. El plasmoide "
-                 + "resuelve usuario + workspace automáticamente en la primera sincronización.")
-    }
-
-    Kirigami.FormLayout {
-        Layout.fillWidth: true
-
-        RowLayout {
-            Kirigami.FormData.label: i18n("API key:")
-            spacing: Kirigami.Units.smallSpacing
-            TextField {
-                id: keyField
-                Layout.fillWidth: true
-                echoMode: showKey.checked ? TextInput.Normal : TextInput.Password
-                placeholderText: i18n("Pegá tu API key acá")
-                inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhSensitiveData
-            }
-            CheckBox {
-                id: showKey
-                text: i18n("Ver")
-            }
-        }
-
-        RowLayout {
-            Kirigami.FormData.label: i18n("Workspace ID:")
-            spacing: Kirigami.Units.smallSpacing
-            TextField {
-                id: workspaceField
-                Layout.fillWidth: true
-                placeholderText: i18n("Vacío = usa tu workspace por defecto")
-                inputMethodHints: Qt.ImhNoPredictiveText
-            }
-            Button {
-                text: i18n("Limpiar")
-                icon.name: "edit-clear"
-                enabled: workspaceField.text.length > 0
-                onClicked: workspaceField.text = ""
-                ToolTip.text: i18n("Vaciar el campo para que el plasmoide use el workspace por defecto")
-                ToolTip.visible: hovered
-                ToolTip.delay: 500
-            }
-        }
-
-        Label {
-            Kirigami.FormData.label: ""
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-            opacity: 0.65
-            font.pixelSize: Kirigami.Theme.smallFont.pixelSize
-            text: i18n("Es un Object ID hex de 24 caracteres (ej. 60661036c145ea559a4e8be6), no "
-                     + "el nombre del workspace. Si lo dejás vacío, el plasmoide va a resolver "
-                     + "tu workspace por defecto en la primera sincronización.")
-        }
-
-        // Default project — ComboBox populated by "Probar". Before that it
-        // only has "(sin proyecto)" plus, if a project id is already saved,
-        // a placeholder row so the saved value isn't silently dropped.
-        ComboBox {
-            id: projectCombo
-            Kirigami.FormData.label: i18n("Proyecto por defecto:")
-            Layout.fillWidth: true
-            textRole: "name"
-            valueRole: "id"
-            model: {
-                var arr = page.projectList.slice();
-                var id = page.cfg_clockifyDefaultProjectId;
-                if (id && page._projectIndexFor(id) < 0) {
-                    arr.push({ id: id, name: i18n("[%1] (probá la conexión)", id.substring(0, 8)) });
-                }
-                return arr;
-            }
-            currentIndex: {
-                var i = _modelIndexFor(page.cfg_clockifyDefaultProjectId);
-                return i < 0 ? 0 : i;
-            }
-            onActivated: page.cfg_clockifyDefaultProjectId = model[currentIndex].id
-            function _modelIndexFor(id) {
-                for (var i = 0; i < model.length; i++) {
-                    if (model[i].id === id) return i;
-                }
-                return -1;
-            }
-        }
-
-        CheckBox {
-            id: billableCheck
-            Kirigami.FormData.label: i18n("Billable:")
-            text: i18n("Marcar como facturable por defecto en nuevas entradas")
-        }
-    }
-
-    GroupBox {
-        Layout.fillWidth: true
-        title: i18n("Probar conexión")
-
-        ColumnLayout {
-            anchors.fill: parent
-            spacing: Kirigami.Units.smallSpacing
-
-            RowLayout {
-                Layout.fillWidth: true
-                Button {
-                    text: i18n("Probar")
-                    icon.name: "network-connect"
-                    onClicked: {
-                        statusLabel.text = i18n("Conectando…");
-                        statusLabel.color = palette.text;
-                        page._test(keyField.text);
-                    }
-                }
-                Item { Layout.fillWidth: true }
-            }
-            Label {
-                id: statusLabel
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                text: ""
-            }
-        }
-    }
-
-    Item { Layout.fillHeight: true }
 
     // -------- Connection test + project fetch --------
 
@@ -246,5 +124,138 @@ ColumnLayout {
             statusLabel.text = i18n("Error de red al traer proyectos: %1", e);
             statusLabel.color = "#e74c3c";
         }
+    }
+
+    ColumnLayout {
+        spacing: Kirigami.Units.largeSpacing
+
+        Label {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            opacity: 0.75
+            text: i18n("Clockify se autentica con un API key personal. Generalo en "
+                     + "Clockify → Perfil → Settings → API y pegalo abajo. El plasmoide "
+                     + "resuelve usuario + workspace automáticamente en la primera sincronización.")
+        }
+
+        Kirigami.FormLayout {
+            Layout.fillWidth: true
+
+            RowLayout {
+                Kirigami.FormData.label: i18n("API key:")
+                spacing: Kirigami.Units.smallSpacing
+                TextField {
+                    id: keyField
+                    Layout.fillWidth: true
+                    echoMode: showKey.checked ? TextInput.Normal : TextInput.Password
+                    placeholderText: i18n("Pegá tu API key acá")
+                    inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhSensitiveData
+                }
+                CheckBox {
+                    id: showKey
+                    text: i18n("Ver")
+                }
+            }
+
+            RowLayout {
+                Kirigami.FormData.label: i18n("Workspace ID:")
+                spacing: Kirigami.Units.smallSpacing
+                TextField {
+                    id: workspaceField
+                    Layout.fillWidth: true
+                    placeholderText: i18n("Vacío = usa tu workspace por defecto")
+                    inputMethodHints: Qt.ImhNoPredictiveText
+                }
+                Button {
+                    text: i18n("Limpiar")
+                    icon.name: "edit-clear"
+                    enabled: workspaceField.text.length > 0
+                    onClicked: workspaceField.text = ""
+                    ToolTip.text: i18n("Vaciar el campo para que el plasmoide use el workspace por defecto")
+                    ToolTip.visible: hovered
+                    ToolTip.delay: 500
+                }
+            }
+
+            Label {
+                Kirigami.FormData.label: ""
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                opacity: 0.65
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                text: i18n("Es un Object ID hex de 24 caracteres (ej. 60661036c145ea559a4e8be6), no "
+                         + "el nombre del workspace. Si lo dejás vacío, el plasmoide va a resolver "
+                         + "tu workspace por defecto en la primera sincronización.")
+            }
+
+            // Default project — ComboBox populated by "Probar". Before that it
+            // only has "(sin proyecto)" plus, if a project id is already saved,
+            // a placeholder row so the saved value isn't silently dropped.
+            ComboBox {
+                id: projectCombo
+                Kirigami.FormData.label: i18n("Proyecto por defecto:")
+                Layout.fillWidth: true
+                textRole: "name"
+                valueRole: "id"
+                model: {
+                    var arr = page.projectList.slice();
+                    var id = page.cfg_clockifyDefaultProjectId;
+                    if (id && page._projectIndexFor(id) < 0) {
+                        arr.push({ id: id, name: i18n("[%1] (probá la conexión)", id.substring(0, 8)) });
+                    }
+                    return arr;
+                }
+                currentIndex: {
+                    var i = _modelIndexFor(page.cfg_clockifyDefaultProjectId);
+                    return i < 0 ? 0 : i;
+                }
+                onActivated: page.cfg_clockifyDefaultProjectId = model[currentIndex].id
+                function _modelIndexFor(id) {
+                    for (var i = 0; i < model.length; i++) {
+                        if (model[i].id === id) return i;
+                    }
+                    return -1;
+                }
+            }
+
+            CheckBox {
+                id: billableCheck
+                Kirigami.FormData.label: i18n("Billable:")
+                text: i18n("Marcar como facturable por defecto en nuevas entradas")
+            }
+        }
+
+        GroupBox {
+            Layout.fillWidth: true
+            title: i18n("Probar conexión")
+
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: Kirigami.Units.smallSpacing
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Button {
+                        text: i18n("Probar")
+                        icon.name: "network-connect"
+                        onClicked: {
+                            statusLabel.text = i18n("Conectando…");
+                            statusLabel.color = palette.text;
+                            page._test(keyField.text);
+                        }
+                    }
+                    Item { Layout.fillWidth: true }
+                }
+                Label {
+                    id: statusLabel
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: ""
+                }
+            }
+        }
+
+        Item { Layout.fillHeight: true }
+
     }
 }

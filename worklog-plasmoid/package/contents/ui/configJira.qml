@@ -8,96 +8,38 @@
  * values currently in the form (not necessarily saved yet).
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Controls 2.15
-import org.kde.kirigami 2.5 as Kirigami
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls
+import org.kde.kirigami as Kirigami
+import org.kde.kcmutils as KCM
 
-ColumnLayout {
+KCM.SimpleKCM {
     id: page
-    spacing: Kirigami.Units.largeSpacing
+
+    // Plasma 6 also assigns cfg_<key>Default; declare them to avoid warnings.
+    property var cfg_jiraSiteDefault
+    property var cfg_jiraEmailDefault
+    property var cfg_jiraTokenDefault
 
     property alias cfg_jiraSite:  siteField.text
     property alias cfg_jiraEmail: emailField.text
     property alias cfg_jiraToken: tokenField.text
 
-    Label {
-        Layout.fillWidth: true
-        wrapMode: Text.WordWrap
-        opacity: 0.75
-        text: i18n("Estas credenciales están compartidas con el plasmoide «Categorized ToDo». "
-                 + "Si ya las configuraste allá, no hace falta volver a escribirlas. El token "
-                 + "se guarda en plain text en ~/.config/categorizedtodorc (permisos 0600).")
+    // Basic-auth header value. Base64 of the UTF-8 bytes of "user:pass"
+    // (Qt 6 deprecates Qt.btoa(string), so it's done by hand).
+    function _basicAuth(user, pass) {
+        var s = unescape(encodeURIComponent(user + ":" + pass));
+        var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        var out = "";
+        for (var i = 0; i < s.length; i += 3) {
+            var n = (s.charCodeAt(i) << 16) | ((s.charCodeAt(i + 1) || 0) << 8) | (s.charCodeAt(i + 2) || 0);
+            out += chars[(n >> 18) & 63] + chars[(n >> 12) & 63]
+                 + (i + 1 < s.length ? chars[(n >> 6) & 63] : "=")
+                 + (i + 2 < s.length ? chars[n & 63] : "=");
+        }
+        return "Basic " + out;
     }
-
-    Kirigami.FormLayout {
-        Layout.fillWidth: true
-
-        TextField {
-            id: siteField
-            Kirigami.FormData.label: i18n("Sitio Jira:")
-            Layout.fillWidth: true
-            placeholderText: "https://your-company.atlassian.net"
-            inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoPredictiveText
-        }
-
-        TextField {
-            id: emailField
-            Kirigami.FormData.label: i18n("Email:")
-            Layout.fillWidth: true
-            placeholderText: "you@example.com"
-            inputMethodHints: Qt.ImhEmailCharactersOnly | Qt.ImhNoPredictiveText
-        }
-
-        RowLayout {
-            Kirigami.FormData.label: i18n("API token:")
-            spacing: Kirigami.Units.smallSpacing
-            TextField {
-                id: tokenField
-                Layout.fillWidth: true
-                echoMode: showTokenCheck.checked ? TextInput.Normal : TextInput.Password
-                placeholderText: i18n("Generado en id.atlassian.com")
-                inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhSensitiveData
-            }
-            CheckBox {
-                id: showTokenCheck
-                text: i18n("Ver")
-            }
-        }
-    }
-
-    GroupBox {
-        Layout.fillWidth: true
-        title: i18n("Probar conexión")
-
-        ColumnLayout {
-            anchors.fill: parent
-            spacing: Kirigami.Units.smallSpacing
-
-            RowLayout {
-                Layout.fillWidth: true
-                Button {
-                    text: i18n("Probar")
-                    icon.name: "network-connect"
-                    onClicked: {
-                        statusLabel.text = i18n("Conectando…");
-                        statusLabel.color = palette.text;
-                        page._test(siteField.text, emailField.text, tokenField.text);
-                    }
-                }
-                Item { Layout.fillWidth: true }
-            }
-
-            Label {
-                id: statusLabel
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                text: ""
-            }
-        }
-    }
-
-    Item { Layout.fillHeight: true }
 
     function _test(site, email, token) {
         site = (site || "").trim().replace(/\/+$/, "");
@@ -108,7 +50,7 @@ ColumnLayout {
         }
         var xhr = new XMLHttpRequest();
         xhr.open("GET", site + "/rest/api/3/myself", true);
-        xhr.setRequestHeader("Authorization", "Basic " + Qt.btoa(email + ":" + token));
+        xhr.setRequestHeader("Authorization", _basicAuth(email, token));
         xhr.setRequestHeader("Accept", "application/json");
         xhr.onreadystatechange = function() {
             if (xhr.readyState !== XMLHttpRequest.DONE) return;
@@ -138,5 +80,88 @@ ColumnLayout {
             statusLabel.text = i18n("Error de red: %1", e);
             statusLabel.color = "#e74c3c";
         }
+    }
+
+    ColumnLayout {
+        spacing: Kirigami.Units.largeSpacing
+
+        Label {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            opacity: 0.75
+            text: i18n("Estas credenciales están compartidas con el plasmoide «Categorized ToDo». "
+                     + "Si ya las configuraste allá, no hace falta volver a escribirlas. El token "
+                     + "se guarda en plain text en ~/.config/categorizedtodorc (permisos 0600).")
+        }
+
+        Kirigami.FormLayout {
+            Layout.fillWidth: true
+
+            TextField {
+                id: siteField
+                Kirigami.FormData.label: i18n("Sitio Jira:")
+                Layout.fillWidth: true
+                placeholderText: "https://your-company.atlassian.net"
+                inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoPredictiveText
+            }
+
+            TextField {
+                id: emailField
+                Kirigami.FormData.label: i18n("Email:")
+                Layout.fillWidth: true
+                placeholderText: "you@example.com"
+                inputMethodHints: Qt.ImhEmailCharactersOnly | Qt.ImhNoPredictiveText
+            }
+
+            RowLayout {
+                Kirigami.FormData.label: i18n("API token:")
+                spacing: Kirigami.Units.smallSpacing
+                TextField {
+                    id: tokenField
+                    Layout.fillWidth: true
+                    echoMode: showTokenCheck.checked ? TextInput.Normal : TextInput.Password
+                    placeholderText: i18n("Generado en id.atlassian.com")
+                    inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhSensitiveData
+                }
+                CheckBox {
+                    id: showTokenCheck
+                    text: i18n("Ver")
+                }
+            }
+        }
+
+        GroupBox {
+            Layout.fillWidth: true
+            title: i18n("Probar conexión")
+
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: Kirigami.Units.smallSpacing
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Button {
+                        text: i18n("Probar")
+                        icon.name: "network-connect"
+                        onClicked: {
+                            statusLabel.text = i18n("Conectando…");
+                            statusLabel.color = palette.text;
+                            page._test(siteField.text, emailField.text, tokenField.text);
+                        }
+                    }
+                    Item { Layout.fillWidth: true }
+                }
+
+                Label {
+                    id: statusLabel
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: ""
+                }
+            }
+        }
+
+        Item { Layout.fillHeight: true }
+
     }
 }

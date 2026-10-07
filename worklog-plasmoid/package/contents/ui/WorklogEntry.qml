@@ -21,11 +21,11 @@
  * automatically uses smaller fonts to fit.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import org.kde.plasma.plasmoid 2.0
-import org.kde.plasma.core 2.0 as PlasmaCore
-import org.kde.plasma.components 3.0 as PlasmaComponents3
+import QtQuick
+import QtQuick.Layouts
+import org.kde.plasma.plasmoid
+import org.kde.plasma.components as PlasmaComponents3
+import org.kde.kirigami as Kirigami
 
 Rectangle {
     id: block
@@ -65,8 +65,8 @@ Rectangle {
     border.color: block._borderColor()
 
     readonly property bool _isShort: entry && entry.durationSec <= 30 * 60
-    readonly property bool _showSummary: plasmoid.configuration.worklogShowIssueSummary === true
-    readonly property int _baseSize:    PlasmaCore.Theme.smallestFont.pixelSize
+    readonly property bool _showSummary: Plasmoid.configuration.worklogShowIssueSummary === true
+    readonly property int _baseSize:    Kirigami.Theme.smallFont.pixelSize
     readonly property int _smallSize:   Math.max(7, _baseSize - 1)
     readonly property int _useSize:     (compact || _isShort) ? _smallSize : _baseSize
 
@@ -370,11 +370,12 @@ Rectangle {
         border.width: 1
         border.color: Qt.rgba(1, 1, 1, 0.45)
 
-        PlasmaCore.IconItem {
+        Kirigami.Icon {
             anchors.fill: parent
             anchors.margins: 1
             source: "edit-copy"
-            colorGroup: PlasmaCore.Theme.ComplementaryColorGroup
+            Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
+            Kirigami.Theme.inherit: false
         }
         MouseArea {
             id: dupBtnMA

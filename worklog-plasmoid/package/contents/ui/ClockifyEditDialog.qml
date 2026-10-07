@@ -5,11 +5,12 @@
  * adds a tags multi-select + billable toggle.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Controls 2.15 as QQC2
-import org.kde.plasma.core 2.0 as PlasmaCore
-import org.kde.plasma.components 3.0 as PlasmaComponents3
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls as QQC2
+import org.kde.plasma.components as PlasmaComponents3
+import org.kde.kirigami as Kirigami
+import org.kde.plasma.plasmoid
 
 Item {
     id: dlg
@@ -26,7 +27,7 @@ Item {
 
     property bool loading: false
     property string statusText: ""
-    property color statusColor: PlasmaCore.Theme.textColor
+    property color statusColor: Kirigami.Theme.textColor
 
     signal saved()
     signal deleted()
@@ -72,13 +73,10 @@ Item {
     }
 
     function plasmoidConfigDefaultProject() {
-        return (typeof plasmoid !== "undefined" && plasmoid)
-               ? (plasmoid.configuration.clockifyDefaultProjectId || "")
-               : "";
+        return Plasmoid.configuration.clockifyDefaultProjectId || "";
     }
     function plasmoidConfigDefaultBillable() {
-        if (typeof plasmoid === "undefined" || !plasmoid) return true;
-        return plasmoid.configuration.clockifyBillableDefault !== false;
+        return Plasmoid.configuration.clockifyBillableDefault !== false;
     }
 
     function _ensureContext() {
@@ -88,7 +86,7 @@ Item {
             dlg.loading = false;
             if (!ok) {
                 statusText = i18n("No se pudo conectar a Clockify (revisá la API key).");
-                statusColor = PlasmaCore.Theme.negativeTextColor;
+                statusColor = Kirigami.Theme.negativeTextColor;
             }
         });
     }
@@ -138,12 +136,12 @@ Item {
     // kcfg, capped at parent's available size minus a small margin.
     Rectangle {
         anchors.centerIn: parent
-        width: Math.min(plasmoid.configuration.worklogModalWidth || 720,
+        width: Math.min(Plasmoid.configuration.worklogModalWidth || 720,
                         Math.max(420, parent.width  - 24))
-        height: Math.min(plasmoid.configuration.worklogModalHeight || 520,
+        height: Math.min(Plasmoid.configuration.worklogModalHeight || 520,
                         Math.max(360, parent.height - 36))
-        color: PlasmaCore.Theme.backgroundColor
-        border.color: PlasmaCore.Theme.textColor
+        color: Kirigami.Theme.backgroundColor
+        border.color: Kirigami.Theme.textColor
         border.width: 1
         radius: 4
 
@@ -152,7 +150,7 @@ Item {
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: 10
-            spacing: PlasmaCore.Units.smallSpacing
+            spacing: Kirigami.Units.smallSpacing
 
             RowLayout {
                 Layout.fillWidth: true
@@ -172,7 +170,7 @@ Item {
             // Time row.
             RowLayout {
                 Layout.fillWidth: true
-                spacing: PlasmaCore.Units.smallSpacing
+                spacing: Kirigami.Units.smallSpacing
 
                 PlasmaComponents3.Label {
                     text: {
@@ -263,18 +261,18 @@ Item {
                 horizontalAlignment: Text.AlignRight
                 text: i18n("Duración: %1", dlg._fmtDur(dlg._durationSec()))
                 opacity: 0.65
-                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
             }
 
             // Project picker.
             PlasmaComponents3.Label { text: i18n("Proyecto"); opacity: 0.7 }
             RowLayout {
                 Layout.fillWidth: true
-                spacing: PlasmaCore.Units.smallSpacing
+                spacing: Kirigami.Units.smallSpacing
 
                 Rectangle {
-                    width: 14
-                    height: 14
+                    Layout.preferredWidth: 14
+                    Layout.preferredHeight: 14
                     radius: 2
                     color: {
                         if (!store) return "transparent";
@@ -319,18 +317,18 @@ Item {
                         width: tagLabel.implicitWidth + 14
                         radius: 10
                         color: checked
-                               ? PlasmaCore.Theme.highlightColor
+                               ? Kirigami.Theme.highlightColor
                                : Qt.rgba(1, 1, 1, 0.06)
                         border.color: checked
-                                      ? PlasmaCore.Theme.highlightColor
+                                      ? Kirigami.Theme.highlightColor
                                       : Qt.rgba(1, 1, 1, 0.2)
                         border.width: 1
                         PlasmaComponents3.Label {
                             id: tagLabel
                             anchors.centerIn: parent
                             text: modelData.name
-                            color: checked ? "white" : PlasmaCore.Theme.textColor
-                            font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                            color: checked ? "white" : Kirigami.Theme.textColor
+                            font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                         }
                         MouseArea {
                             anchors.fill: parent
@@ -411,7 +409,7 @@ Item {
                     onClicked: {
                         dlg.loading = true;
                         dlg.statusText = dlg.isEdit ? i18n("Guardando…") : i18n("Creando…");
-                        dlg.statusColor = PlasmaCore.Theme.textColor;
+                        dlg.statusColor = Kirigami.Theme.textColor;
                         var sd = new Date(dlg.startMs);
                         var ed = new Date(dlg.endMs);
                         if (dlg.isEdit) {
@@ -453,7 +451,7 @@ Item {
             if (ok) { dlg.visible = false; dlg.saved(); }
             else {
                 dlg.statusText = i18n("Error: %1", err);
-                dlg.statusColor = PlasmaCore.Theme.negativeTextColor;
+                dlg.statusColor = Kirigami.Theme.negativeTextColor;
             }
         }
         function onUpdateFinished(ok, err) {
@@ -461,7 +459,7 @@ Item {
             if (ok) { dlg.visible = false; dlg.saved(); }
             else {
                 dlg.statusText = i18n("Error: %1", err);
-                dlg.statusColor = PlasmaCore.Theme.negativeTextColor;
+                dlg.statusColor = Kirigami.Theme.negativeTextColor;
             }
         }
         function onDeleteFinished(ok, err) {
@@ -469,7 +467,7 @@ Item {
             if (ok) { dlg.visible = false; dlg.deleted(); }
             else {
                 dlg.statusText = i18n("Error al eliminar: %1", err);
-                dlg.statusColor = PlasmaCore.Theme.negativeTextColor;
+                dlg.statusColor = Kirigami.Theme.negativeTextColor;
             }
         }
     }

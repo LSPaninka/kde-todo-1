@@ -7,38 +7,41 @@
  * (toggled by the pin button in the header).
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import org.kde.plasma.plasmoid 2.0
-import org.kde.plasma.core 2.0 as PlasmaCore
+import QtQuick
+import QtQuick.Layouts
+import org.kde.plasma.plasmoid
+import org.kde.kirigami as Kirigami
 
-Item {
+PlasmoidItem {
     id: root
 
-    Plasmoid.switchWidth: PlasmaCore.Units.gridUnit * 14
-    Plasmoid.switchHeight: PlasmaCore.Units.gridUnit * 10
+    switchWidth: Kirigami.Units.gridUnit * 14
+    switchHeight: Kirigami.Units.gridUnit * 10
 
-    readonly property string source: plasmoid.configuration.worklogSource || "jira"
-    readonly property bool pinned:   plasmoid.configuration.worklogPinned === true
+    readonly property string source: Plasmoid.configuration.worklogSource || "jira"
+    readonly property bool pinned:   Plasmoid.configuration.worklogPinned === true
 
-    Plasmoid.fullRepresentation: FullRepresentation {
+    fullRepresentation: FullRepresentation {
+        plasmoidItem: root
         jiraStore: _jira
         clockifyStore: _clockify
         googleStore: _google
-        Layout.minimumWidth: plasmoid.configuration.worklogPopupWidth
-        Layout.minimumHeight: plasmoid.configuration.worklogPopupHeight
-        Layout.preferredWidth: plasmoid.configuration.worklogPopupWidth
-        Layout.preferredHeight: plasmoid.configuration.worklogPopupHeight
+        Layout.minimumWidth: Plasmoid.configuration.worklogPopupWidth
+        Layout.minimumHeight: Plasmoid.configuration.worklogPopupHeight
+        Layout.preferredWidth: Plasmoid.configuration.worklogPopupWidth
+        Layout.preferredHeight: Plasmoid.configuration.worklogPopupHeight
     }
 
-    Plasmoid.compactRepresentation: CompactRepresentation { }
+    compactRepresentation: CompactRepresentation {
+        plasmoidItem: root
+    }
 
-    Plasmoid.toolTipMainText: {
+    toolTipMainText: {
         if (root.source === "clockify")      return i18n("Clockify Worklog");
         if (root.source === "jira-clockify") return i18n("Jira / Clockify Worklog");
         return i18n("Jira Worklog Calendar");
     }
-    Plasmoid.toolTipSubText: {
+    toolTipSubText: {
         var parts = [];
         if ((root.source === "jira" || root.source === "jira-clockify") && _jira) {
             if (_jira.loading) parts.push(i18n("Jira: cargando…"));
@@ -55,32 +58,32 @@ Item {
 
     JiraWorklogStore {
         id: _jira
-        plasmoidApi: plasmoid
+        plasmoidApi: Plasmoid
     }
     ClockifyStore {
         id: _clockify
-        plasmoidApi: plasmoid
+        plasmoidApi: Plasmoid
     }
     GoogleCalendarStore {
         id: _google
-        plasmoidApi: plasmoid
+        plasmoidApi: Plasmoid
     }
 
     Component.onCompleted: {
-        _jira.plasmoidApi     = plasmoid;
-        _clockify.plasmoidApi = plasmoid;
-        _google.plasmoidApi   = plasmoid;
+        _jira.plasmoidApi     = Plasmoid;
+        _clockify.plasmoidApi = Plasmoid;
+        _google.plasmoidApi   = Plasmoid;
         _jira.init();
         _clockify.init();
         _google.init();
         // Apply the pinned state on startup.
-        plasmoid.hideOnWindowDeactivate = !root.pinned;
+        root.hideOnWindowDeactivate = !root.pinned;
     }
 
     Connections {
-        target: plasmoid.configuration
+        target: Plasmoid.configuration
         function onWorklogPinnedChanged() {
-            plasmoid.hideOnWindowDeactivate = !plasmoid.configuration.worklogPinned;
+            root.hideOnWindowDeactivate = !Plasmoid.configuration.worklogPinned;
         }
     }
 }

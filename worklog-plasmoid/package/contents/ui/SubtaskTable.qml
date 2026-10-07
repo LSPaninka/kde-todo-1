@@ -16,11 +16,12 @@
  * lazily on open) and "Ver en Jira". Both fire signals back up.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Controls 2.15 as QQC2
-import org.kde.plasma.core 2.0 as PlasmaCore
-import org.kde.plasma.components 3.0 as PlasmaComponents3
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls as QQC2
+import org.kde.plasma.components as PlasmaComponents3
+import org.kde.kirigami as Kirigami
+import org.kde.plasma.plasmoid
 
 Item {
     id: tbl
@@ -28,7 +29,7 @@ Item {
     property var jiraStore
     readonly property int _v: jiraStore ? jiraStore.version : 0
     readonly property bool _showParent:
-        plasmoid.configuration.worklogSubtaskShowParent !== false
+        Plasmoid.configuration.worklogSubtaskShowParent !== false
 
     // Sort state. Empty _sortKey keeps the JQL's own ORDER BY. Clicking a
     // header sets it; clicking the active one flips direction.
@@ -157,7 +158,7 @@ Item {
             anchors.fill: parent
             text: parent.title + tbl._sortGlyph(parent.skey)
             opacity: tbl._sortKey === parent.skey ? 0.9 : 0.6
-            font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+            font.pixelSize: Kirigami.Theme.smallFont.pixelSize
             font.bold: true
             horizontalAlignment: parent.halign
             verticalAlignment: Text.AlignVCenter
@@ -178,7 +179,7 @@ Item {
         // -------- Header --------
         RowLayout {
             Layout.fillWidth: true
-            spacing: PlasmaCore.Units.smallSpacing
+            spacing: Kirigami.Units.smallSpacing
 
             PlasmaComponents3.Label {
                 text: i18n("Subtareas")
@@ -188,7 +189,7 @@ Item {
                 visible: !tbl._searchOpen
                 text: tbl._displayRows.length > 0 ? ("(" + tbl._displayRows.length + ")") : ""
                 opacity: 0.6
-                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
             }
             Item { visible: !tbl._searchOpen; Layout.fillWidth: true }
 
@@ -233,7 +234,7 @@ Item {
         // -------- Column header (clickable to sort) --------
         RowLayout {
             Layout.fillWidth: true
-            spacing: PlasmaCore.Units.smallSpacing
+            spacing: Kirigami.Units.smallSpacing
 
             HeaderCell { Layout.fillWidth: true; title: i18n("Subtarea"); skey: "key" }
             HeaderCell { Layout.preferredWidth: tbl._statusW; title: i18n("Estado"); skey: "status" }
@@ -255,7 +256,7 @@ Item {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 1
-            color: PlasmaCore.Theme.textColor
+            color: Kirigami.Theme.textColor
             opacity: 0.15
         }
 
@@ -302,7 +303,7 @@ Item {
                         id: row
                         anchors.fill: parent
                         anchors.margins: 4
-                        spacing: PlasmaCore.Units.smallSpacing
+                        spacing: Kirigami.Units.smallSpacing
 
                         // Code + summary
                         RowLayout {
@@ -330,7 +331,7 @@ Item {
                                 anchors.centerIn: parent
                                 text: modelData.status
                                 color: tbl._statusFg()
-                                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                                 font.bold: true
                                 elide: Text.ElideRight
                                 width: parent.width - 8

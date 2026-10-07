@@ -17,14 +17,24 @@
  * pick which one to show (kcfg googleCalendarId). See docs/GOOGLE_CALENDAR.md.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Controls 2.15
-import org.kde.kirigami 2.5 as Kirigami
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls
+import org.kde.kirigami as Kirigami
+import org.kde.kcmutils as KCM
 
-ColumnLayout {
+KCM.SimpleKCM {
     id: page
-    spacing: Kirigami.Units.largeSpacing
+
+    // Plasma 6 also assigns cfg_<key>Default; declare them to avoid warnings.
+    property var cfg_googleCalEnabledDefault
+    property var cfg_googleClientIdDefault
+    property var cfg_googleClientSecretDefault
+    property var cfg_googleRefreshTokenDefault
+    property var cfg_googleCalDebugDefault
+    property var cfg_googleCalendarIdDefault
+    property var cfg_googleCalendarIdsDefault
+    property var cfg_googleCalendarColorsDefault
 
     property alias cfg_googleCalEnabled:    enabledCheck.checked
     property alias cfg_googleClientId:      clientIdField.text
@@ -99,236 +109,6 @@ ColumnLayout {
     function _optIndexOf(opts, id) {
         for (var i = 0; i < opts.length; i++) if (opts[i].id === id) return i;
         return 0;
-    }
-
-    Label {
-        Layout.fillWidth: true
-        wrapMode: Text.WordWrap
-        opacity: 0.75
-        text: i18n("Integración de solo lectura con Google Calendar: muestra tus eventos como "
-                 + "bloques rojos translúcidos detrás del worklog. La autorización es de una "
-                 + "sola vez con un código de dispositivo (no requiere servidor local). Mirá "
-                 + "docs/GOOGLE_CALENDAR.md para el paso a paso de cómo crear el cliente OAuth "
-                 + "en Google Cloud (plan gratuito) y elegir el calendario.")
-    }
-
-    CheckBox {
-        id: enabledCheck
-        text: i18n("Mostrar los eventos de Google Calendar en el worklog")
-    }
-
-    Kirigami.FormLayout {
-        Layout.fillWidth: true
-
-        TextField {
-            id: clientIdField
-            Kirigami.FormData.label: i18n("Client ID:")
-            Layout.fillWidth: true
-            placeholderText: "xxxxxxxx.apps.googleusercontent.com"
-            inputMethodHints: Qt.ImhNoPredictiveText
-        }
-        RowLayout {
-            Kirigami.FormData.label: i18n("Client secret:")
-            spacing: Kirigami.Units.smallSpacing
-            TextField {
-                id: clientSecretField
-                Layout.fillWidth: true
-                echoMode: showSecretCheck.checked ? TextInput.Normal : TextInput.Password
-                inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhSensitiveData
-            }
-            CheckBox { id: showSecretCheck; text: i18n("Ver") }
-        }
-        RowLayout {
-            Kirigami.FormData.label: i18n("Refresh token:")
-            spacing: Kirigami.Units.smallSpacing
-            TextField {
-                id: refreshTokenField
-                Layout.fillWidth: true
-                echoMode: showTokenCheck.checked ? TextInput.Normal : TextInput.Password
-                placeholderText: i18n("Se completa al autorizar")
-                inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhSensitiveData
-            }
-            CheckBox { id: showTokenCheck; text: i18n("Ver") }
-        }
-    }
-
-    // -------- Authorize (device flow) --------
-    GroupBox {
-        Layout.fillWidth: true
-        title: i18n("Autorizar")
-
-        ColumnLayout {
-            anchors.fill: parent
-            spacing: Kirigami.Units.smallSpacing
-
-            RowLayout {
-                Layout.fillWidth: true
-                Button {
-                    text: page._polling ? i18n("Esperando autorización…") : i18n("Conectar con Google")
-                    icon.name: "network-connect"
-                    enabled: !page._polling
-                    onClicked: page._startDeviceAuth()
-                }
-                Button {
-                    visible: page._polling
-                    text: i18n("Cancelar")
-                    icon.name: "dialog-cancel"
-                    onClicked: page._stopPolling(i18n("Autorización cancelada."))
-                }
-                Item { Layout.fillWidth: true }
-            }
-
-            // The user code + open-page button, visible while authorizing.
-            RowLayout {
-                Layout.fillWidth: true
-                visible: page._polling && userCodeLabel.text.length > 0
-                Label { text: i18n("Código:"); opacity: 0.7 }
-                Label {
-                    id: userCodeLabel
-                    text: ""
-                    font.family: "monospace"
-                    font.bold: true
-                    font.pixelSize: Math.round(Kirigami.Theme.defaultFont.pixelSize * 1.4)
-                }
-                Button {
-                    text: i18n("Abrir página de Google")
-                    icon.name: "internet-services"
-                    onClicked: Qt.openUrlExternally(verifUrlField.text || "https://www.google.com/device")
-                }
-            }
-            // Hidden holder for the verification URL.
-            TextField { id: verifUrlField; visible: false }
-
-            Label {
-                id: authStatus
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                text: ""
-            }
-        }
-    }
-
-    // -------- Calendars (up to 3) --------
-    GroupBox {
-        Layout.fillWidth: true
-        title: i18n("Calendarios (hasta 3)")
-
-        ColumnLayout {
-            anchors.fill: parent
-            spacing: Kirigami.Units.smallSpacing
-
-            RowLayout {
-                Layout.fillWidth: true
-                Button {
-                    text: i18n("Cargar mis calendarios")
-                    icon.name: "view-refresh"
-                    enabled: refreshTokenField.text.length > 0 &&
-                             clientIdField.text.length > 0 &&
-                             clientSecretField.text.length > 0
-                    onClicked: page._loadCalendars()
-                }
-                Item { Layout.fillWidth: true }
-                Label {
-                    id: calStatus
-                    text: ""
-                    wrapMode: Text.WordWrap
-                    Layout.maximumWidth: 280
-                }
-            }
-
-            // Three calendar rows: pick a calendar + a (translucent) color.
-            Repeater {
-                model: 3
-                delegate: RowLayout {
-                    Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing
-                    property int row: index
-
-                    Label {
-                        text: i18n("%1.", index + 1)
-                        opacity: 0.6
-                    }
-                    ComboBox {
-                        Layout.fillWidth: true
-                        textRole: "label"
-                        model: page._calOptions()
-                        currentIndex: page._optIndexOf(page._calOptions(), page._idAt(row))
-                        onActivated: function(idx) {
-                            var opts = page._calOptions();
-                            page._setId(row, opts[idx] ? opts[idx].id : "");
-                        }
-                    }
-                    // Color swatch — opens the palette popup for this row.
-                    Rectangle {
-                        Layout.preferredWidth: 34
-                        Layout.preferredHeight: 22
-                        radius: 3
-                        color: page._colorAt(row)
-                        border.width: 1
-                        border.color: Qt.rgba(1, 1, 1, 0.4)
-                        opacity: page._idAt(row).length > 0 ? 1.0 : 0.35
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: { page._colorTargetRow = row; colorPopup.open(); }
-                        }
-                    }
-                }
-            }
-
-            Label {
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                opacity: 0.8
-                text: i18n("Elegí hasta 3 calendarios. El color por defecto es el rojo translúcido; "
-                         + "podés cambiarlo por calendario (siempre se dibuja translúcido detrás del "
-                         + "worklog). «primary» es tu calendario principal; para uno secundario, "
-                         + "cargá la lista o usá su Calendar ID.")
-            }
-        }
-    }
-
-    // Shared palette popup for picking a row's color.
-    Popup {
-        id: colorPopup
-        modal: true
-        focus: true
-        padding: 8
-        Grid {
-            columns: 5
-            spacing: 6
-            Repeater {
-                model: page._palette
-                delegate: Rectangle {
-                    width: 28; height: 28
-                    radius: 4
-                    color: modelData
-                    border.width: page._colorAt(page._colorTargetRow) === modelData ? 2 : 1
-                    border.color: page._colorAt(page._colorTargetRow) === modelData
-                                  ? Kirigami.Theme.highlightColor : Qt.rgba(1, 1, 1, 0.4)
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: { page._setColor(page._colorTargetRow, modelData); colorPopup.close(); }
-                    }
-                }
-            }
-        }
-    }
-
-    CheckBox {
-        id: debugCheck
-        text: i18n("Loggear las llamadas a Google en plasmashell stdout")
-    }
-
-    Item { Layout.fillHeight: true }
-
-    // Polls the token endpoint while a device authorization is pending.
-    Timer {
-        id: pollTimer
-        interval: page._interval * 1000
-        repeat: true
-        onTriggered: page._pollToken()
     }
 
     // ------------------------------------------------------------------
@@ -520,5 +300,240 @@ ColumnLayout {
         try { xhr.send(page._form({ client_id: id, client_secret: secret,
                                     refresh_token: refresh, grant_type: "refresh_token" })); }
         catch (e) { callback(false, ""); }
+    }
+
+    ColumnLayout {
+        spacing: Kirigami.Units.largeSpacing
+
+        Label {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            opacity: 0.75
+            text: i18n("Integración de solo lectura con Google Calendar: muestra tus eventos como "
+                     + "bloques rojos translúcidos detrás del worklog. La autorización es de una "
+                     + "sola vez con un código de dispositivo (no requiere servidor local). Mirá "
+                     + "docs/GOOGLE_CALENDAR.md para el paso a paso de cómo crear el cliente OAuth "
+                     + "en Google Cloud (plan gratuito) y elegir el calendario.")
+        }
+
+        CheckBox {
+            id: enabledCheck
+            text: i18n("Mostrar los eventos de Google Calendar en el worklog")
+        }
+
+        Kirigami.FormLayout {
+            Layout.fillWidth: true
+
+            TextField {
+                id: clientIdField
+                Kirigami.FormData.label: i18n("Client ID:")
+                Layout.fillWidth: true
+                placeholderText: "xxxxxxxx.apps.googleusercontent.com"
+                inputMethodHints: Qt.ImhNoPredictiveText
+            }
+            RowLayout {
+                Kirigami.FormData.label: i18n("Client secret:")
+                spacing: Kirigami.Units.smallSpacing
+                TextField {
+                    id: clientSecretField
+                    Layout.fillWidth: true
+                    echoMode: showSecretCheck.checked ? TextInput.Normal : TextInput.Password
+                    inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhSensitiveData
+                }
+                CheckBox { id: showSecretCheck; text: i18n("Ver") }
+            }
+            RowLayout {
+                Kirigami.FormData.label: i18n("Refresh token:")
+                spacing: Kirigami.Units.smallSpacing
+                TextField {
+                    id: refreshTokenField
+                    Layout.fillWidth: true
+                    echoMode: showTokenCheck.checked ? TextInput.Normal : TextInput.Password
+                    placeholderText: i18n("Se completa al autorizar")
+                    inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhSensitiveData
+                }
+                CheckBox { id: showTokenCheck; text: i18n("Ver") }
+            }
+        }
+
+        // -------- Authorize (device flow) --------
+        GroupBox {
+            Layout.fillWidth: true
+            title: i18n("Autorizar")
+
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: Kirigami.Units.smallSpacing
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Button {
+                        text: page._polling ? i18n("Esperando autorización…") : i18n("Conectar con Google")
+                        icon.name: "network-connect"
+                        enabled: !page._polling
+                        onClicked: page._startDeviceAuth()
+                    }
+                    Button {
+                        visible: page._polling
+                        text: i18n("Cancelar")
+                        icon.name: "dialog-cancel"
+                        onClicked: page._stopPolling(i18n("Autorización cancelada."))
+                    }
+                    Item { Layout.fillWidth: true }
+                }
+
+                // The user code + open-page button, visible while authorizing.
+                RowLayout {
+                    Layout.fillWidth: true
+                    visible: page._polling && userCodeLabel.text.length > 0
+                    Label { text: i18n("Código:"); opacity: 0.7 }
+                    Label {
+                        id: userCodeLabel
+                        text: ""
+                        font.family: "monospace"
+                        font.bold: true
+                        font.pixelSize: Math.round(Kirigami.Theme.defaultFont.pixelSize * 1.4)
+                    }
+                    Button {
+                        text: i18n("Abrir página de Google")
+                        icon.name: "internet-services"
+                        onClicked: Qt.openUrlExternally(verifUrlField.text || "https://www.google.com/device")
+                    }
+                }
+                // Hidden holder for the verification URL.
+                TextField { id: verifUrlField; visible: false }
+
+                Label {
+                    id: authStatus
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: ""
+                }
+            }
+        }
+
+        // -------- Calendars (up to 3) --------
+        GroupBox {
+            Layout.fillWidth: true
+            title: i18n("Calendarios (hasta 3)")
+
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: Kirigami.Units.smallSpacing
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Button {
+                        text: i18n("Cargar mis calendarios")
+                        icon.name: "view-refresh"
+                        enabled: refreshTokenField.text.length > 0 &&
+                                 clientIdField.text.length > 0 &&
+                                 clientSecretField.text.length > 0
+                        onClicked: page._loadCalendars()
+                    }
+                    Item { Layout.fillWidth: true }
+                    Label {
+                        id: calStatus
+                        text: ""
+                        wrapMode: Text.WordWrap
+                        Layout.maximumWidth: 280
+                    }
+                }
+
+                // Three calendar rows: pick a calendar + a (translucent) color.
+                Repeater {
+                    model: 3
+                    delegate: RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Kirigami.Units.smallSpacing
+                        property int row: index
+
+                        Label {
+                            text: i18n("%1.", index + 1)
+                            opacity: 0.6
+                        }
+                        ComboBox {
+                            Layout.fillWidth: true
+                            textRole: "label"
+                            model: page._calOptions()
+                            currentIndex: page._optIndexOf(page._calOptions(), page._idAt(row))
+                            onActivated: function(idx) {
+                                var opts = page._calOptions();
+                                page._setId(row, opts[idx] ? opts[idx].id : "");
+                            }
+                        }
+                        // Color swatch — opens the palette popup for this row.
+                        Rectangle {
+                            Layout.preferredWidth: 34
+                            Layout.preferredHeight: 22
+                            radius: 3
+                            color: page._colorAt(row)
+                            border.width: 1
+                            border.color: Qt.rgba(1, 1, 1, 0.4)
+                            opacity: page._idAt(row).length > 0 ? 1.0 : 0.35
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: { page._colorTargetRow = row; colorPopup.open(); }
+                            }
+                        }
+                    }
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    opacity: 0.8
+                    text: i18n("Elegí hasta 3 calendarios. El color por defecto es el rojo translúcido; "
+                             + "podés cambiarlo por calendario (siempre se dibuja translúcido detrás del "
+                             + "worklog). «primary» es tu calendario principal; para uno secundario, "
+                             + "cargá la lista o usá su Calendar ID.")
+                }
+            }
+        }
+
+        // Shared palette popup for picking a row's color.
+        Popup {
+            id: colorPopup
+            modal: true
+            focus: true
+            padding: 8
+            Grid {
+                columns: 5
+                spacing: 6
+                Repeater {
+                    model: page._palette
+                    delegate: Rectangle {
+                        width: 28; height: 28
+                        radius: 4
+                        color: modelData
+                        border.width: page._colorAt(page._colorTargetRow) === modelData ? 2 : 1
+                        border.color: page._colorAt(page._colorTargetRow) === modelData
+                                      ? Kirigami.Theme.highlightColor : Qt.rgba(1, 1, 1, 0.4)
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: { page._setColor(page._colorTargetRow, modelData); colorPopup.close(); }
+                        }
+                    }
+                }
+            }
+        }
+
+        CheckBox {
+            id: debugCheck
+            text: i18n("Loggear las llamadas a Google en plasmashell stdout")
+        }
+
+        Item { Layout.fillHeight: true }
+
+        // Polls the token endpoint while a device authorization is pending.
+        Timer {
+            id: pollTimer
+            interval: page._interval * 1000
+            repeat: true
+            onTriggered: page._pollToken()
+        }
+
     }
 }

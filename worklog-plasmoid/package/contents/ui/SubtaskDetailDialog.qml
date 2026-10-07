@@ -8,11 +8,12 @@
  * and a few audit fields. Falls back to the row data if the fetch fails.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Controls 2.15 as QQC2
-import org.kde.plasma.core 2.0 as PlasmaCore
-import org.kde.plasma.components 3.0 as PlasmaComponents3
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls as QQC2
+import org.kde.plasma.components as PlasmaComponents3
+import org.kde.kirigami as Kirigami
+import org.kde.plasma.plasmoid
 
 Item {
     id: dlg
@@ -110,12 +111,12 @@ Item {
     // -------- card --------
     Rectangle {
         anchors.centerIn: parent
-        width: Math.min(plasmoid.configuration.worklogModalWidth || 720,
+        width: Math.min(Plasmoid.configuration.worklogModalWidth || 720,
                         Math.max(420, parent.width  - 24))
-        height: Math.min(plasmoid.configuration.worklogModalHeight || 520,
+        height: Math.min(Plasmoid.configuration.worklogModalHeight || 520,
                         Math.max(360, parent.height - 36))
-        color: PlasmaCore.Theme.backgroundColor
-        border.color: PlasmaCore.Theme.textColor
+        color: Kirigami.Theme.backgroundColor
+        border.color: Kirigami.Theme.textColor
         border.width: 1
         radius: 4
 
@@ -124,12 +125,12 @@ Item {
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: 10
-            spacing: PlasmaCore.Units.smallSpacing
+            spacing: Kirigami.Units.smallSpacing
 
             // Header
             RowLayout {
                 Layout.fillWidth: true
-                spacing: PlasmaCore.Units.smallSpacing
+                spacing: Kirigami.Units.smallSpacing
 
                 PlasmaComponents3.Label {
                     text: dlg.detail ? ("[" + dlg.detail.key + "]") : ""
@@ -159,8 +160,8 @@ Item {
                 Layout.fillWidth: true
                 Rectangle {
                     visible: dlg.detail && (dlg.detail.status || "").length > 0
-                    width: badgeLabel.implicitWidth + 16
-                    height: 20
+                    Layout.preferredWidth: badgeLabel.implicitWidth + 16
+                    Layout.preferredHeight: 20
                     radius: 10
                     color: dlg.detail ? dlg._statusBg(dlg.detail.statusColor) : "transparent"
                     PlasmaComponents3.Label {
@@ -168,7 +169,7 @@ Item {
                         anchors.centerIn: parent
                         text: dlg.detail ? (dlg.detail.status || "") : ""
                         color: "#1a1a1a"
-                        font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                        font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                         font.bold: true
                     }
                 }
@@ -180,7 +181,7 @@ Item {
             GridLayout {
                 Layout.fillWidth: true
                 columns: 2
-                columnSpacing: PlasmaCore.Units.largeSpacing
+                columnSpacing: Kirigami.Units.largeSpacing
                 rowSpacing: 3
 
                 PlasmaComponents3.Label {
@@ -231,14 +232,14 @@ Item {
             // Estimates
             RowLayout {
                 Layout.fillWidth: true
-                spacing: PlasmaCore.Units.largeSpacing
+                spacing: Kirigami.Units.largeSpacing
 
                 ColumnLayout {
                     spacing: 0
                     PlasmaComponents3.Label {
                         text: i18n("Original")
                         opacity: 0.6
-                        font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                        font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                     }
                     PlasmaComponents3.Label {
                         text: dlg.detail ? dlg._fmtHours(dlg.detail.originalEstimateSec) : "—"
@@ -251,7 +252,7 @@ Item {
                     PlasmaComponents3.Label {
                         text: i18n("Quemadas")
                         opacity: 0.6
-                        font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                        font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                     }
                     PlasmaComponents3.Label {
                         text: dlg.detail ? dlg._fmtHours(dlg.detail.spentSec) : "—"
@@ -264,7 +265,7 @@ Item {
                     PlasmaComponents3.Label {
                         text: i18n("Disponible")
                         opacity: 0.6
-                        font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                        font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                     }
                     PlasmaComponents3.Label {
                         text: dlg.detail ? dlg._fmtHours(dlg.detail.remainingSec) : "—"
@@ -302,7 +303,7 @@ Item {
                 PlasmaComponents3.Label {
                     Layout.fillWidth: true
                     opacity: 0.55
-                    font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                    font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                     text: dlg.detail
                           ? (i18n("Creada: %1", dlg._fmtDate(dlg.detail.created)) + "    " +
                              i18n("Actualizada: %1", dlg._fmtDate(dlg.detail.updated)))
@@ -314,7 +315,7 @@ Item {
                 Layout.fillWidth: true
                 visible: dlg.errorText.length > 0
                 text: dlg.errorText
-                color: PlasmaCore.Theme.negativeTextColor
+                color: Kirigami.Theme.negativeTextColor
                 wrapMode: Text.WordWrap
             }
 

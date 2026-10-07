@@ -18,10 +18,10 @@
  * never show the previous month's numbers even if a response lands late.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import org.kde.plasma.core 2.0 as PlasmaCore
-import org.kde.plasma.components 3.0 as PlasmaComponents3
+import QtQuick
+import QtQuick.Layouts
+import org.kde.plasma.components as PlasmaComponents3
+import org.kde.kirigami as Kirigami
 
 Item {
     id: heat
@@ -159,9 +159,9 @@ Item {
         if (c <= 2) return _lerp(red, yellow, c / 2);
         return _lerp(yellow, green, (c - 2) / 2);
     }
-    function _cellTextColor(h) { return h > 0 ? "#1a1a1a" : PlasmaCore.Theme.textColor; }
+    function _cellTextColor(h) { return h > 0 ? "#1a1a1a" : Kirigami.Theme.textColor; }
 
-    readonly property color _weekendColor: PlasmaCore.Theme.disabledTextColor
+    readonly property color _weekendColor: Kirigami.Theme.disabledTextColor
 
     component HoursCell: Rectangle {
         property real hours: 0
@@ -184,7 +184,7 @@ Item {
             anchors.centerIn: parent
             text: heat._fmtNum(parent.hours)
             color: heat._cellTextColor(parent.hours)
-            font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+            font.pixelSize: Kirigami.Theme.smallFont.pixelSize
             font.bold: true
         }
         MouseArea {
@@ -204,7 +204,7 @@ Item {
         // Header: title + month label + prev/next.
         RowLayout {
             Layout.fillWidth: true
-            spacing: PlasmaCore.Units.smallSpacing
+            spacing: Kirigami.Units.smallSpacing
 
             PlasmaComponents3.Label {
                 text: i18n("Horas del mes")
@@ -250,7 +250,7 @@ Item {
                 Item {
                     Layout.fillWidth: true
                     Layout.preferredHeight: heat.cellRowH
-                    PlasmaCore.IconItem {
+                    Kirigami.Icon {
                         anchors.centerIn: parent
                         width: 16; height: 16
                         source: "chronometer"
@@ -266,7 +266,7 @@ Item {
                 Item {
                     Layout.fillWidth: true
                     Layout.preferredHeight: heat.cellRowH
-                    PlasmaCore.IconItem {
+                    Kirigami.Icon {
                         anchors.centerIn: parent
                         width: 16; height: 16
                         source: "view-task"
@@ -297,8 +297,8 @@ Item {
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                         text: heat._weekdayLetter(day)
-                        color: weekend ? heat._weekendColor : PlasmaCore.Theme.textColor
-                        font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                        color: weekend ? heat._weekendColor : Kirigami.Theme.textColor
+                        font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                         opacity: weekend ? 0.8 : 1.0
                     }
                     PlasmaComponents3.Label {
@@ -307,8 +307,8 @@ Item {
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                         text: "" + day
-                        color: weekend ? heat._weekendColor : PlasmaCore.Theme.textColor
-                        font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                        color: weekend ? heat._weekendColor : Kirigami.Theme.textColor
+                        font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                         font.bold: !weekend
                     }
                     HoursCell { day: parent.day; hours: (heat._v, heat._clkHours(parent.day)) }
@@ -322,9 +322,9 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             Layout.topMargin: 2
-            spacing: PlasmaCore.Units.smallSpacing
+            spacing: Kirigami.Units.smallSpacing
 
-            PlasmaCore.IconItem {
+            Kirigami.Icon {
                 source: "chronometer"
                 Layout.preferredWidth: 14
                 Layout.preferredHeight: 14
@@ -332,10 +332,10 @@ Item {
             PlasmaComponents3.Label {
                 text: (heat._v, heat._fmtHM(heat._monthClkSec()))
                 font.bold: true
-                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
             }
-            Item { Layout.preferredWidth: PlasmaCore.Units.smallSpacing }
-            PlasmaCore.IconItem {
+            Item { Layout.preferredWidth: Kirigami.Units.smallSpacing }
+            Kirigami.Icon {
                 source: "view-task"
                 Layout.preferredWidth: 14
                 Layout.preferredHeight: 14
@@ -343,13 +343,13 @@ Item {
             PlasmaComponents3.Label {
                 text: (heat._v, heat._fmtHM(heat._monthJiraSec()))
                 font.bold: true
-                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
             }
             Item { Layout.fillWidth: true }
             PlasmaComponents3.Label {
                 text: i18n("Total del mes")
                 opacity: 0.55
-                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
             }
         }
     }

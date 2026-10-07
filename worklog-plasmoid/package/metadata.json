@@ -1,0 +1,23 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Claude (Anthropic) for LSPaninka",
+                "Email": ""
+            }
+        ],
+        "Category": "Utilities",
+        "Description": "Weekly calendar combining Jira and Clockify worklogs with drag-to-log",
+        "Description[es]": "Calendario semanal con worklogs de Jira y Clockify, drag para crear",
+        "EnabledByDefault": true,
+        "Icon": "view-calendar-week",
+        "Id": "org.kde.plasma.jiraworklog",
+        "License": "MIT",
+        "Name": "Jira / Clockify Worklog Calendar",
+        "Name[es]": "Calendario de horas Jira / Clockify",
+        "Version": "1.0.0",
+        "Website": "https://github.com/lspaninka/kde-todo-1"
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

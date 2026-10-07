@@ -1,5 +1,24 @@
 # Changelog — Jira / Clockify Worklog Calendar
 
+## 1.0.0 — Port to KDE Plasma 6 (Qt 6)
+
+- `metadata.desktop` → `metadata.json` (`X-Plasma-API-Minimum-Version: 6.0`).
+  Same plugin `Id` (`org.kde.plasma.jiraworklog`) and same kcfg keys/defaults,
+  so an in-place upgrade keeps the user's configuration.
+- Root is a `PlasmoidItem`; `plasmoid` → `Plasmoid`; `expanded` /
+  `hideOnWindowDeactivate` are used on the root (`plasmoidItem` is passed down
+  to the representations); `plasmoid.action("configure")` →
+  `Plasmoid.internalAction("configure")`.
+- Unversioned imports; `PlasmaCore.Units/Theme/IconItem` →
+  `Kirigami.Units/Theme/Icon`; the complementary-color icon (duplicate button)
+  uses `Kirigami.Theme.colorSet: Complementary`.
+- Config pages are `KCM.SimpleKCM` roots (with `cfg_*` and `cfg_*Default` on
+  the root).
+- Qt 6: explicit signal-handler parameters, `Qt.btoa(string)` replaced by a
+  hand-made Basic-auth encoder, `Layout.preferred*` on layout-managed items.
+- `install.sh` / README use `kpackagetool6` and
+  `systemctl --user restart plasma-plasmashell`.
+
 ## 0.11.1 — Fix: calendar blocks rendered opaque white
 
 - The 0.11.0 per-calendar color path used `Qt.color(base)` to read the

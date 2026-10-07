@@ -14,12 +14,12 @@
  * setting.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Controls 2.15 as QQC2
-import org.kde.plasma.plasmoid 2.0
-import org.kde.plasma.core 2.0 as PlasmaCore
-import org.kde.plasma.components 3.0 as PlasmaComponents3
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls as QQC2
+import org.kde.plasma.plasmoid
+import org.kde.plasma.components as PlasmaComponents3
+import org.kde.kirigami as Kirigami
 
 Item {
     id: cal
@@ -90,7 +90,7 @@ Item {
     readonly property bool _showJira:   source === "jira" || source === "jira-clockify"
     readonly property bool _showClockify: source === "clockify" || source === "jira-clockify"
 
-    readonly property string viewMode: plasmoid.configuration.worklogViewMode || "9h"
+    readonly property string viewMode: Plasmoid.configuration.worklogViewMode || "9h"
     readonly property int startHour: viewMode === "24h" ? 0 : 9
     readonly property int endHour:   viewMode === "24h" ? 24 : 18
     readonly property int slotsPerDay: (endHour - startHour) * 2
@@ -98,7 +98,7 @@ Item {
     readonly property real hourColWidth: 56
     readonly property real headerRowHeight: 22
     readonly property real totalsRowHeight: 22
-    readonly property real dailyTargetHours: plasmoid.configuration.worklogDailyTargetHours || 8
+    readonly property real dailyTargetHours: Plasmoid.configuration.worklogDailyTargetHours || 8
 
     readonly property int _vJira: jiraStore ? jiraStore.version : 0
     readonly property int _vClockify: clockifyStore ? clockifyStore.version : 0
@@ -107,7 +107,7 @@ Item {
     // Google Calendar event blocks — immovable, non-interactive, drawn
     // behind the Jira/Clockify entries. Shown only when the toggle is on.
     readonly property bool _showGoogle:
-        plasmoid.configuration.googleCalEnabled === true && !!googleStore
+        Plasmoid.configuration.googleCalEnabled === true && !!googleStore
 
     // calendarId → base color (hex). Re-evaluates when the config lists
     // change so color edits apply live without a refetch. Missing ids
@@ -115,8 +115,8 @@ Item {
     readonly property string _googleDefaultColor: "#e74c3c"
     readonly property var _googleColorMap: {
         var m = {};
-        var ids = plasmoid.configuration.googleCalendarIds || [];
-        var cols = plasmoid.configuration.googleCalendarColors || [];
+        var ids = Plasmoid.configuration.googleCalendarIds || [];
+        var cols = Plasmoid.configuration.googleCalendarColors || [];
         for (var i = 0; i < ids.length; i++) {
             var id = ("" + (ids[i] || "")).trim();
             if (id) m[id] = ("" + (cols[i] || "")).trim() || cal._googleDefaultColor;
@@ -301,13 +301,13 @@ Item {
             Rectangle {
                 Layout.preferredWidth: cal.hourColWidth
                 Layout.preferredHeight: cal.headerRowHeight + cal.totalsRowHeight
-                color: PlasmaCore.Theme.backgroundColor
+                color: Kirigami.Theme.backgroundColor
                 border.width: 1
                 border.color: Qt.rgba(1, 1, 1, 0.1)
                 PlasmaComponents3.Label {
                     anchors.centerIn: parent
                     text: "total"
-                    font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                    font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                     opacity: 0.6
                 }
             }
@@ -324,9 +324,9 @@ Item {
                             width: parent.width
                             height: cal.headerRowHeight
                             color: cal._isToday(index)
-                                   ? Qt.rgba(PlasmaCore.Theme.highlightColor.r,
-                                             PlasmaCore.Theme.highlightColor.g,
-                                             PlasmaCore.Theme.highlightColor.b, 0.22)
+                                   ? Qt.rgba(Kirigami.Theme.highlightColor.r,
+                                             Kirigami.Theme.highlightColor.g,
+                                             Kirigami.Theme.highlightColor.b, 0.22)
                                    : cal._isWeekend(index)
                                        ? Qt.rgba(0, 0, 0, 0.18)
                                        : Qt.rgba(1, 1, 1, 0.04)
@@ -336,7 +336,7 @@ Item {
                                 anchors.centerIn: parent
                                 text: cal._formatDayHeader(index)
                                 font.bold: true
-                                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                             }
                         }
                         Rectangle {
@@ -359,7 +359,7 @@ Item {
                                     return i18n("Logged: %1 %2",
                                                 cal._formatTotal(s), cal._formatDiff(s));
                                 }
-                                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                             }
                         }
                     }
@@ -383,7 +383,7 @@ Item {
                                 anchors.rightMargin: 4
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: cal._slotLabel(index)
-                                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                                 opacity: index % 2 === 0 ? 0.85 : 0.45
                             }
                         }
@@ -415,9 +415,9 @@ Item {
                     Rectangle {
                         visible: cal._isToday(dayCol.dayIndex)
                         anchors.fill: parent
-                        color: Qt.rgba(PlasmaCore.Theme.highlightColor.r,
-                                       PlasmaCore.Theme.highlightColor.g,
-                                       PlasmaCore.Theme.highlightColor.b, 0.10)
+                        color: Qt.rgba(Kirigami.Theme.highlightColor.r,
+                                       Kirigami.Theme.highlightColor.g,
+                                       Kirigami.Theme.highlightColor.b, 0.10)
                     }
 
                     // Background grid.
@@ -460,7 +460,7 @@ Item {
                                 text: modelData.summary || ""
                                 color: "white"
                                 opacity: 0.85
-                                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                                 elide: Text.ElideRight
                                 wrapMode: Text.NoWrap
                                 verticalAlignment: Text.AlignTop
@@ -491,10 +491,10 @@ Item {
                         y: dragMouse._snappedTop
                         width: dragMouse._snapWidth()
                         height: Math.max(cal.rowHeight, dragMouse._snappedBottom - dragMouse._snappedTop)
-                        color: Qt.rgba(PlasmaCore.Theme.highlightColor.r,
-                                       PlasmaCore.Theme.highlightColor.g,
-                                       PlasmaCore.Theme.highlightColor.b, 0.30)
-                        border.color: PlasmaCore.Theme.highlightColor
+                        color: Qt.rgba(Kirigami.Theme.highlightColor.r,
+                                       Kirigami.Theme.highlightColor.g,
+                                       Kirigami.Theme.highlightColor.b, 0.30)
+                        border.color: Kirigami.Theme.highlightColor
                         border.width: 1
 
                         // Live time-range readout, centered, on a dark pill
@@ -513,7 +513,7 @@ Item {
                                       cal._fmtClock(dragMouse._pxToMs(dragMouse._snappedBottom))
                                 color: "white"
                                 font.bold: true
-                                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                             }
                         }
                     }

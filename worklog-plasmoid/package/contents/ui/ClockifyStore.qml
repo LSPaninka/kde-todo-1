@@ -5,7 +5,7 @@
  * (https://api.clockify.me/api/v1). Auth: X-Api-Key header.
  *
  * On first use the store resolves the user id and the default workspace
- * via GET /user and caches both in plasmoid.configuration so subsequent
+ * via GET /user and caches both in Plasmoid.configuration so subsequent
  * fetches skip the lookup. Projects and tags are pulled once per session
  * (they rarely change).
  *
@@ -22,14 +22,15 @@
  * JiraWorklogStore so WorklogCalendar can render both with the same code.
  */
 
-import QtQuick 2.15
+import QtQuick
+import org.kde.plasma.plasmoid
 
 QtObject {
     id: store
 
     property var plasmoidApi: null
 
-    // Resolved & cached in plasmoid.configuration so reloads can skip the
+    // Resolved & cached in Plasmoid.configuration so reloads can skip the
     // /user lookup. Filled by ensureContext().
     property string workspaceId: ""
     property string userId: ""
@@ -107,7 +108,7 @@ QtObject {
         var key = _apiKey();
         if (!key) {
             lastError = qsTr("Falta la API key de Clockify. Configurala en la pestaña Clockify.");
-            _warn("Falta API key (plasmoid.configuration.clockifyApiKey está vacío).");
+            _warn("Falta API key (Plasmoid.configuration.clockifyApiKey está vacío).");
             _bump();
             callback(false);
             return;
