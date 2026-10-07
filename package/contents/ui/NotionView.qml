@@ -9,12 +9,12 @@
  * The user can filter via the `notionQuery` field in config.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Controls 2.15 as QQC2
-import org.kde.plasma.plasmoid 2.0
-import org.kde.plasma.core 2.0 as PlasmaCore
-import org.kde.plasma.components 3.0 as PlasmaComponents3
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls as QQC2
+import org.kde.plasma.plasmoid
+import org.kde.plasma.components as PlasmaComponents3
+import org.kde.kirigami as Kirigami
 
 Item {
     id: view
@@ -24,20 +24,20 @@ Item {
 
     function _formatDate(ms) {
         if (!ms) return "";
-        return Qt.formatDateTime(new Date(ms), Qt.DefaultLocaleShortDate);
+        return Qt.formatDateTime(new Date(ms), Locale.ShortFormat);
     }
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: PlasmaCore.Units.smallSpacing
-        spacing: PlasmaCore.Units.smallSpacing
+        anchors.margins: Kirigami.Units.smallSpacing
+        spacing: Kirigami.Units.smallSpacing
 
         // -------- Header --------
         RowLayout {
             Layout.fillWidth: true
-            spacing: PlasmaCore.Units.smallSpacing
+            spacing: Kirigami.Units.smallSpacing
 
-            PlasmaCore.IconItem {
+            Kirigami.Icon {
                 source: "notes"
                 Layout.preferredWidth: 18
                 Layout.preferredHeight: 18
@@ -61,8 +61,8 @@ Item {
                 elide: Text.ElideRight
                 opacity: 0.7
                 color: notion && notion.lastError
-                       ? PlasmaCore.Theme.negativeTextColor
-                       : PlasmaCore.Theme.textColor
+                       ? Kirigami.Theme.negativeTextColor
+                       : Kirigami.Theme.textColor
             }
             PlasmaComponents3.ToolButton {
                 icon.name: "view-refresh"
@@ -93,7 +93,7 @@ Item {
                 delegate: NotionPageItem {
                     width: list.width
                     page: modelData
-                    onEditRequested: editDialog.openFor(page)
+                    onEditRequested: (page) => editDialog.openFor(page)
                 }
 
                 PlasmaComponents3.Label {
@@ -131,14 +131,14 @@ Item {
                                      "%1 páginas en total",
                                      (view._v, notion.totalCount())) : ""
                 opacity: 0.6
-                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
             }
 
             ModeMenuButton {}
             PlasmaComponents3.ToolButton {
                 icon.name: "configure"
                 text: i18n("Configurar…")
-                onClicked: plasmoid.action("configure").trigger()
+                onClicked: Plasmoid.internalAction("configure").trigger()
             }
         }
     }
@@ -170,8 +170,8 @@ Item {
             anchors.centerIn: parent
             width: Math.max(400, parent.width - 16)
             height: Math.max(300, parent.height - 30)
-            color: PlasmaCore.Theme.backgroundColor
-            border.color: PlasmaCore.Theme.textColor
+            color: Kirigami.Theme.backgroundColor
+            border.color: Kirigami.Theme.textColor
             border.width: 1
             radius: 4
 
@@ -180,7 +180,7 @@ Item {
             ColumnLayout {
                 anchors.fill: parent
                 anchors.margins: 8
-                spacing: PlasmaCore.Units.smallSpacing
+                spacing: Kirigami.Units.smallSpacing
 
                 RowLayout {
                     Layout.fillWidth: true

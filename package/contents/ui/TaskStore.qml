@@ -21,7 +21,8 @@
  *   }
  */
 
-import QtQuick 2.15
+import QtQuick
+import org.kde.plasma.plasmoid
 
 QtObject {
     id: store
@@ -117,7 +118,7 @@ QtObject {
 
     function _categoryName(i) {
         if (!plasmoid) return "category-" + i;
-        var arr = plasmoid.configuration.categoryNames || [];
+        var arr = Plasmoid.configuration.categoryNames || [];
         return arr[i] || ("category-" + i);
     }
 

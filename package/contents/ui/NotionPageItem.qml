@@ -7,16 +7,16 @@
  * to other ntn commands).
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Controls 2.15 as QQC2
-import org.kde.plasma.core 2.0 as PlasmaCore
-import org.kde.plasma.components 3.0 as PlasmaComponents3
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls as QQC2
+import org.kde.plasma.components as PlasmaComponents3
+import org.kde.kirigami as Kirigami
 
 Item {
     id: row
     property var page
-    height: layout.implicitHeight + PlasmaCore.Units.smallSpacing * 2
+    height: layout.implicitHeight + Kirigami.Units.smallSpacing * 2
 
     signal editRequested(var page)
 
@@ -24,15 +24,15 @@ Item {
         if (!iso) return "";
         var d = new Date(iso);
         if (isNaN(d.getTime())) return iso;
-        return Qt.formatDateTime(d, Qt.DefaultLocaleShortDate);
+        return Qt.formatDateTime(d, Locale.ShortFormat);
     }
 
     Rectangle {
         anchors.fill: parent
         color: hoverArea.containsMouse
-               ? Qt.rgba(PlasmaCore.Theme.highlightColor.r,
-                         PlasmaCore.Theme.highlightColor.g,
-                         PlasmaCore.Theme.highlightColor.b, 0.10)
+               ? Qt.rgba(Kirigami.Theme.highlightColor.r,
+                         Kirigami.Theme.highlightColor.g,
+                         Kirigami.Theme.highlightColor.b, 0.10)
                : "transparent"
         radius: 3
         border.width: 1
@@ -50,15 +50,15 @@ Item {
     RowLayout {
         id: layout
         anchors.fill: parent
-        anchors.margins: PlasmaCore.Units.smallSpacing
-        spacing: PlasmaCore.Units.smallSpacing
+        anchors.margins: Kirigami.Units.smallSpacing
+        spacing: Kirigami.Units.smallSpacing
 
         // Emoji icon or generic page icon.
         Item {
             Layout.preferredWidth: 22
             Layout.preferredHeight: 22
             Layout.alignment: Qt.AlignVCenter
-            PlasmaCore.IconItem {
+            Kirigami.Icon {
                 anchors.fill: parent
                 source: (row.page && row.page.icon && row.page.icon.indexOf("http") === 0)
                         ? "text-x-generic" : "text-x-generic"
@@ -90,12 +90,12 @@ Item {
                 PlasmaComponents3.Label {
                     visible: row.page && row.page.lastEditedTime
                     text: row.page ? i18n("Editada: %1", row._formatEdited(row.page.lastEditedTime)) : ""
-                    font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                    font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                     opacity: 0.65
                 }
                 PlasmaComponents3.Label {
                     text: row.page ? "[" + (row.page.id || "").substring(0, 8) + "…]" : ""
-                    font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                    font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                     opacity: 0.5
                     font.family: "monospace"
                 }
@@ -135,7 +135,7 @@ Item {
         QQC2.TextField {
             id: idCopy
             visible: false
-            width: 0
+            Layout.preferredWidth: 0
             text: row.page ? (row.page.id || "") : ""
         }
     }

@@ -4,9 +4,9 @@
  * wider pill for two or more digits, so the layout never looks oblong.
  */
 
-import QtQuick 2.15
-import org.kde.plasma.core 2.0 as PlasmaCore
-import org.kde.plasma.components 3.0 as PlasmaComponents3
+import QtQuick
+import org.kde.plasma.components as PlasmaComponents3
+import org.kde.kirigami as Kirigami
 
 Rectangle {
     id: pill
@@ -14,7 +14,7 @@ Rectangle {
     property color badgeColor: "#888"
     property color textColor: "white"
 
-    readonly property int _diameter: PlasmaCore.Units.iconSizes.small - 2
+    readonly property int _diameter: Kirigami.Units.iconSizes.small - 2
     readonly property bool _wide: count >= 10
 
     color: badgeColor
@@ -30,7 +30,7 @@ Rectangle {
         anchors.centerIn: parent
         text: pill.count
         color: pill.textColor
-        font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+        font.pixelSize: Kirigami.Theme.smallFont.pixelSize
         font.bold: true
     }
 }

@@ -12,17 +12,18 @@
  *   - repo:   "owner/name" exact match.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Controls 2.15
-import QtQuick.Dialogs 1.3 as Dialogs
-import org.kde.kirigami 2.5 as Kirigami
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls
+import QtQuick.Dialogs as Dialogs
+import org.kde.kirigami as Kirigami
+import org.kde.kcmutils as KCM
+import org.kde.plasma.plasmoid
 
-ColumnLayout {
+KCM.SimpleKCM {
     id: page
-    spacing: Kirigami.Units.largeSpacing
 
-    // Read/write plasmoid.configuration directly — reassigning a standalone
+    // Read/write Plasmoid.configuration directly — reassigning a standalone
     // `var` StringList does not persist reliably through Apply (Plasma quirk).
     readonly property int _slots: 4
     property int _rev: 0
@@ -41,17 +42,17 @@ ColumnLayout {
         { value: "repo",   label: i18n("Repositorio (owner/name)") }
     ]
 
-    function _name(i)          { var v = (page._rev, plasmoid.configuration.ghCategoryNames        || [])[i]; return v !== undefined ? v : _defaultNames[i]; }
-    function _color(i)         { var v = (page._rev, plasmoid.configuration.ghCategoryColors       || [])[i]; return v !== undefined ? v : _defaultColors[i]; }
-    function _textColor(i)     { var v = (page._rev, plasmoid.configuration.ghCategoryTextColors   || [])[i]; return v !== undefined ? v : _defaultTextColors[i]; }
-    function _filterField(i)   { var v = (page._rev, plasmoid.configuration.ghCategoryFilterFields || [])[i]; return v !== undefined ? v : _defaultFilterFields[i]; }
-    function _filterValue(i)   { var v = (page._rev, plasmoid.configuration.ghCategoryFilterValues || [])[i]; return v !== undefined ? v : _defaultFilterValues[i]; }
+    function _name(i)          { var v = (page._rev, Plasmoid.configuration.ghCategoryNames        || [])[i]; return v !== undefined ? v : _defaultNames[i]; }
+    function _color(i)         { var v = (page._rev, Plasmoid.configuration.ghCategoryColors       || [])[i]; return v !== undefined ? v : _defaultColors[i]; }
+    function _textColor(i)     { var v = (page._rev, Plasmoid.configuration.ghCategoryTextColors   || [])[i]; return v !== undefined ? v : _defaultTextColors[i]; }
+    function _filterField(i)   { var v = (page._rev, Plasmoid.configuration.ghCategoryFilterFields || [])[i]; return v !== undefined ? v : _defaultFilterFields[i]; }
+    function _filterValue(i)   { var v = (page._rev, Plasmoid.configuration.ghCategoryFilterValues || [])[i]; return v !== undefined ? v : _defaultFilterValues[i]; }
 
     function _persist(key, fallback, i, value) {
-        var arr = (plasmoid.configuration[key] || []).slice();
+        var arr = (Plasmoid.configuration[key] || []).slice();
         while (arr.length < page._slots) arr.push(fallback[arr.length] !== undefined ? fallback[arr.length] : "");
         arr[i] = value;
-        plasmoid.configuration[key] = arr;
+        Plasmoid.configuration[key] = arr;
         page._rev++;
     }
 
@@ -62,126 +63,131 @@ ColumnLayout {
         return 0;
     }
 
-    Label {
-        Layout.fillWidth: true
-        Layout.preferredWidth: 600
-        wrapMode: Text.WordWrap
-        opacity: 0.75
-        text: i18n("Cada categoría representa una pestaña en el popup y un cuadrado en el panel cuando "
-                 + "el modo es «GitHub Projects». La cantidad activa se ajusta en la pestaña «GitHub». "
-                 + "Para que una categoría haga match con varios valores, separá con punto y coma "
-                 + "(por ejemplo «In Progress; Code Review»).")
-    }
-
-    Repeater {
-        model: 4
-        delegate: GroupBox {
-            Layout.fillWidth: true
-            title: i18n("Categoría #%1", index + 1)
-
-            ColumnLayout {
-                anchors.fill: parent
-                spacing: Kirigami.Units.smallSpacing
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Label { text: i18n("Nombre:") }
-                    TextField {
-                        Layout.fillWidth: true
-                        text: page._name(index)
-                        onEditingFinished: page._persist("ghCategoryNames", page._defaultNames, index, text)
-                    }
-
-                    Rectangle {
-                        id: swatch
-                        width: 28
-                        height: 22
-                        radius: 3
-                        color: page._color(index)
-                        border.color: Qt.darker(color, 1.5)
-                        border.width: 1
-                        Text {
-                            anchors.centerIn: parent
-                            text: "9"
-                            color: page._textColor(index)
-                            font.bold: true
-                            font.pixelSize: 14
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: { colorDlg.targetIndex = index; colorDlg.color = swatch.color; colorDlg.open(); }
-                        }
-                    }
-
-                    Button {
-                        text: i18n("Color…")
-                        onClicked: { colorDlg.targetIndex = index; colorDlg.color = swatch.color; colorDlg.open(); }
-                    }
-
-                    ButtonGroup { id: textGroup }
-                    RadioButton {
-                        ButtonGroup.group: textGroup
-                        text: i18n("Letra blanca")
-                        checked: page._textColor(index) !== "black"
-                        onToggled: if (checked) page._persist("ghCategoryTextColors", page._defaultTextColors, index, "white")
-                    }
-                    RadioButton {
-                        ButtonGroup.group: textGroup
-                        text: i18n("Negra")
-                        checked: page._textColor(index) === "black"
-                        onToggled: if (checked) page._persist("ghCategoryTextColors", page._defaultTextColors, index, "black")
-                    }
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Label { text: i18n("Filtrar por:") }
-                    ComboBox {
-                        id: fieldCombo
-                        Layout.preferredWidth: 320
-                        textRole: "label"
-                        valueRole: "value"
-                        model: page._filterFieldOptions
-                        // Initialise once from config; no reactive binding on
-                        // currentIndex (it would fight the user's selection).
-                        Component.onCompleted: currentIndex = page._optionIndexForField(page._filterField(index))
-                        onActivated: {
-                            var v = page._filterFieldOptions[currentIndex].value;
-                            page._persist("ghCategoryFilterFields", page._defaultFilterFields, index, v);
-                        }
-                    }
-
-                    Label { text: i18n("Valor:") }
-                    TextField {
-                        Layout.fillWidth: true
-                        enabled: fieldCombo.currentIndex !== 0
-                        text: page._filterValue(index)
-                        placeholderText: {
-                            switch (page._filterField(index)) {
-                                case "status": return i18n("Todo ; In Progress ; Done");
-                                case "type":   return i18n("Issue ; PullRequest");
-                                case "state":  return i18n("OPEN ; CLOSED ; MERGED");
-                                case "repo":   return i18n("owner/repo ; otra/repo");
-                            }
-                            return i18n("(separá con ; para OR)");
-                        }
-                        onEditingFinished: page._persist("ghCategoryFilterValues", page._defaultFilterValues, index, text)
-                    }
-                }
-            }
-        }
-    }
-
-    Item { Layout.fillHeight: true }
-
     Dialogs.ColorDialog {
         id: colorDlg
         property int targetIndex: 0
         title: i18n("Pick a color")
-        onAccepted: page._persist("ghCategoryColors", page._defaultColors, targetIndex, color.toString())
+        onAccepted: page._persist("ghCategoryColors", page._defaultColors, targetIndex, selectedColor.toString())
+    }
+
+    ColumnLayout {
+        spacing: Kirigami.Units.largeSpacing
+
+        Label {
+            Layout.fillWidth: true
+            Layout.preferredWidth: 600
+            wrapMode: Text.WordWrap
+            opacity: 0.75
+            text: i18n("Cada categoría representa una pestaña en el popup y un cuadrado en el panel cuando "
+                     + "el modo es «GitHub Projects». La cantidad activa se ajusta en la pestaña «GitHub». "
+                     + "Para que una categoría haga match con varios valores, separá con punto y coma "
+                     + "(por ejemplo «In Progress; Code Review»).")
+        }
+
+        Repeater {
+            model: 4
+            delegate: GroupBox {
+                Layout.fillWidth: true
+                title: i18n("Categoría #%1", index + 1)
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    spacing: Kirigami.Units.smallSpacing
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Label { text: i18n("Nombre:") }
+                        TextField {
+                            Layout.fillWidth: true
+                            text: page._name(index)
+                            onEditingFinished: page._persist("ghCategoryNames", page._defaultNames, index, text)
+                        }
+
+                        Rectangle {
+                            id: swatch
+                            Layout.preferredWidth: 28
+                            Layout.preferredHeight: 22
+                            radius: 3
+                            color: page._color(index)
+                            border.color: Qt.darker(color, 1.5)
+                            border.width: 1
+                            Text {
+                                anchors.centerIn: parent
+                                text: "9"
+                                color: page._textColor(index)
+                                font.bold: true
+                                font.pixelSize: 14
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: { colorDlg.targetIndex = index; colorDlg.selectedColor = swatch.color; colorDlg.open(); }
+                            }
+                        }
+
+                        Button {
+                            text: i18n("Color…")
+                            onClicked: { colorDlg.targetIndex = index; colorDlg.selectedColor = swatch.color; colorDlg.open(); }
+                        }
+
+                        ButtonGroup { id: textGroup }
+                        RadioButton {
+                            ButtonGroup.group: textGroup
+                            text: i18n("Letra blanca")
+                            checked: page._textColor(index) !== "black"
+                            onToggled: if (checked) page._persist("ghCategoryTextColors", page._defaultTextColors, index, "white")
+                        }
+                        RadioButton {
+                            ButtonGroup.group: textGroup
+                            text: i18n("Negra")
+                            checked: page._textColor(index) === "black"
+                            onToggled: if (checked) page._persist("ghCategoryTextColors", page._defaultTextColors, index, "black")
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Label { text: i18n("Filtrar por:") }
+                        ComboBox {
+                            id: fieldCombo
+                            Layout.preferredWidth: 320
+                            textRole: "label"
+                            valueRole: "value"
+                            model: page._filterFieldOptions
+                            // Initialise once from config; no reactive binding on
+                            // currentIndex (it would fight the user's selection).
+                            Component.onCompleted: currentIndex = page._optionIndexForField(page._filterField(index))
+                            onActivated: (activatedIndex) => {
+                                var v = page._filterFieldOptions[currentIndex].value;
+                                page._persist("ghCategoryFilterFields", page._defaultFilterFields, index, v);
+                            }
+                        }
+
+                        Label { text: i18n("Valor:") }
+                        TextField {
+                            Layout.fillWidth: true
+                            enabled: fieldCombo.currentIndex !== 0
+                            text: page._filterValue(index)
+                            placeholderText: {
+                                switch (page._filterField(index)) {
+                                    case "status": return i18n("Todo ; In Progress ; Done");
+                                    case "type":   return i18n("Issue ; PullRequest");
+                                    case "state":  return i18n("OPEN ; CLOSED ; MERGED");
+                                    case "repo":   return i18n("owner/repo ; otra/repo");
+                                }
+                                return i18n("(separá con ; para OR)");
+                            }
+                            onEditingFinished: page._persist("ghCategoryFilterValues", page._defaultFilterValues, index, text)
+                        }
+                    }
+                }
+            }
+        }
+
+        Item { Layout.fillHeight: true }
+
     }
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # install.sh - install / update / uninstall the Categorized ToDo plasmoid
-# for the current user on Kubuntu 24.04 (KDE Plasma 5.27 + Qt 5.15).
+# for the current user on Kubuntu 26.04 (KDE Plasma 6 + Qt 6).
 #
 # Usage:
 #   ./install.sh             # install (or upgrade if already installed)
@@ -8,10 +8,10 @@
 #   ./install.sh --dev       # symlink the package (for live development)
 #   ./install.sh --no-deps   # skip the apt dependency check
 #
-# Requires `plasmapkg2` (or `kpackagetool5`), provided by plasma-framework.
+# Requires `kpackagetool6`, provided by libkf6package-bin (KDE Frameworks 6).
 # Also depends on the Qt QML module `QtQuick.LocalStorage`, which on
-# Debian/Ubuntu is the package `qml-module-qtquick-localstorage`. The
-# script offers to install it if missing.
+# Debian/Ubuntu is the package `qml6-module-qtquick-localstorage`. The
+# script offers to install it (and the other Qt 6 QML modules) if missing.
 
 set -euo pipefail
 
@@ -23,9 +23,10 @@ PKG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/package" && pwd)"
 # paths, which is more reliable than dpkg (works with non-Debian systems
 # too, where we just print a warning).
 declare -A REQUIRED_QML_MODULES=(
-    ["QtQuick/LocalStorage"]="qml-module-qtquick-localstorage"
-    ["QtQuick/Controls.2"]="qml-module-qtquick-controls2"
-    ["Qt/labs/platform"]="qml-module-qt-labs-platform"
+    ["QtQuick/LocalStorage"]="qml6-module-qtquick-localstorage"
+    ["QtQuick/Controls"]="qml6-module-qtquick-controls"
+    ["QtQuick/Dialogs"]="qml6-module-qtquick-dialogs"
+    ["QtQuick/Layouts"]="qml6-module-qtquick-layouts"
 )
 
 MODE="install"
@@ -45,15 +46,14 @@ done
 
 have_cmd() { command -v "$1" >/dev/null 2>&1; }
 
-# Print the standard QML import paths for Qt 5 across distros.
+# Print the standard QML import paths for Qt 6 across distros.
 qml_import_paths() {
     local p
     for p in \
-        /usr/lib/x86_64-linux-gnu/qt5/qml \
-        /usr/lib/aarch64-linux-gnu/qt5/qml \
-        /usr/lib/qt5/qml \
-        /usr/lib64/qt5/qml \
-        /usr/lib/qt/qml \
+        /usr/lib/x86_64-linux-gnu/qt6/qml \
+        /usr/lib/aarch64-linux-gnu/qt6/qml \
+        /usr/lib/qt6/qml \
+        /usr/lib64/qt6/qml \
     ; do
         [ -d "$p" ] && echo "$p"
     done
@@ -105,24 +105,21 @@ check_qml_dependencies() {
         esac
     elif have_cmd dnf; then
         echo
-        echo "On Fedora try: sudo dnf install qt5-qtdeclarative qt5-qtquickcontrols2"
+        echo "On Fedora try: sudo dnf install qt6-qtdeclarative"
     elif have_cmd pacman; then
         echo
-        echo "On Arch try: sudo pacman -S qt5-declarative qt5-quickcontrols2"
+        echo "On Arch try: sudo pacman -S qt6-declarative"
     else
         echo
         echo "Install the equivalent packages for your distribution before continuing."
     fi
 }
 
-# Prefer `kpackagetool5`; fall back to `plasmapkg2` if only that is installed.
-if have_cmd kpackagetool5; then
-    TOOL=(kpackagetool5 -t Plasma/Applet)
-elif have_cmd plasmapkg2; then
-    TOOL=(plasmapkg2 -t Plasma/Applet)
+if have_cmd kpackagetool6; then
+    TOOL=(kpackagetool6 -t Plasma/Applet)
 else
-    echo "Neither kpackagetool5 nor plasmapkg2 is available." >&2
-    echo "Install 'plasma-framework' or make sure you're on KDE Plasma." >&2
+    echo "kpackagetool6 is not available." >&2
+    echo "Install 'libkf6package-bin' or make sure you're on KDE Plasma 6." >&2
     exit 1
 fi
 
@@ -163,6 +160,6 @@ esac
 
 echo
 echo "Done. To apply changes in a running Plasma session:"
-echo "  kquitapp5 plasmashell && kstart5 plasmashell"
+echo "  systemctl --user restart plasma-plasmashell"
 echo
 echo "Add the widget with: right-click desktop -> Add Widgets -> search \"ToDo\"."

@@ -8,11 +8,11 @@
  * the plasmoid popup context.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Controls 2.15 as QQC2
-import org.kde.plasma.core 2.0 as PlasmaCore
-import org.kde.plasma.components 3.0 as PlasmaComponents3
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls as QQC2
+import org.kde.plasma.components as PlasmaComponents3
+import org.kde.kirigami as Kirigami
 
 Item {
     id: dlg
@@ -24,7 +24,7 @@ Item {
     property var page: null
     property bool loading: false
     property string statusText: ""
-    property color statusColor: PlasmaCore.Theme.textColor
+    property color statusColor: Kirigami.Theme.textColor
 
     function openFor(p) {
         if (!p) return;
@@ -49,7 +49,7 @@ Item {
             } else {
                 contentArea.text = "";
                 dlg.statusText = i18n("No se pudo leer el contenido: %1", err);
-                dlg.statusColor = PlasmaCore.Theme.negativeTextColor;
+                dlg.statusColor = Kirigami.Theme.negativeTextColor;
             }
         }
         function onPageUpdated(pageId, ok, err) {
@@ -57,11 +57,11 @@ Item {
             dlg.loading = false;
             if (ok) {
                 dlg.statusText = i18n("Guardado.");
-                dlg.statusColor = PlasmaCore.Theme.positiveTextColor;
+                dlg.statusColor = Kirigami.Theme.positiveTextColor;
                 dlg.visible = false;
             } else {
                 dlg.statusText = i18n("Error al guardar: %1", err);
-                dlg.statusColor = PlasmaCore.Theme.negativeTextColor;
+                dlg.statusColor = Kirigami.Theme.negativeTextColor;
             }
         }
     }
@@ -80,8 +80,8 @@ Item {
         anchors.centerIn: parent
         width: Math.max(420, parent.width - 24)
         height: Math.max(360, parent.height - 30)
-        color: PlasmaCore.Theme.backgroundColor
-        border.color: PlasmaCore.Theme.textColor
+        color: Kirigami.Theme.backgroundColor
+        border.color: Kirigami.Theme.textColor
         border.width: 1
         radius: 4
 
@@ -90,7 +90,7 @@ Item {
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: 10
-            spacing: PlasmaCore.Units.smallSpacing
+            spacing: Kirigami.Units.smallSpacing
 
             RowLayout {
                 Layout.fillWidth: true
@@ -111,7 +111,7 @@ Item {
                 text: dlg.page ? i18n("ID: %1", (dlg.page.id || "")) : ""
                 opacity: 0.55
                 font.family: "monospace"
-                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
             }
 
             PlasmaComponents3.Label { text: i18n("Título"); opacity: 0.75 }
@@ -168,7 +168,7 @@ Item {
                     onClicked: {
                         if (!dlg.page) return;
                         dlg.statusText = i18n("Guardando…");
-                        dlg.statusColor = PlasmaCore.Theme.textColor;
+                        dlg.statusColor = Kirigami.Theme.textColor;
                         dlg.loading = true;
                         var newTitle = titleField.text.trim();
                         var newContent = contentArea.text;

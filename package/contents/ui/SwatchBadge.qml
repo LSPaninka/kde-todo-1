@@ -7,10 +7,11 @@
  * depending on `insideMode`. Optionally appends a label after the count.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import org.kde.plasma.core 2.0 as PlasmaCore
-import org.kde.plasma.components 3.0 as PlasmaComponents3
+import QtQuick
+import QtQuick.Layouts
+import org.kde.plasma.components as PlasmaComponents3
+import org.kde.kirigami as Kirigami
+import org.kde.plasma.plasmoid
 
 Item {
     id: badge
@@ -59,7 +60,7 @@ Item {
         acceptedButtons: Qt.LeftButton
         cursorShape: Qt.PointingHandCursor
         onClicked: badge.clicked(badge.catIndex)
-        onWheel: wheel.accepted = false
+        onWheel: (wheel) => wheel.accepted = false
     }
 
     visible: showZero || count > 0
@@ -72,7 +73,7 @@ Item {
     RowLayout {
         id: rightRow
         visible: !badge.insideMode
-        spacing: PlasmaCore.Units.smallSpacing
+        spacing: Kirigami.Units.smallSpacing
 
         Rectangle {
             Layout.preferredWidth: badge.smallSwatch
@@ -86,14 +87,14 @@ Item {
         PlasmaComponents3.Label {
             text: badge.count
             color: badge.textColor
-            font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize + 2
+            font.pixelSize: Kirigami.Theme.smallFont.pixelSize + 2
             font.bold: true
         }
 
         PlasmaComponents3.Label {
             visible: badge.showLabel
             text: badge.label
-            font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+            font.pixelSize: Kirigami.Theme.smallFont.pixelSize
             opacity: 0.75
         }
     }
@@ -102,7 +103,7 @@ Item {
     RowLayout {
         id: insideRow
         visible: badge.insideMode
-        spacing: Math.max(2, Math.round(PlasmaCore.Units.smallSpacing * badge._scale))
+        spacing: Math.max(2, Math.round(Kirigami.Units.smallSpacing * badge._scale))
 
         Rectangle {
             id: bigSwatchRect
@@ -120,7 +121,7 @@ Item {
                 color: badge.textColor
                 font.bold: true
                 font.pixelSize: Math.max(
-                    Math.round(PlasmaCore.Theme.smallestFont.pixelSize * badge._scale),
+                    Math.round(Kirigami.Theme.smallFont.pixelSize * badge._scale),
                     Math.round(badge._effBig * 0.6))
             }
         }
@@ -128,7 +129,7 @@ Item {
         PlasmaComponents3.Label {
             visible: badge.showLabel
             text: badge.label
-            font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+            font.pixelSize: Kirigami.Theme.smallFont.pixelSize
             opacity: 0.75
         }
     }

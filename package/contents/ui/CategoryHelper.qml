@@ -1,22 +1,22 @@
 /*
  * CategoryHelper.qml - small helper that reads category metadata from
- * plasmoid.configuration. Instantiated in each view that needs it so
+ * Plasmoid.configuration. Instantiated in each view that needs it so
  * we don't have to chain properties across files.
  */
 
-import QtQuick 2.15
-import org.kde.plasma.plasmoid 2.0
+import QtQuick
+import org.kde.plasma.plasmoid
 
 QtObject {
     function count() {
-        return Math.min(7, Math.max(1, plasmoid.configuration.categoryCount || 4));
+        return Math.min(7, Math.max(1, Plasmoid.configuration.categoryCount || 4));
     }
     function name(i) {
-        var names = plasmoid.configuration.categoryNames || [];
+        var names = Plasmoid.configuration.categoryNames || [];
         return names[i] || qsTr("Category %1").arg(i + 1);
     }
     function color(i) {
-        var colors = plasmoid.configuration.categoryColors || [];
+        var colors = Plasmoid.configuration.categoryColors || [];
         return colors[i] || "#7f8c8d";
     }
 
@@ -28,7 +28,7 @@ QtObject {
     readonly property var _fallbackColors: ["#95a5a6", "#3498db", "#2ecc71", "#f39c12", "#e74c3c"]
 
     function priorityLevelsList() {
-        var arr = plasmoid.configuration.priorityLevels || [];
+        var arr = Plasmoid.configuration.priorityLevels || [];
         var out = [];
         for (var i = 0; i < arr.length; i++) {
             var s = ("" + arr[i]).trim();
@@ -41,7 +41,7 @@ QtObject {
     readonly property var priorityLevels: priorityLevelsList()
 
     function priorityColorsList() {
-        var arr = plasmoid.configuration.priorityColors || [];
+        var arr = Plasmoid.configuration.priorityColors || [];
         return arr;
     }
 

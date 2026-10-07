@@ -10,12 +10,12 @@
  * Import/export moved to the configuration dialog ("Datos" page).
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Controls 2.15 as QQC2
-import org.kde.plasma.plasmoid 2.0
-import org.kde.plasma.core 2.0 as PlasmaCore
-import org.kde.plasma.components 3.0 as PlasmaComponents3
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls as QQC2
+import org.kde.plasma.plasmoid
+import org.kde.plasma.components as PlasmaComponents3
+import org.kde.kirigami as Kirigami
 
 Item {
     id: view
@@ -75,15 +75,15 @@ Item {
 
     ColumnLayout {
         anchors.fill: parent
-        spacing: PlasmaCore.Units.smallSpacing
+        spacing: Kirigami.Units.smallSpacing
 
         // Header.
         RowLayout {
             Layout.fillWidth: true
 
             Rectangle {
-                width: 14
-                height: 14
+                Layout.preferredWidth: 14
+                Layout.preferredHeight: 14
                 radius: 2
                 color: cats.color(view.catIndex)
             }
@@ -139,9 +139,9 @@ Item {
         // Text field: quick-add by default, filter in search mode.
         RowLayout {
             Layout.fillWidth: true
-            spacing: PlasmaCore.Units.smallSpacing
+            spacing: Kirigami.Units.smallSpacing
 
-            PlasmaCore.IconItem {
+            Kirigami.Icon {
                 source: view._searchMode ? "search" : "list-add"
                 Layout.preferredWidth: 16
                 Layout.preferredHeight: 16
@@ -189,9 +189,9 @@ Item {
                     ownerView: view
                     catColor: cats.color(modelData ? modelData.category : 0)
                     expandSignal: view._expandSeq
-                    onEditRequested: view.editTaskRequested(task)
-                    onLinkJiraRequested: view.linkJiraRequested(task)
-                    onOpenJiraRequested: view.openJiraRequested(task)
+                    onEditRequested: (task) => view.editTaskRequested(task)
+                    onLinkJiraRequested: (task) => view.linkJiraRequested(task)
+                    onOpenJiraRequested: (task) => view.openJiraRequested(task)
                 }
 
                 PlasmaComponents3.Label {

@@ -7,12 +7,12 @@
  * On Save, writes the task and its whole subtask list back through TaskStore.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Controls 2.15 as QQC2
-import org.kde.plasma.plasmoid 2.0
-import org.kde.plasma.core 2.0 as PlasmaCore
-import org.kde.plasma.components 3.0 as PlasmaComponents3
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls as QQC2
+import org.kde.plasma.plasmoid
+import org.kde.plasma.components as PlasmaComponents3
+import org.kde.kirigami as Kirigami
 
 QQC2.Dialog {
     id: dlg
@@ -110,7 +110,7 @@ QQC2.Dialog {
     contentItem: Item {
         ColumnLayout {
             anchors.fill: parent
-            spacing: PlasmaCore.Units.smallSpacing
+            spacing: Kirigami.Units.smallSpacing
 
             PlasmaComponents3.Label { text: i18n("Title") }
             PlasmaComponents3.TextField {
@@ -121,7 +121,7 @@ QQC2.Dialog {
 
             RowLayout {
                 Layout.fillWidth: true
-                spacing: PlasmaCore.Units.smallSpacing
+                spacing: Kirigami.Units.smallSpacing
 
                 ColumnLayout {
                     Layout.fillWidth: true
@@ -181,13 +181,13 @@ QQC2.Dialog {
 
                 ColumnLayout {
                     width: bodyScroll.availableWidth
-                    spacing: PlasmaCore.Units.smallSpacing
+                    spacing: Kirigami.Units.smallSpacing
 
                     Repeater {
                         model: (dlg._subsRev, dlg._subs.length)
                         delegate: RowLayout {
                             Layout.fillWidth: true
-                            spacing: PlasmaCore.Units.smallSpacing
+                            spacing: Kirigami.Units.smallSpacing
                             property int subIndex: index
 
                             PlasmaComponents3.TextField {

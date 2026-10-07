@@ -15,7 +15,7 @@
  *   journalctl --user -f _COMM=plasmashell | grep -i jirastore
  */
 
-import QtQuick 2.15
+import QtQuick
 
 QtObject {
     id: store
@@ -88,6 +88,21 @@ QtObject {
         _fetchSprintHours();
         // Refresh finished sub-tasks for the "Hechas" tab.
         if (_cfg("ShowHechasTab") !== false) fetchDone();
+    }
+
+    // Basic-auth header value. Base64 of the UTF-8 bytes of "user:pass"
+    // (Qt 6 deprecates Qt.btoa(string), so it's done by hand).
+    function _basicAuth(user, pass) {
+        var s = unescape(encodeURIComponent(user + ":" + pass));
+        var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        var out = "";
+        for (var i = 0; i < s.length; i += 3) {
+            var n = (s.charCodeAt(i) << 16) | ((s.charCodeAt(i + 1) || 0) << 8) | (s.charCodeAt(i + 2) || 0);
+            out += chars[(n >> 18) & 63] + chars[(n >> 12) & 63]
+                 + (i + 1 < s.length ? chars[(n >> 6) & 63] : "=")
+                 + (i + 2 < s.length ? chars[n & 63] : "=");
+        }
+        return "Basic " + out;
     }
 
     // Read a config value for this instance (cfgPrefix + suffix).
@@ -248,7 +263,7 @@ QtObject {
         // enough for the plasmoid use case.
         var url = site + "/rest/api/3/search/jql?jql=" + encodeURIComponent(jql)
                 + "&maxResults=" + max + "&fields=" + fields;
-        var authHeader = "Basic " + Qt.btoa(email + ":" + token);
+        var authHeader = _basicAuth(email, token);
 
         _log("");
         _log("Preparando request:");
@@ -418,7 +433,7 @@ QtObject {
         }
         var xhr = new XMLHttpRequest();
         xhr.open("GET", site + "/rest/api/3/myself", true);
-        xhr.setRequestHeader("Authorization", "Basic " + Qt.btoa(email + ":" + token));
+        xhr.setRequestHeader("Authorization", _basicAuth(email, token));
         xhr.setRequestHeader("Accept", "application/json");
         xhr.onreadystatechange = function() {
             if (xhr.readyState !== XMLHttpRequest.DONE) return;
@@ -464,7 +479,7 @@ QtObject {
 
         var xhr = new XMLHttpRequest();
         xhr.open("GET", url, true);
-        xhr.setRequestHeader("Authorization", "Basic " + Qt.btoa(email + ":" + token));
+        xhr.setRequestHeader("Authorization", _basicAuth(email, token));
         xhr.setRequestHeader("Accept", "application/json");
         xhr.onreadystatechange = function() {
             if (xhr.readyState !== XMLHttpRequest.DONE) return;
@@ -508,7 +523,7 @@ QtObject {
         var url = c.site + "/rest/api/3/issue/" + encodeURIComponent(key) + "/transitions";
         var xhr = new XMLHttpRequest();
         xhr.open("GET", url, true);
-        xhr.setRequestHeader("Authorization", "Basic " + Qt.btoa(c.email + ":" + c.token));
+        xhr.setRequestHeader("Authorization", _basicAuth(c.email, c.token));
         xhr.setRequestHeader("Accept", "application/json");
         xhr.onreadystatechange = function() {
             if (xhr.readyState !== XMLHttpRequest.DONE) return;
@@ -549,7 +564,7 @@ QtObject {
         var body = JSON.stringify({ transition: { id: "" + transitionId } });
         var xhr = new XMLHttpRequest();
         xhr.open("POST", url, true);
-        xhr.setRequestHeader("Authorization", "Basic " + Qt.btoa(c.email + ":" + c.token));
+        xhr.setRequestHeader("Authorization", _basicAuth(c.email, c.token));
         xhr.setRequestHeader("Accept", "application/json");
         xhr.setRequestHeader("Content-Type", "application/json");
         xhr.onreadystatechange = function() {
@@ -726,7 +741,7 @@ QtObject {
                   "&maxResults=" + max + "&fields=" + fields;
         var xhr = new XMLHttpRequest();
         xhr.open("GET", url, true);
-        xhr.setRequestHeader("Authorization", "Basic " + Qt.btoa(c.email + ":" + c.token));
+        xhr.setRequestHeader("Authorization", _basicAuth(c.email, c.token));
         xhr.setRequestHeader("Accept", "application/json");
         xhr.onreadystatechange = function() {
             if (xhr.readyState !== XMLHttpRequest.DONE) return;
@@ -768,7 +783,7 @@ QtObject {
                       "&fields=summary,status,assignee,timetracking,timeestimate,timeoriginalestimate";
             var xhr = new XMLHttpRequest();
             xhr.open("GET", url, true);
-            xhr.setRequestHeader("Authorization", "Basic " + Qt.btoa(c.email + ":" + c.token));
+            xhr.setRequestHeader("Authorization", _basicAuth(c.email, c.token));
             xhr.setRequestHeader("Accept", "application/json");
             xhr.onreadystatechange = function() {
                 if (xhr.readyState !== XMLHttpRequest.DONE) return;
@@ -891,7 +906,7 @@ QtObject {
         if (myAccountId) { cb(); return; }
         var xhr = new XMLHttpRequest();
         xhr.open("GET", creds.site + "/rest/api/3/myself", true);
-        xhr.setRequestHeader("Authorization", "Basic " + Qt.btoa(creds.email + ":" + creds.token));
+        xhr.setRequestHeader("Authorization", _basicAuth(creds.email, creds.token));
         xhr.setRequestHeader("Accept", "application/json");
         xhr.onreadystatechange = function() {
             if (xhr.readyState !== XMLHttpRequest.DONE) return;
@@ -1047,7 +1062,7 @@ QtObject {
                        (store.myAccountId ? "[OK]" : "(VACÍO!)") + ")");
             var xhr = new XMLHttpRequest();
             xhr.open("GET", url, true);
-            xhr.setRequestHeader("Authorization", "Basic " + Qt.btoa(c.email + ":" + c.token));
+            xhr.setRequestHeader("Authorization", _basicAuth(c.email, c.token));
             xhr.setRequestHeader("Accept", "application/json");
             xhr.onreadystatechange = function() {
                 if (xhr.readyState !== XMLHttpRequest.DONE) return;

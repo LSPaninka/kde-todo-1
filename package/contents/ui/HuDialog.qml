@@ -4,12 +4,12 @@
  * responsable), with a "solo mis subtareas" toggle. Opened from the HU tab.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Controls 2.15 as QQC2
-import org.kde.plasma.plasmoid 2.0
-import org.kde.plasma.core 2.0 as PlasmaCore
-import org.kde.plasma.components 3.0 as PlasmaComponents3
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls as QQC2
+import org.kde.plasma.plasmoid
+import org.kde.plasma.components as PlasmaComponents3
+import org.kde.kirigami as Kirigami
 
 QQC2.Dialog {
     id: dlg
@@ -72,8 +72,8 @@ QQC2.Dialog {
 
     function _statusColor(statusName, colorName, statusCat) {
         var s = (statusName || "").trim().toLowerCase();
-        var names  = plasmoid.configuration[cfgPrefix+"StatusNames"]  || [];
-        var colors = plasmoid.configuration[cfgPrefix+"StatusColors"] || [];
+        var names  = Plasmoid.configuration[cfgPrefix+"StatusNames"]  || [];
+        var colors = Plasmoid.configuration[cfgPrefix+"StatusColors"] || [];
         for (var i = 0; i < names.length; i++) {
             if ((names[i] || "").trim().toLowerCase() === s) {
                 var c = (colors[i] || "").trim();
@@ -105,8 +105,8 @@ QQC2.Dialog {
     readonly property int _wResp: 130
 
     background: Rectangle {
-        color: PlasmaCore.Theme.backgroundColor
-        border.color: PlasmaCore.Theme.textColor
+        color: Kirigami.Theme.backgroundColor
+        border.color: Kirigami.Theme.textColor
         border.width: 1
         radius: 6
     }
@@ -119,14 +119,14 @@ QQC2.Dialog {
         // -------- Header --------
         RowLayout {
             Layout.fillWidth: true
-            Layout.margins: PlasmaCore.Units.smallSpacing * 2
-            spacing: PlasmaCore.Units.smallSpacing
+            Layout.margins: Kirigami.Units.smallSpacing * 2
+            spacing: Kirigami.Units.smallSpacing
 
             PlasmaComponents3.Label {
                 Layout.fillWidth: true
                 text: "[" + dlg.parentKey + "]  " + dlg.parentSummary
                 font.bold: true
-                font.pixelSize: PlasmaCore.Theme.defaultFont.pixelSize + 1
+                font.pixelSize: Kirigami.Theme.defaultFont.pixelSize + 1
                 wrapMode: Text.WordWrap
             }
             PlasmaComponents3.ToolButton {
@@ -138,9 +138,9 @@ QQC2.Dialog {
         // -------- Filter row --------
         RowLayout {
             Layout.fillWidth: true
-            Layout.leftMargin: PlasmaCore.Units.smallSpacing * 2
-            Layout.rightMargin: PlasmaCore.Units.smallSpacing * 2
-            spacing: PlasmaCore.Units.smallSpacing
+            Layout.leftMargin: Kirigami.Units.smallSpacing * 2
+            Layout.rightMargin: Kirigami.Units.smallSpacing * 2
+            spacing: Kirigami.Units.smallSpacing
 
             PlasmaComponents3.CheckBox {
                 text: i18n("Solo mis subtareas")
@@ -152,22 +152,22 @@ QQC2.Dialog {
                 text: dlg.loading ? i18n("Cargando…")
                                   : i18np("%1 subtarea", "%1 subtareas", dlg._rows.length)
                 opacity: 0.6
-                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
             }
         }
 
         // -------- Table header --------
         RowLayout {
             Layout.fillWidth: true
-            Layout.leftMargin: PlasmaCore.Units.smallSpacing * 2
-            Layout.rightMargin: PlasmaCore.Units.smallSpacing * 2
-            Layout.topMargin: PlasmaCore.Units.smallSpacing
-            spacing: PlasmaCore.Units.smallSpacing
-            PlasmaComponents3.Label { text: i18n("Código");      Layout.preferredWidth: dlg._wCode;   font.bold: true; opacity: 0.7; font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize }
-            PlasmaComponents3.Label { text: i18n("Nombre");      Layout.fillWidth: true;               font.bold: true; opacity: 0.7; font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize }
-            PlasmaComponents3.Label { text: i18n("Estado");      Layout.preferredWidth: dlg._wStatus; font.bold: true; opacity: 0.7; font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize }
-            PlasmaComponents3.Label { text: i18n("Hs. rest.");   Layout.preferredWidth: dlg._wHours;  font.bold: true; opacity: 0.7; font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize; horizontalAlignment: Text.AlignRight }
-            PlasmaComponents3.Label { text: i18n("Responsable"); Layout.preferredWidth: dlg._wResp;   font.bold: true; opacity: 0.7; font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize }
+            Layout.leftMargin: Kirigami.Units.smallSpacing * 2
+            Layout.rightMargin: Kirigami.Units.smallSpacing * 2
+            Layout.topMargin: Kirigami.Units.smallSpacing
+            spacing: Kirigami.Units.smallSpacing
+            PlasmaComponents3.Label { text: i18n("Código");      Layout.preferredWidth: dlg._wCode;   font.bold: true; opacity: 0.7; font.pixelSize: Kirigami.Theme.smallFont.pixelSize }
+            PlasmaComponents3.Label { text: i18n("Nombre");      Layout.fillWidth: true;               font.bold: true; opacity: 0.7; font.pixelSize: Kirigami.Theme.smallFont.pixelSize }
+            PlasmaComponents3.Label { text: i18n("Estado");      Layout.preferredWidth: dlg._wStatus; font.bold: true; opacity: 0.7; font.pixelSize: Kirigami.Theme.smallFont.pixelSize }
+            PlasmaComponents3.Label { text: i18n("Hs. rest.");   Layout.preferredWidth: dlg._wHours;  font.bold: true; opacity: 0.7; font.pixelSize: Kirigami.Theme.smallFont.pixelSize; horizontalAlignment: Text.AlignRight }
+            PlasmaComponents3.Label { text: i18n("Responsable"); Layout.preferredWidth: dlg._wResp;   font.bold: true; opacity: 0.7; font.pixelSize: Kirigami.Theme.smallFont.pixelSize }
         }
 
         Rectangle {
@@ -209,22 +209,22 @@ QQC2.Dialog {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
-                        anchors.leftMargin: PlasmaCore.Units.smallSpacing * 2
-                        anchors.rightMargin: PlasmaCore.Units.smallSpacing * 2
-                        spacing: PlasmaCore.Units.smallSpacing
+                        anchors.leftMargin: Kirigami.Units.smallSpacing * 2
+                        anchors.rightMargin: Kirigami.Units.smallSpacing * 2
+                        spacing: Kirigami.Units.smallSpacing
 
                         PlasmaComponents3.Label {
                             Layout.preferredWidth: dlg._wCode
                             text: modelData ? modelData.key : ""
                             font.family: "monospace"
                             elide: Text.ElideRight
-                            font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize + 1
+                            font.pixelSize: Kirigami.Theme.smallFont.pixelSize + 1
                         }
                         PlasmaComponents3.Label {
                             Layout.fillWidth: true
                             text: modelData ? modelData.summary : ""
                             elide: Text.ElideRight
-                            font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize + 1
+                            font.pixelSize: Kirigami.Theme.smallFont.pixelSize + 1
                         }
                         Rectangle {
                             Layout.preferredWidth: dlg._wStatus
@@ -239,21 +239,21 @@ QQC2.Dialog {
                                 font.bold: true
                                 elide: Text.ElideRight
                                 horizontalAlignment: Text.AlignHCenter
-                                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                             }
                         }
                         PlasmaComponents3.Label {
                             Layout.preferredWidth: dlg._wHours
                             text: modelData ? dlg._fmtH(modelData.remainingSec) : ""
                             horizontalAlignment: Text.AlignRight
-                            font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize + 1
+                            font.pixelSize: Kirigami.Theme.smallFont.pixelSize + 1
                         }
                         PlasmaComponents3.Label {
                             Layout.preferredWidth: dlg._wResp
                             text: modelData ? modelData.assignee : ""
                             elide: Text.ElideRight
                             opacity: 0.85
-                            font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize + 1
+                            font.pixelSize: Kirigami.Theme.smallFont.pixelSize + 1
                         }
                     }
                 }
@@ -286,8 +286,8 @@ QQC2.Dialog {
         // -------- Footer --------
         RowLayout {
             Layout.fillWidth: true
-            Layout.margins: PlasmaCore.Units.smallSpacing * 2
-            spacing: PlasmaCore.Units.smallSpacing
+            Layout.margins: Kirigami.Units.smallSpacing * 2
+            spacing: Kirigami.Units.smallSpacing
             Item { Layout.fillWidth: true }
             PlasmaComponents3.ToolButton {
                 icon.name: "window-close"

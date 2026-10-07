@@ -5,13 +5,23 @@
  * the matching kcfg entry declared in config/main.xml.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Controls 2.15
-import org.kde.kirigami 2.5 as Kirigami
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls
+import org.kde.kirigami as Kirigami
+import org.kde.kcmutils as KCM
 
-Kirigami.FormLayout {
+KCM.SimpleKCM {
     id: page
+
+    // Plasma 6 also assigns cfg_<key>Default; declare them to avoid warnings.
+    property var cfg_modeDefault
+    property var cfg_categoryCountDefault
+    property var cfg_showPriorityIconsDefault
+    property var cfg_confirmDeleteDefault
+    property var cfg_todoJiraLinkDefault
+    property var cfg_popupWidthDefault
+    property var cfg_popupHeightDefault
 
     // Bindings to main.xml entries.
     property string cfg_mode: "todo"
@@ -24,91 +34,93 @@ Kirigami.FormLayout {
 
     ButtonGroup { id: modeGroup }
 
-    RowLayout {
-        Kirigami.FormData.label: i18n("Modo:")
-        spacing: Kirigami.Units.smallSpacing
+    Kirigami.FormLayout {
+        RowLayout {
+            Kirigami.FormData.label: i18n("Modo:")
+            spacing: Kirigami.Units.smallSpacing
 
-        RadioButton {
-            ButtonGroup.group: modeGroup
-            text: i18n("ToDo")
-            checked: page.cfg_mode === "todo"
-            onToggled: if (checked) page.cfg_mode = "todo"
+            RadioButton {
+                ButtonGroup.group: modeGroup
+                text: i18n("ToDo")
+                checked: page.cfg_mode === "todo"
+                onToggled: if (checked) page.cfg_mode = "todo"
+            }
+            RadioButton {
+                ButtonGroup.group: modeGroup
+                text: i18n("Jira 1")
+                checked: page.cfg_mode === "jira"
+                onToggled: if (checked) page.cfg_mode = "jira"
+            }
+            RadioButton {
+                ButtonGroup.group: modeGroup
+                text: i18n("Jira 2")
+                checked: page.cfg_mode === "jira2"
+                onToggled: if (checked) page.cfg_mode = "jira2"
+            }
+            RadioButton {
+                ButtonGroup.group: modeGroup
+                text: i18n("GitHub Projects")
+                checked: page.cfg_mode === "gh"
+                onToggled: if (checked) page.cfg_mode = "gh"
+            }
         }
-        RadioButton {
-            ButtonGroup.group: modeGroup
-            text: i18n("Jira 1")
-            checked: page.cfg_mode === "jira"
-            onToggled: if (checked) page.cfg_mode = "jira"
+
+        Label {
+            Layout.preferredWidth: 360
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            opacity: 0.65
+            text: i18n("ToDo: lista de tareas local (con sincronización opcional a Notion, "
+                     + "pestaña «Notion»). Jira: incidencias asignadas en Jira Cloud. "
+                     + "GitHub Projects: ítems de un proyecto V2 (pestaña «GitHub»). Desde la vista "
+                     + "minimalista podés cambiar de modo con la rueda del mouse.")
         }
-        RadioButton {
-            ButtonGroup.group: modeGroup
-            text: i18n("Jira 2")
-            checked: page.cfg_mode === "jira2"
-            onToggled: if (checked) page.cfg_mode = "jira2"
+
+        Item { Kirigami.FormData.isSection: true }
+
+        // -------- ToDo-specific section --------
+        SpinBox {
+            id: catCountSpin
+            Kirigami.FormData.label: i18n("Número de categorías:")
+            from: 1
+            to: 7
+            stepSize: 1
         }
-        RadioButton {
-            ButtonGroup.group: modeGroup
-            text: i18n("GitHub Projects")
-            checked: page.cfg_mode === "gh"
-            onToggled: if (checked) page.cfg_mode = "gh"
+
+        CheckBox {
+            id: showPrioCheck
+            Kirigami.FormData.label: i18n("Prioridades:")
+            text: i18n("Mostrar insignias de prioridad (XS/S/M/L/XL)")
         }
-    }
 
-    Label {
-        Layout.preferredWidth: 360
-        Layout.fillWidth: true
-        wrapMode: Text.WordWrap
-        opacity: 0.65
-        text: i18n("ToDo: lista de tareas local (con sincronización opcional a Notion, "
-                 + "pestaña «Notion»). Jira: incidencias asignadas en Jira Cloud. "
-                 + "GitHub Projects: ítems de un proyecto V2 (pestaña «GitHub»). Desde la vista "
-                 + "minimalista podés cambiar de modo con la rueda del mouse.")
-    }
+        CheckBox {
+            id: confirmDeleteCheck
+            Kirigami.FormData.label: i18n("Borrado:")
+            text: i18n("Confirmar antes de borrar permanentemente archivadas")
+        }
 
-    Item { Kirigami.FormData.isSection: true }
+        CheckBox {
+            id: todoJiraLinkCheck
+            Kirigami.FormData.label: i18n("Anexar Jira:")
+            text: i18n("Mostrar un botón en cada tarea para anexar una subtarea de Jira")
+        }
 
-    // -------- ToDo-specific section --------
-    SpinBox {
-        id: catCountSpin
-        Kirigami.FormData.label: i18n("Número de categorías:")
-        from: 1
-        to: 7
-        stepSize: 1
-    }
+        Item { Kirigami.FormData.isSection: true }
 
-    CheckBox {
-        id: showPrioCheck
-        Kirigami.FormData.label: i18n("Prioridades:")
-        text: i18n("Mostrar insignias de prioridad (XS/S/M/L/XL)")
-    }
+        SpinBox {
+            id: popupW
+            Kirigami.FormData.label: i18n("Ancho del popup (px):")
+            from: 280
+            to: 1200
+            stepSize: 10
+        }
 
-    CheckBox {
-        id: confirmDeleteCheck
-        Kirigami.FormData.label: i18n("Borrado:")
-        text: i18n("Confirmar antes de borrar permanentemente archivadas")
-    }
-
-    CheckBox {
-        id: todoJiraLinkCheck
-        Kirigami.FormData.label: i18n("Anexar Jira:")
-        text: i18n("Mostrar un botón en cada tarea para anexar una subtarea de Jira")
-    }
-
-    Item { Kirigami.FormData.isSection: true }
-
-    SpinBox {
-        id: popupW
-        Kirigami.FormData.label: i18n("Ancho del popup (px):")
-        from: 280
-        to: 1200
-        stepSize: 10
-    }
-
-    SpinBox {
-        id: popupH
-        Kirigami.FormData.label: i18n("Alto del popup (px):")
-        from: 300
-        to: 1200
-        stepSize: 10
+        SpinBox {
+            id: popupH
+            Kirigami.FormData.label: i18n("Alto del popup (px):")
+            from: 300
+            to: 1200
+            stepSize: 10
+        }
     }
 }

@@ -3,12 +3,12 @@
  * Only archived tasks can be permanently deleted, matching the requirement.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Controls 2.15 as QQC2
-import org.kde.plasma.plasmoid 2.0
-import org.kde.plasma.core 2.0 as PlasmaCore
-import org.kde.plasma.components 3.0 as PlasmaComponents3
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls as QQC2
+import org.kde.plasma.plasmoid
+import org.kde.plasma.components as PlasmaComponents3
+import org.kde.kirigami as Kirigami
 
 Item {
     id: archiveView
@@ -24,7 +24,7 @@ Item {
 
     ColumnLayout {
         anchors.fill: parent
-        spacing: PlasmaCore.Units.smallSpacing
+        spacing: Kirigami.Units.smallSpacing
 
         RowLayout {
             Layout.fillWidth: true
@@ -56,7 +56,7 @@ Item {
                 delegate: Rectangle {
                     width: list.width
                     readonly property var item: modelData
-                    height: row.implicitHeight + PlasmaCore.Units.smallSpacing * 2
+                    height: row.implicitHeight + Kirigami.Units.smallSpacing * 2
                     radius: 3
                     color: Qt.rgba(1, 1, 1, 0.04)
                     border.color: Qt.rgba(1, 1, 1, 0.08)
@@ -76,8 +76,8 @@ Item {
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.leftMargin: 10
-                        anchors.rightMargin: PlasmaCore.Units.smallSpacing
-                        spacing: PlasmaCore.Units.smallSpacing
+                        anchors.rightMargin: Kirigami.Units.smallSpacing
+                        spacing: Kirigami.Units.smallSpacing
 
                         ColumnLayout {
                             Layout.fillWidth: true
@@ -94,14 +94,14 @@ Item {
                                 text: i18n("%1 · archived %2",
                                            cats.name(item.category),
                                            Qt.formatDateTime(new Date(item.archivedAt),
-                                                             Qt.DefaultLocaleShortDate))
-                                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                                                             Locale.ShortFormat))
+                                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                                 opacity: 0.6
                             }
                         }
 
                         PriorityBadge {
-                            visible: plasmoid.configuration.showPriorityIcons
+                            visible: Plasmoid.configuration.showPriorityIcons
                             level: item.priority
                         }
 
@@ -115,7 +115,7 @@ Item {
                         PlasmaComponents3.ToolButton {
                             icon.name: "edit-delete"
                             onClicked: {
-                                if (plasmoid.configuration.confirmDelete) {
+                                if (Plasmoid.configuration.confirmDelete) {
                                     archiveView.confirmDelete(item.id);
                                 } else {
                                     store.deleteArchived(item.id);

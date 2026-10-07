@@ -2,16 +2,16 @@
 
 Este documento explica **dónde** se guardan las tareas, las
 credenciales de Jira y la cache, **cómo** se persisten y **cómo
-depurar / respaldar / migrar**. Aplica a Kubuntu 24.04 con KDE Plasma
-5.27 + Qt 5.15.
+depurar / respaldar / migrar**. Aplica a Kubuntu 26.04 con KDE Plasma
+6 + Qt 6 (el port a Plasma 6 conserva el mismo esquema y la misma ruta de la base).
 
 ---
 
 ## TL;DR
 
-- **Backend**: **SQLite** vía `QtQuick.LocalStorage 2.0` (parte de
-  Qt 5; en Kubuntu/Debian viene en el paquete
-  `qml-module-qtquick-localstorage` que **a veces no está instalado
+- **Backend**: **SQLite** vía `QtQuick.LocalStorage` (parte de
+  Qt 6; en Kubuntu/Debian viene en el paquete
+  `qml6-module-qtquick-localstorage` que **a veces no está instalado
   por defecto** — el `install.sh` lo detecta y ofrece instalarlo).
 - **Archivo**:
   ```
@@ -21,7 +21,7 @@ depurar / respaldar / migrar**. Aplica a Kubuntu 24.04 con KDE Plasma
   (`CategorizedToDo`); junto al `.sqlite` hay un `.ini` con metadatos.
 - **Atomic & durable**: cada mutación es una transacción SQLite, que
   hace `fsync()` por nosotros. Persiste a través de reboots, crashes
-  de plasmashell y `kquitapp5` forzados.
+  de plasmashell y cierres forzados.
 - **Configuración del widget** (modo, categorías, opciones del panel):
   sigue en `Plasmoid.configuration`. Las **credenciales de Jira** se
   mirroran a SQLite además de a Plasma — si Plasma las pierde, las
@@ -117,7 +117,7 @@ sqlite3 "$DB" 'SELECT issue_key, fetched_at FROM jira_cache;'
 2. Revisá la base (ver bloque anterior) — la tarea debería estar.
 3. Cerrá plasmashell brutalmente:
    ```bash
-   pkill -9 plasmashell && kstart5 plasmashell
+   pkill -9 plasmashell && systemctl --user restart plasma-plasmashell
    ```
 4. Reabrí el popup — la tarea sigue.
 
@@ -144,9 +144,9 @@ INI="${DB%.sqlite}.ini"
 cp -p "$DB" "$INI" ~/categorizedtodo-bak/
 
 # Restore (cerrá Plasma para evitar lock)
-kquitapp5 plasmashell
+systemctl --user stop plasma-plasmashell
 cp -p ~/categorizedtodo-bak/*.sqlite ~/categorizedtodo-bak/*.ini "$DIR"/
-kstart5 plasmashell
+systemctl --user start plasma-plasmashell
 ```
 
 Para mover datos entre máquinas o entre instancias del plasmoide
@@ -186,8 +186,8 @@ a inyectar en `Plasmoid.configuration`.
 0. **`module "QtQuick.LocalStorage" is not installed`**
    Falta el paquete del módulo QML. Instalalo con:
    ```bash
-   sudo apt install qml-module-qtquick-localstorage
-   kquitapp5 plasmashell && kstart5 plasmashell
+   sudo apt install qml6-module-qtquick-localstorage
+   systemctl --user restart plasma-plasmashell
    ```
    El `install.sh` chequea esto antes de instalar y ofrece hacerlo
    automáticamente.

@@ -6,12 +6,12 @@
  * same way Jira categories do.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Controls 2.15 as QQC2
-import org.kde.plasma.plasmoid 2.0
-import org.kde.plasma.core 2.0 as PlasmaCore
-import org.kde.plasma.components 3.0 as PlasmaComponents3
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls as QQC2
+import org.kde.plasma.plasmoid
+import org.kde.plasma.components as PlasmaComponents3
+import org.kde.kirigami as Kirigami
 
 Item {
     id: view
@@ -19,32 +19,32 @@ Item {
 
     readonly property int _v: gh ? gh.version : 0
     readonly property int categoryCount:
-        Math.min(4, Math.max(1, plasmoid.configuration.ghCategoryCount | 0 || 3))
+        Math.min(4, Math.max(1, Plasmoid.configuration.ghCategoryCount | 0 || 3))
 
     function _formatDate(ms) {
         if (!ms) return "";
-        return Qt.formatDateTime(new Date(ms), Qt.DefaultLocaleShortDate);
+        return Qt.formatDateTime(new Date(ms), Locale.ShortFormat);
     }
     function _categoryName(i) {
-        var arr = plasmoid.configuration.ghCategoryNames || [];
+        var arr = Plasmoid.configuration.ghCategoryNames || [];
         return arr[i] || qsTr("Cat. %1").arg(i + 1);
     }
     function _categoryColor(i) {
-        var arr = plasmoid.configuration.ghCategoryColors || [];
+        var arr = Plasmoid.configuration.ghCategoryColors || [];
         return arr[i] || "#7f8c8d";
     }
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: PlasmaCore.Units.smallSpacing
-        spacing: PlasmaCore.Units.smallSpacing
+        anchors.margins: Kirigami.Units.smallSpacing
+        spacing: Kirigami.Units.smallSpacing
 
         // -------- Header --------
         RowLayout {
             Layout.fillWidth: true
-            spacing: PlasmaCore.Units.smallSpacing
+            spacing: Kirigami.Units.smallSpacing
 
-            PlasmaCore.IconItem {
+            Kirigami.Icon {
                 source: "applications-development"
                 Layout.preferredWidth: 18
                 Layout.preferredHeight: 18
@@ -68,8 +68,8 @@ Item {
                 elide: Text.ElideRight
                 opacity: 0.7
                 color: gh && gh.lastError
-                       ? PlasmaCore.Theme.negativeTextColor
-                       : PlasmaCore.Theme.textColor
+                       ? Kirigami.Theme.negativeTextColor
+                       : Kirigami.Theme.textColor
             }
             PlasmaComponents3.ToolButton {
                 icon.name: "view-refresh"
@@ -186,14 +186,14 @@ Item {
                                  "%1 ítems en total",
                                  (view._v, gh.totalCount())) : ""
                 opacity: 0.6
-                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
             }
 
             ModeMenuButton {}
             PlasmaComponents3.ToolButton {
                 icon.name: "configure"
                 text: i18n("Configurar…")
-                onClicked: plasmoid.action("configure").trigger()
+                onClicked: Plasmoid.internalAction("configure").trigger()
             }
         }
     }
@@ -219,8 +219,8 @@ Item {
             anchors.centerIn: parent
             width: Math.max(300, parent.width - 20)
             height: Math.max(220, parent.height - 30)
-            color: PlasmaCore.Theme.backgroundColor
-            border.color: PlasmaCore.Theme.textColor
+            color: Kirigami.Theme.backgroundColor
+            border.color: Kirigami.Theme.textColor
             border.width: 1
             radius: 4
 

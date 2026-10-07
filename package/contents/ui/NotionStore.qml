@@ -4,9 +4,9 @@
  * Shells out to the Notion CLI (`ntn`) to list and edit pages. Auth is
  * delegated entirely to ntn — the user runs `ntn login` once (or exports
  * NOTION_API_TOKEN) and the plasmoid just reads its stdout. No tokens are
- * stored in plasmoid.configuration.
+ * stored in Plasmoid.configuration.
  *
- * The executable data engine (PlasmaCore.DataSource engine="executable")
+ * The executable data engine (Plasma5Support.DataSource engine="executable")
  * is used to invoke ntn. Each command runs through `sh -c '<cmd>'` with
  * single-quoted shell-safe arguments. All variable input is escaped via
  * _shellQuote so a malicious page title can't break out and execute
@@ -21,8 +21,9 @@
  * See docs/NOTION.md for setup instructions.
  */
 
-import QtQuick 2.15
-import org.kde.plasma.core 2.0 as PlasmaCore
+import QtQuick
+import org.kde.plasma.plasma5support as Plasma5Support
+import org.kde.plasma.plasmoid
 
 QtObject {
     id: store
@@ -49,14 +50,14 @@ QtObject {
         onTriggered: store.fetch()
     }
 
-    property var _cmd: PlasmaCore.DataSource {
+    property var _cmd: Plasma5Support.DataSource {
         engine: "executable"
         connectedSources: []
-        onNewData: function(sourceName, data) {
+        onNewData: (sourceName, data) => {
             var exitCode = data["exit code"];
             var stdout = data["stdout"] || "";
             var stderr = data["stderr"] || "";
-            disconnectSource(sourceName);
+            store._cmd.disconnectSource(sourceName);
             var cb = store._pending[sourceName];
             if (cb) {
                 delete store._pending[sourceName];

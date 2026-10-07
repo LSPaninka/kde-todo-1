@@ -1,12 +1,16 @@
-# Categorized ToDo — KDE Plasma 5 plasmoid
+# Categorized ToDo — KDE Plasma 6 plasmoid
 
-Un plasmoide (gadget de escritorio y de panel) para **Kubuntu 24.04**
-(**KDE Plasma 5.27** + **Qt 5.15**) que implementa una lista de tareas con
+Un plasmoide (gadget de escritorio y de panel) para **Kubuntu 26.04**
+(**KDE Plasma 6.6** + **Qt 6.10**) que implementa una lista de tareas con
 categorías, prioridades, subtareas y archivo.
 
 Todo el código es QML puro. **No se usan librerías externas**: sólo los módulos
-que vienen con Plasma 5 y Qt 5.15 (`org.kde.plasma.*`, `org.kde.kirigami`,
-`QtQuick`, `QtQuick.Controls 2`, `QtQuick.Dialogs`).
+que vienen con Plasma 6 y Qt 6 (`org.kde.plasma.*`, `org.kde.kirigami`,
+`QtQuick`, `QtQuick.Controls`, `QtQuick.Dialogs`).
+
+> **Plasma 5**: esta rama es el port a Plasma 6 (versión 2.0.0, mismo `Id` de
+> plugin y mismas claves de configuración). La versión para Plasma 5.27 / Qt 5.15
+> sigue en la rama `claude/todo-notion-jira-enhancements`.
 
 ---
 
@@ -124,35 +128,37 @@ Pestaña **Apariencia** (controla la vista compacta):
 
 ## Instalación
 
-Requisitos: Kubuntu 24.04 con Plasma 5.27 y Qt 5.15 (vienen por defecto).
+Requisitos: Kubuntu 26.04 con Plasma 6 y Qt 6 (vienen por defecto).
 
 ### Dependencias QML
 
-El plasmoide depende de tres módulos QML que **a veces no se instalan
+El plasmoide depende de cuatro módulos QML de Qt 6 que **a veces no se instalan
 con Plasma por defecto**:
 
 | Módulo QML                 | Paquete (Debian/Ubuntu)              |
 | -------------------------- | ------------------------------------ |
-| `QtQuick.LocalStorage`     | `qml-module-qtquick-localstorage`    |
-| `QtQuick.Controls 2`       | `qml-module-qtquick-controls2`       |
-| `Qt.labs.platform`         | `qml-module-qt-labs-platform`        |
+| `QtQuick.LocalStorage`     | `qml6-module-qtquick-localstorage`   |
+| `QtQuick.Controls`         | `qml6-module-qtquick-controls`       |
+| `QtQuick.Dialogs`          | `qml6-module-qtquick-dialogs`        |
+| `QtQuick.Layouts`          | `qml6-module-qtquick-layouts`        |
 
 El `install.sh` los detecta automáticamente y ofrece instalarlos vía
 `sudo apt install`. Si preferís hacerlo a mano:
 
 ```bash
-sudo apt install qml-module-qtquick-localstorage \
-                 qml-module-qtquick-controls2 \
-                 qml-module-qt-labs-platform
+sudo apt install qml6-module-qtquick-localstorage \
+                 qml6-module-qtquick-controls \
+                 qml6-module-qtquick-dialogs \
+                 qml6-module-qtquick-layouts
 ```
 
-En Fedora: `sudo dnf install qt5-qtdeclarative qt5-qtquickcontrols2`
-En Arch: `sudo pacman -S qt5-declarative qt5-quickcontrols2`
+En Fedora: `sudo dnf install qt6-qtdeclarative`
+En Arch: `sudo pacman -S qt6-declarative`
 
 > **Nota**: si al cargar el plasmoide ves el error
 > `module "QtQuick.LocalStorage" is not installed`, instalá el paquete
 > de arriba y reiniciá plasmashell con
-> `kquitapp5 plasmashell && kstart5 plasmashell`.
+> `systemctl --user restart plasma-plasmashell`.
 
 ### Instalar el plasmoide
 
@@ -164,8 +170,17 @@ En Arch: `sudo pacman -S qt5-declarative qt5-quickcontrols2`
 ./install.sh --uninstall
 ```
 
-El script usa `kpackagetool5` (o `plasmapkg2` si está presente). Ambos ya
-vienen con la sesión Plasma.
+El script usa `kpackagetool6`, que ya viene con la sesión Plasma 6.
+
+O a mano, sin el script:
+
+```bash
+kpackagetool6 -t Plasma/Applet -i package   # primera instalación
+kpackagetool6 -t Plasma/Applet -u package   # actualizar (conserva la configuración)
+```
+
+Como el `Id` del plugin no cambió, al actualizar desde la versión de Plasma 5 el
+widget conserva su configuración.
 
 Una vez instalado, agrega el widget con:
 
@@ -175,7 +190,7 @@ Una vez instalado, agrega el widget con:
 
 Si el widget no aparece en el buscador, reiniciá Plasma:
 ```bash
-kquitapp5 plasmashell && kstart5 plasmashell
+systemctl --user restart plasma-plasmashell
 ```
 
 ---
@@ -184,7 +199,7 @@ kquitapp5 plasmashell && kstart5 plasmashell
 
 ```
 package/
-├── metadata.desktop              # metadatos del plasmoide (id, autor, …)
+├── metadata.json                 # metadatos del plasmoide (id, autor, …)
 ├── contents/
 │   ├── config/
 │   │   ├── main.xml              # esquema KCfg: opciones + datos serializados
@@ -234,8 +249,8 @@ package/
 ## Modelo de datos
 
 Las tareas, subtareas, cache de Jira y credenciales de Jira se guardan
-en una base **SQLite** vía `QtQuick.LocalStorage 2.0` (incluido en
-Qt 5, no es una librería externa). El archivo `.sqlite` vive bajo
+en una base **SQLite** vía `QtQuick.LocalStorage` (incluido en
+Qt 6, no es una librería externa). El archivo `.sqlite` vive bajo
 `~/.local/share/KDE/plasmashell/QML/OfflineStorage/Databases/`. Cada
 mutación es una transacción atómica con `fsync()`, así que sobrevive a
 reinicios y crashes de plasmashell.
@@ -296,7 +311,7 @@ Para iterar sin desinstalar/reinstalar cada vez:
 
 ```bash
 ./install.sh --dev            # hace un symlink al paquete
-kquitapp5 plasmashell && kstart5 plasmashell
+systemctl --user restart plasma-plasmashell
 ```
 
 A partir de ahí cualquier cambio en `package/contents/ui/*.qml` se aplica
@@ -304,13 +319,16 @@ al recargar el plasmoide (o reiniciar plasmashell).
 
 Logs de errores QML:
 ```bash
-journalctl --user -f -u plasma-plasmashell.service
+journalctl --user -f | grep -iE "qml|plasma"
 # o bien:
 plasmashell --replace 2>&1 | grep -i -E 'qml|warning|error'
+
+# Prueba aislada del paquete (paquete plasma-sdk):
+plasmoidviewer -a package
 ```
 
 ---
 
 ## Licencia
 
-MIT. Ver cabecera en `metadata.desktop`.
+MIT. Ver `metadata.json`.

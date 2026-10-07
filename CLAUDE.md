@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A KDE Plasma 5 plasmoid (`org.kde.plasma.categorizedtodo`) targeted at **Kubuntu 24.04 / Plasma 5.27 / Qt 5.15**. Pure QML — no native code, no external libraries beyond what ships with Plasma 5 + Qt 5.15 (`org.kde.plasma.*`, `org.kde.kirigami`, `QtQuick`, `QtQuick.Controls 2`, `QtQuick.Dialogs`, `QtQuick.LocalStorage`, `Qt.labs.platform`). README is authored in Spanish; UI strings are bilingual via `i18n`.
+A KDE Plasma 6 plasmoid (`org.kde.plasma.categorizedtodo`) targeted at **Kubuntu 26.04 / Plasma 6.6 / Qt 6.10**. Pure QML — no native code, no external libraries beyond what ships with Plasma 6 + Qt 6 (`org.kde.plasma.*`, `org.kde.kirigami`, `org.kde.kcmutils`, `QtQuick`, `QtQuick.Controls`, `QtQuick.Dialogs`, `QtQuick.LocalStorage`). This is the Plasma 6 port (version 2.0.0, same plugin `Id` and same config keys); the Plasma 5 version lives on the `claude/todo-notion-jira-enhancements` branch. README is authored in Spanish; UI strings are bilingual via `i18n`.
 
 ## Common commands
 
-Install / develop / uninstall (all wrap `kpackagetool5` / `plasmapkg2`):
+Install / develop / uninstall (all wrap `kpackagetool6`):
 
 ```bash
 ./install.sh              # install or upgrade for current user; checks QML deps
@@ -20,13 +20,14 @@ Install / develop / uninstall (all wrap `kpackagetool5` / `plasmapkg2`):
 Reload Plasma after installing or after editing QML in dev mode:
 
 ```bash
-kquitapp5 plasmashell && kstart5 plasmashell
+systemctl --user restart plasma-plasmashell
 ```
 
 Tail QML errors / Jira debug logs:
 
 ```bash
-journalctl --user -f _COMM=plasmashell
+journalctl --user -f | grep -iE "qml|plasma"
+plasmoidviewer -a package   # isolated test (plasma-sdk)
 journalctl --user -f _COMM=plasmashell | grep -i jirastore   # Jira fetch/parse traces (jiraDebug=true by default)
 ```
 
@@ -36,7 +37,7 @@ There is **no test suite, no linter, no build step** — `package/` is the deliv
 
 ### Operating modes, one widget
 
-`main.qml` is a thin dispatcher. `plasmoid.configuration.mode` selects between:
+`main.qml` is a thin dispatcher. `Plasmoid.configuration.mode` selects between:
 
 - **`todo`** — local list (`TodoView.qml`) backed by `TaskStore` + SQLite. Up to **7** user-defined categories (`Math.min(7, …)` clamp everywhere) plus an always-on "Global" tab (`GlobalView.qml`). The compact view shows hover tooltips with each category's pending titles; **clicking a specific ToDo swatch opens the popup and jumps to that category's tab** (`TaskStore.requestCategory` → `categoryRequested`, `TodoView` maps category `i` → tab `i+1`). Each `CategoryView`'s text field is **dual-mode**: quick-add by default (Enter / "Agregar" creates a task in that category), toggled to a live filter by the magnifier button left of "New…". **Subtasks are edited inside `TaskEditDialog`** (add/edit/remove rows + `TaskStore.setTaskSubtasks`), not inline — `TaskItem`'s expanded view is read-only (description + checkable subtask rows). Expansion state is persistent per task id (`_expandOverrides`/`_expandDefault` on the view) so toggling a done-checkbox never collapses open cards. **Priority letters/colors/count are user-configurable** (`priorityLevels`/`priorityColors` StringLists, ordered low→high; `CategoryHelper.priorityLevelsList/priorityColor/priorityRank/defaultPriority`; editor `configPriorities.qml`). **JSON import/export moved to the `configData.qml` settings page** (it opens the same SQLite DB by instantiating its own `Database`+`TaskStore` against the shared `CategorizedToDo` LocalStorage name). **Optionally syncs two-way with a Notion database** — see below.
 - **`jira`** / **`jira2`** — two independent read-only Jira instances (`JiraView.qml`), each backed by its own `JiraStore` with a `cfgPrefix` (`"jira"` / `"jira2"`). **The whole Jira stack is parameterized by that prefix**: `JiraStore`/`JiraView`/`JiraIssueItem`/`JiraIssueDialog` read config keys as `<cfgPrefix>Site`, `<cfgPrefix>CategoryNames`, `<cfgPrefix>StatusNames`, … and SQLite settings as `<cfgPrefix>.site`, `<cfgPrefix>.sprint`, …; the issue cache (`jira_cache`, **schema v5**) is keyed by `(instance, issue_key)`. Config pages `configJira[2]{,Categories,Statuses}.qml`. Up to **10** configurable categories per instance. Clicking an issue opens `JiraIssueDialog.qml` (detail + comments via `JiraStore.fetchIssueDetail` → `/rest/api/3/issue/{key}`, ADF flattened by `_adfToText`); right-click / a modal button change status via `/transitions`. The popup footer has a consumed-hours bar (worklog-ring math: `quemadas / (quemadas + disponible)`) and a celeste sprint-progress bar. When a sprint is active the footer figures come from `JiraStore._fetchSprintHours()`, which replicates the worklog-calendar's **subtask+customfield** strategy: it queries `issuetype in subTaskIssueTypes() AND assignee = currentUser()` (no status filter), locates the active sprint inside `<cfgPrefix>SprintField` (default `customfield_10020`), then over the subtasks in that sprint computes `disponible = Σ _remainingSecFromFields` and `quemadas = Σ my worklogs whose started ∈ [sprint.start, sprint.end]` (author matched via `myAccountId` from `/myself`). Do **not** revert to a `sprint = N` JQL — it fails on team-managed/next-gen projects. `_remainingSecFromFields` honors the `<cfgPrefix>RemainingMode` config (`calculated` = `max(0, original − spent)`, default; `api` = Jira's `remainingEstimateSeconds`).
@@ -55,7 +56,7 @@ Both `FullRepresentation.qml` (popup) and `CompactRepresentation.qml` (panel) br
 
 ### Persistence: SQLite via QtQuick.LocalStorage
 
-`Database.qml` wraps `QtQuick.LocalStorage 2.0` (synchronous, ACID, ships with Qt 5). The DB file lives at `~/.local/share/KDE/plasmashell/QML/OfflineStorage/Databases/<md5>.sqlite` (logical name `CategorizedToDo`). Tables: `tasks`, `subtasks`, `settings` (k/v fallback for credentials), `jira_cache`, `gh_cache`, `schema_version`. Schema migrations are gated on `schema_version.v` inside `_migrate()` — bump `v` and add a new `if (v < N)` block when changing schema. **Current schema is v5**: v3 adds the Notion-sync columns to `tasks`; v4 adds `tasks.jira_key` (ToDo↔Jira link); v5 recreates `jira_cache` with a composite PK `(instance, issue_key)` so the two Jira instances don't clobber each other's cache (`saveJiraIssues`/`loadJiraIssues` take an `instance` arg = the store's `cfgPrefix`).
+`Database.qml` wraps `QtQuick.LocalStorage` (synchronous, ACID, ships with Qt 6). The DB file lives at `~/.local/share/KDE/plasmashell/QML/OfflineStorage/Databases/<md5>.sqlite` (logical name `CategorizedToDo`). Tables: `tasks`, `subtasks`, `settings` (k/v fallback for credentials), `jira_cache`, `gh_cache`, `schema_version`. Schema migrations are gated on `schema_version.v` inside `_migrate()` — bump `v` and add a new `if (v < N)` block when changing schema. **Current schema is v5**: v3 adds the Notion-sync columns to `tasks`; v4 adds `tasks.jira_key` (ToDo↔Jira link); v5 recreates `jira_cache` with a composite PK `(instance, issue_key)` so the two Jira instances don't clobber each other's cache (`saveJiraIssues`/`loadJiraIssues` take an `instance` arg = the store's `cfgPrefix`).
 
 Every store mutation commits inside `Database.transaction(...)` immediately — there is no debounce, no `flushNow()` queue (the function exists only as an API-compat no-op). `TaskStore.load()` is called once from `Component.onCompleted` and rebuilds the in-memory arrays from SQLite. Do **not** add a separate JSON-file path: previous JSON-file and `Plasmoid.configuration.tasksJson` backends were removed because `KConfigPropertyMap` debouncing and the `executable` data engine proved unreliable on the target setup (see `docs/PERSISTENCE.md`).
 
@@ -63,7 +64,7 @@ Every store mutation commits inside `Database.transaction(...)` immediately — 
 
 Schema is in `package/contents/config/main.xml` (KConfig XML). Use it for **widget configuration** (mode, category names/colors, popup size, panel layout, Jira JQL/refresh interval). Tasks and the Jira issue cache live in SQLite, **not** in `Plasmoid.configuration`.
 
-**Jira credentials are mirrored to both layers.** `main.qml` wires `Connections { target: plasmoid.configuration }` so any change to `jiraSite/Email/Token/Jql` calls `_jira.persistCredentials()` to write through to SQLite. On startup `JiraStore.restoreCredentialsFromCache()` re-populates `Plasmoid.configuration` if Plasma has lost it. Keep this two-way mirror intact when touching credential fields.
+**Jira credentials are mirrored to both layers.** `main.qml` wires `Connections { target: Plasmoid.configuration }` so any change to `jiraSite/Email/Token/Jql` calls `_jira.persistCredentials()` to write through to SQLite. On startup `JiraStore.restoreCredentialsFromCache()` re-populates `Plasmoid.configuration` if Plasma has lost it. Keep this two-way mirror intact when touching credential fields.
 
 **GitHub credentials follow the same mirror.** `ghToken` / `ghOwner` round-trip through `GhStore.persistCredentials()` / `GhStore.restoreCredentialsFromCache()` (settings keys `gh.token`, `gh.owner`).
 
@@ -81,12 +82,14 @@ The matching `categoryNames`/`categoryColors`/`categoryCount` entries drive the 
 
 ### QML module dependencies
 
-`QtQuick.LocalStorage`, `QtQuick.Controls 2`, and `Qt.labs.platform` are imported but on Debian/Ubuntu often not installed by default. `install.sh` probes Qt's QML import paths for the `qmldir` files and offers `apt install qml-module-qtquick-localstorage qml-module-qtquick-controls2 qml-module-qt-labs-platform`. If you add a new QML import that isn't part of base Plasma 5, add it to `REQUIRED_QML_MODULES` in `install.sh`.
+`QtQuick.LocalStorage`, `QtQuick.Controls`, `QtQuick.Dialogs` and `QtQuick.Layouts` are imported but on Debian/Ubuntu often not installed by default. `install.sh` probes Qt 6's QML import paths for the `qmldir` files and offers `apt install qml6-module-qtquick-localstorage qml6-module-qtquick-controls qml6-module-qtquick-dialogs qml6-module-qtquick-layouts`. If you add a new QML import that isn't part of base Plasma 5, add it to `REQUIRED_QML_MODULES` in `install.sh`.
 
 ## Conventions worth knowing
 
-- The repo is targeted at Plasma 5 (`X-Plasma-API=declarativeappletscript`, `kpackagetool5`). Don't migrate APIs to Plasma 6 / KF6 / Qt 6 unless explicitly asked.
+- The repo is targeted at Plasma 6 (`metadata.json` with `X-Plasma-API-Minimum-Version: 6.0`, `kpackagetool6`). Don't reintroduce Plasma 5 APIs (`plasmoid` context object, `PlasmaCore.Units/Theme/IconItem/DataSource`, versioned imports, `metadata.desktop`).
+- Plasma 6 specifics: `main.qml`'s root is a `PlasmoidItem`; it passes itself down as `plasmoidItem` (to `CompactRepresentation`, `FullRepresentation`, `TodoView`, `JiraView`) because `expanded` belongs to the `PlasmoidItem`, not to the `Plasmoid` attached object. Stores receive the `Plasmoid` attached object as `plasmoidApi`/`plasmoid`. Signal handlers that use arguments declare them explicitly (`onClicked: (mouse) => …`). The Jira Basic-auth header is built by `_basicAuth()` (Qt 6 deprecates `Qt.btoa(string)`). The `(version, expr)` comma idiom used to make bindings depend on a store's `version` is intentional (qmllint reports it as `comma`).
+- `tools/qml-harness/` renders the real `main.qml` offscreen against fake KDE modules (`python3 tools/qml-harness/run.py package <out_dir>`, needs `PySide6-Essentials` and `libegl1`); goal is zero non-store `WARNING:` lines. Config pages that use `Kirigami.FormData` can only be checked with `qmllint`.
 - After every store mutation, call `_bump()` so QML bindings re-evaluate — the arrays are reassigned by reference, but `version` is the binding trigger.
 - IDs are monotonically increasing integers issued from `TaskStore._nextId`, seeded from `MAX(id)` across both tasks and subtasks at load time.
-- `metadata.desktop` carries the version (`X-KDE-PluginInfo-Version`) — bump it when releasing user-visible changes.
+- `metadata.json` carries the version (`KPlugin.Version`) — bump it when releasing user-visible changes.
 - Documentation source-of-truth: `README.md`, `docs/PERSISTENCE.md`, `docs/JIRA.md`, `docs/GH_PROJECTS.md`. README is in Spanish.

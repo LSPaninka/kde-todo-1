@@ -13,14 +13,22 @@
  * before the dialog is even saved.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Controls 2.15
-import org.kde.kirigami 2.5 as Kirigami
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls
+import org.kde.kirigami as Kirigami
+import org.kde.kcmutils as KCM
 
-ColumnLayout {
+KCM.SimpleKCM {
     id: page
-    spacing: Kirigami.Units.largeSpacing
+
+    // Plasma 6 also assigns cfg_<key>Default; declare them to avoid warnings.
+    property var cfg_notionApiTokenDefault
+    property var cfg_notionParentPageIdDefault
+    property var cfg_notionDatabaseIdDefault
+    property var cfg_notionRefreshMinutesDefault
+    property var cfg_notionSyncOnOpenDefault
+    property var cfg_notionDebugDefault
 
     property alias  cfg_notionApiToken:       tokenField.text
     property alias  cfg_notionParentPageId:   parentField.text
@@ -41,135 +49,6 @@ ColumnLayout {
         if (m && m.length) return m[m.length - 1];
         return s.trim();
     }
-
-    Label {
-        Layout.fillWidth: true
-        wrapMode: Text.WordWrap
-        opacity: 0.8
-        text: i18n("El modo ToDo puede sincronizarse con una base de datos de Notion (ida y vuelta). "
-                 + "1) Creá una integración interna en https://www.notion.so/my-integrations y copiá "
-                 + "su token secreto. 2) Compartí una página con esa integración y pegá su ID como "
-                 + "«página padre». 3) Pulsá «Crear base de datos» una vez. Desde entonces la lista se "
-                 + "sincroniza al abrir el plasmoide y con el botón «Notion» del popup.")
-    }
-
-    Kirigami.FormLayout {
-        Layout.fillWidth: true
-
-        RowLayout {
-            Kirigami.FormData.label: i18n("Token de integración:")
-            spacing: Kirigami.Units.smallSpacing
-            TextField {
-                id: tokenField
-                Layout.fillWidth: true
-                echoMode: showTokenCheck.checked ? TextInput.Normal : TextInput.Password
-                placeholderText: "secret_… / ntn_…"
-                inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhSensitiveData
-            }
-            CheckBox {
-                id: showTokenCheck
-                text: i18n("Ver")
-            }
-        }
-
-        TextField {
-            id: parentField
-            Kirigami.FormData.label: i18n("Página padre (ID o URL):")
-            Layout.fillWidth: true
-            placeholderText: i18n("Pegá la URL o el ID de la página compartida con la integración")
-        }
-
-        RowLayout {
-            Kirigami.FormData.label: i18n("Base de datos:")
-            spacing: Kirigami.Units.smallSpacing
-            TextField {
-                id: dbField
-                Layout.fillWidth: true
-                placeholderText: i18n("Se completa al crear la base (o pegá una existente)")
-            }
-            Label {
-                text: dbField.text.length > 0 ? i18n("✓ configurada") : i18n("sin configurar")
-                opacity: 0.7
-            }
-        }
-
-        SpinBox {
-            id: refreshSpin
-            Kirigami.FormData.label: i18n("Auto-sync (min):")
-            from: 0
-            to: 1440
-            stepSize: 1
-        }
-
-        CheckBox {
-            id: syncOnOpenCheck
-            Kirigami.FormData.label: i18n("Al abrir:")
-            text: i18n("Sincronizar con Notion cada vez que se abre el plasmoide")
-        }
-
-        CheckBox {
-            id: debugCheck
-            Kirigami.FormData.label: i18n("Logs:")
-            text: i18n("Loggear las llamadas a la API de Notion en plasmashell")
-        }
-    }
-
-    // -------- Actions --------
-    GroupBox {
-        Layout.fillWidth: true
-        title: i18n("Configurar Notion")
-
-        ColumnLayout {
-            anchors.fill: parent
-            spacing: Kirigami.Units.smallSpacing
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: Kirigami.Units.smallSpacing
-
-                Button {
-                    text: i18n("Probar token")
-                    icon.name: "network-connect"
-                    onClicked: {
-                        statusLabel.text = i18n("Conectando…");
-                        statusLabel.color = palette.text;
-                        page._testToken(tokenField.text);
-                    }
-                }
-
-                Button {
-                    text: i18n("Crear base de datos")
-                    icon.name: "list-add"
-                    enabled: tokenField.text.length > 0 && parentField.text.length > 0
-                    onClicked: {
-                        statusLabel.text = i18n("Creando base de datos en Notion…");
-                        statusLabel.color = palette.text;
-                        page._createDatabase(tokenField.text, page._extractId(parentField.text));
-                    }
-                }
-
-                Item { Layout.fillWidth: true }
-            }
-
-            Label {
-                id: statusLabel
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                text: ""
-            }
-        }
-    }
-
-    Label {
-        Layout.fillWidth: true
-        wrapMode: Text.WordWrap
-        opacity: 0.65
-        text: i18n("La sincronización es de doble vía: lo nuevo en cualquier lado se crea en el otro, "
-                 + "y si una tarea cambió en ambos lados gana la edición más reciente. No se borran "
-                 + "tareas automáticamente. Ver docs/NOTION.md.")
-    }
-
-    Item { Layout.fillHeight: true }
 
     // -------- HTTP helpers --------
     function _testToken(token) {
@@ -256,5 +135,139 @@ ColumnLayout {
         };
         try { xhr.send(JSON.stringify(body)); }
         catch (e) { statusLabel.text = i18n("Error de red: %1", e); statusLabel.color = "#e74c3c"; }
+    }
+
+    ColumnLayout {
+        spacing: Kirigami.Units.largeSpacing
+
+        Label {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            opacity: 0.8
+            text: i18n("El modo ToDo puede sincronizarse con una base de datos de Notion (ida y vuelta). "
+                     + "1) Creá una integración interna en https://www.notion.so/my-integrations y copiá "
+                     + "su token secreto. 2) Compartí una página con esa integración y pegá su ID como "
+                     + "«página padre». 3) Pulsá «Crear base de datos» una vez. Desde entonces la lista se "
+                     + "sincroniza al abrir el plasmoide y con el botón «Notion» del popup.")
+        }
+
+        Kirigami.FormLayout {
+            Layout.fillWidth: true
+
+            RowLayout {
+                Kirigami.FormData.label: i18n("Token de integración:")
+                spacing: Kirigami.Units.smallSpacing
+                TextField {
+                    id: tokenField
+                    Layout.fillWidth: true
+                    echoMode: showTokenCheck.checked ? TextInput.Normal : TextInput.Password
+                    placeholderText: "secret_… / ntn_…"
+                    inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhSensitiveData
+                }
+                CheckBox {
+                    id: showTokenCheck
+                    text: i18n("Ver")
+                }
+            }
+
+            TextField {
+                id: parentField
+                Kirigami.FormData.label: i18n("Página padre (ID o URL):")
+                Layout.fillWidth: true
+                placeholderText: i18n("Pegá la URL o el ID de la página compartida con la integración")
+            }
+
+            RowLayout {
+                Kirigami.FormData.label: i18n("Base de datos:")
+                spacing: Kirigami.Units.smallSpacing
+                TextField {
+                    id: dbField
+                    Layout.fillWidth: true
+                    placeholderText: i18n("Se completa al crear la base (o pegá una existente)")
+                }
+                Label {
+                    text: dbField.text.length > 0 ? i18n("✓ configurada") : i18n("sin configurar")
+                    opacity: 0.7
+                }
+            }
+
+            SpinBox {
+                id: refreshSpin
+                Kirigami.FormData.label: i18n("Auto-sync (min):")
+                from: 0
+                to: 1440
+                stepSize: 1
+            }
+
+            CheckBox {
+                id: syncOnOpenCheck
+                Kirigami.FormData.label: i18n("Al abrir:")
+                text: i18n("Sincronizar con Notion cada vez que se abre el plasmoide")
+            }
+
+            CheckBox {
+                id: debugCheck
+                Kirigami.FormData.label: i18n("Logs:")
+                text: i18n("Loggear las llamadas a la API de Notion en plasmashell")
+            }
+        }
+
+        // -------- Actions --------
+        GroupBox {
+            Layout.fillWidth: true
+            title: i18n("Configurar Notion")
+
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: Kirigami.Units.smallSpacing
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Button {
+                        text: i18n("Probar token")
+                        icon.name: "network-connect"
+                        onClicked: {
+                            statusLabel.text = i18n("Conectando…");
+                            statusLabel.color = palette.text;
+                            page._testToken(tokenField.text);
+                        }
+                    }
+
+                    Button {
+                        text: i18n("Crear base de datos")
+                        icon.name: "list-add"
+                        enabled: tokenField.text.length > 0 && parentField.text.length > 0
+                        onClicked: {
+                            statusLabel.text = i18n("Creando base de datos en Notion…");
+                            statusLabel.color = palette.text;
+                            page._createDatabase(tokenField.text, page._extractId(parentField.text));
+                        }
+                    }
+
+                    Item { Layout.fillWidth: true }
+                }
+
+                Label {
+                    id: statusLabel
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: ""
+                }
+            }
+        }
+
+        Label {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            opacity: 0.65
+            text: i18n("La sincronización es de doble vía: lo nuevo en cualquier lado se crea en el otro, "
+                     + "y si una tarea cambió en ambos lados gana la edición más reciente. No se borran "
+                     + "tareas automáticamente. Ver docs/NOTION.md.")
+        }
+
+        Item { Layout.fillHeight: true }
+
     }
 }

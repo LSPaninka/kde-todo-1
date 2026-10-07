@@ -11,14 +11,21 @@
  * unchecks the other and the bindings stay consistent.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Controls 2.15
-import org.kde.kirigami 2.5 as Kirigami
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls
+import org.kde.kirigami as Kirigami
+import org.kde.kcmutils as KCM
+import org.kde.plasma.plasmoid
 
-ColumnLayout {
+KCM.SimpleKCM {
     id: page
-    spacing: Kirigami.Units.largeSpacing
+
+    // Plasma 6 also assigns cfg_<key>Default; declare them to avoid warnings.
+    property var cfg_panelShowLabelsDefault
+    property var cfg_panelShowZeroDefault
+    property var cfg_panelCounterStyleDefault
+    property var cfg_panelCounterScaleDefault
 
     // Auto-bound to KCfg entries:
     property alias  cfg_panelShowLabels: showLabelsCheck.checked
@@ -26,7 +33,7 @@ ColumnLayout {
     property string cfg_panelCounterStyle: "right"
     property alias  cfg_panelCounterScale: scaleSpin.value
 
-    // panelCounterColors is a StringList: read/write plasmoid.configuration
+    // panelCounterColors is a StringList: read/write Plasmoid.configuration
     // directly (reassigning a `var` StringList doesn't persist reliably).
     property int _rev: 0
 
@@ -35,167 +42,171 @@ ColumnLayout {
     readonly property var _defaultColors: ["#2ecc71", "#f1c40f", "#3498db", "#e74c3c", "#9b59b6", "#1abc9c", "#e67e22"]
 
     function _counterColor(i) {
-        var v = (page._rev, plasmoid.configuration.panelCounterColors || [])[i];
+        var v = (page._rev, Plasmoid.configuration.panelCounterColors || [])[i];
         return (v === "black") ? "black" : "white";
     }
     function _setCounterColor(i, v) {
-        var arr = (plasmoid.configuration.panelCounterColors || []).slice();
+        var arr = (Plasmoid.configuration.panelCounterColors || []).slice();
         while (arr.length < 7) arr.push(_defaultCounterColors[arr.length]);
         arr[i] = v;
-        plasmoid.configuration.panelCounterColors = arr;
+        Plasmoid.configuration.panelCounterColors = arr;
         page._rev++;
     }
     function _categoryName(i) {
-        var arr = plasmoid.configuration.categoryNames || [];
+        var arr = Plasmoid.configuration.categoryNames || [];
         return arr[i] || _defaultNames[i];
     }
     function _categoryColor(i) {
-        var arr = plasmoid.configuration.categoryColors || [];
+        var arr = Plasmoid.configuration.categoryColors || [];
         return arr[i] || _defaultColors[i];
     }
 
     ButtonGroup { id: styleGroup }
 
-    GroupBox {
-        Layout.fillWidth: true
-        title: i18n("Counter layout")
+    ColumnLayout {
+        spacing: Kirigami.Units.largeSpacing
 
-        ColumnLayout {
-            anchors.fill: parent
-            spacing: Kirigami.Units.smallSpacing
+        GroupBox {
+            Layout.fillWidth: true
+            title: i18n("Counter layout")
 
-            RadioButton {
-                ButtonGroup.group: styleGroup
-                text: i18n("Number to the right of the colored square")
-                checked: page.cfg_panelCounterStyle === "right"
-                onToggled: if (checked) page.cfg_panelCounterStyle = "right"
-            }
-            RadioButton {
-                id: insideRadio
-                ButtonGroup.group: styleGroup
-                text: i18n("Number inside the colored square (bigger swatch)")
-                checked: page.cfg_panelCounterStyle === "inside"
-                onToggled: if (checked) page.cfg_panelCounterStyle = "inside"
-            }
-
-            // Scale, only meaningful for the "inside" style.
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.leftMargin: Kirigami.Units.largeSpacing
+            ColumnLayout {
+                anchors.fill: parent
                 spacing: Kirigami.Units.smallSpacing
-                enabled: insideRadio.checked
 
-                Label { text: i18n("Escala del cuadrado:") }
-                SpinBox {
-                    id: scaleSpin
-                    from: 50
-                    to: 100
-                    stepSize: 5
-                    textFromValue: function(value) { return value + "%"; }
-                    valueFromText: function(text) { return parseInt(text); }
+                RadioButton {
+                    ButtonGroup.group: styleGroup
+                    text: i18n("Number to the right of the colored square")
+                    checked: page.cfg_panelCounterStyle === "right"
+                    onToggled: if (checked) page.cfg_panelCounterStyle = "right"
                 }
-                Label {
-                    text: i18n("(50% = mitad de tamaño; 100% = tamaño actual)")
-                    opacity: 0.65
+                RadioButton {
+                    id: insideRadio
+                    ButtonGroup.group: styleGroup
+                    text: i18n("Number inside the colored square (bigger swatch)")
+                    checked: page.cfg_panelCounterStyle === "inside"
+                    onToggled: if (checked) page.cfg_panelCounterStyle = "inside"
                 }
-                Item { Layout.fillWidth: true }
-            }
-        }
-    }
 
-    GroupBox {
-        Layout.fillWidth: true
-        title: i18n("Counter text color (per category)")
-
-        ColumnLayout {
-            anchors.fill: parent
-            spacing: Kirigami.Units.smallSpacing
-
-            Repeater {
-                model: 7
-                delegate: RowLayout {
+                // Scale, only meaningful for the "inside" style.
+                RowLayout {
                     Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
                     spacing: Kirigami.Units.smallSpacing
+                    enabled: insideRadio.checked
 
-                    ButtonGroup { id: colorGroup }
-
-                    // Mini preview mimicking the panel swatch.
-                    Rectangle {
-                        Layout.preferredWidth: 28
-                        Layout.preferredHeight: 22
-                        radius: 3
-                        color: page._categoryColor(index)
-                        border.width: 1
-                        border.color: Qt.darker(color, 1.4)
-                        Text {
-                            anchors.centerIn: parent
-                            text: "9"
-                            color: page._counterColor(index)
-                            font.bold: true
-                            font.pixelSize: 14
-                        }
+                    Label { text: i18n("Escala del cuadrado:") }
+                    SpinBox {
+                        id: scaleSpin
+                        from: 50
+                        to: 100
+                        stepSize: 5
+                        textFromValue: function(value) { return value + "%"; }
+                        valueFromText: function(text) { return parseInt(text); }
                     }
-
                     Label {
-                        Layout.preferredWidth: 120
-                        text: page._categoryName(index)
-                        elide: Text.ElideRight
+                        text: i18n("(50% = mitad de tamaño; 100% = tamaño actual)")
+                        opacity: 0.65
                     }
-
-                    RadioButton {
-                        ButtonGroup.group: colorGroup
-                        text: i18n("White")
-                        checked: page._counterColor(index) !== "black"
-                        onToggled: if (checked) page._setCounterColor(index, "white")
-                    }
-                    RadioButton {
-                        ButtonGroup.group: colorGroup
-                        text: i18n("Black")
-                        checked: page._counterColor(index) === "black"
-                        onToggled: if (checked) page._setCounterColor(index, "black")
-                    }
-
                     Item { Layout.fillWidth: true }
                 }
             }
+        }
 
-            Label {
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                opacity: 0.7
-                text: i18n("Pick the color that contrasts best with each category's color.")
+        GroupBox {
+            Layout.fillWidth: true
+            title: i18n("Counter text color (per category)")
+
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: Kirigami.Units.smallSpacing
+
+                Repeater {
+                    model: 7
+                    delegate: RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Kirigami.Units.smallSpacing
+
+                        ButtonGroup { id: colorGroup }
+
+                        // Mini preview mimicking the panel swatch.
+                        Rectangle {
+                            Layout.preferredWidth: 28
+                            Layout.preferredHeight: 22
+                            radius: 3
+                            color: page._categoryColor(index)
+                            border.width: 1
+                            border.color: Qt.darker(color, 1.4)
+                            Text {
+                                anchors.centerIn: parent
+                                text: "9"
+                                color: page._counterColor(index)
+                                font.bold: true
+                                font.pixelSize: 14
+                            }
+                        }
+
+                        Label {
+                            Layout.preferredWidth: 120
+                            text: page._categoryName(index)
+                            elide: Text.ElideRight
+                        }
+
+                        RadioButton {
+                            ButtonGroup.group: colorGroup
+                            text: i18n("White")
+                            checked: page._counterColor(index) !== "black"
+                            onToggled: if (checked) page._setCounterColor(index, "white")
+                        }
+                        RadioButton {
+                            ButtonGroup.group: colorGroup
+                            text: i18n("Black")
+                            checked: page._counterColor(index) === "black"
+                            onToggled: if (checked) page._setCounterColor(index, "black")
+                        }
+
+                        Item { Layout.fillWidth: true }
+                    }
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    opacity: 0.7
+                    text: i18n("Pick the color that contrasts best with each category's color.")
+                }
             }
         }
-    }
 
-    GroupBox {
-        Layout.fillWidth: true
-        title: i18n("Visibility")
+        GroupBox {
+            Layout.fillWidth: true
+            title: i18n("Visibility")
 
-        ColumnLayout {
-            anchors.fill: parent
-            spacing: Kirigami.Units.smallSpacing
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: Kirigami.Units.smallSpacing
 
-            CheckBox {
-                id: showLabelsCheck
-                text: i18n("Show category names next to counters")
-            }
-            CheckBox {
-                id: showZeroCheck
-                text: i18n("Show categories with zero pending tasks")
+                CheckBox {
+                    id: showLabelsCheck
+                    text: i18n("Show category names next to counters")
+                }
+                CheckBox {
+                    id: showZeroCheck
+                    text: i18n("Show categories with zero pending tasks")
+                }
             }
         }
-    }
 
-    Label {
-        Layout.fillWidth: true
-        Layout.preferredWidth: 360
-        wrapMode: Text.WordWrap
-        opacity: 0.65
-        text: i18n("The panel representation always shows a colored square per "
-                 + "category followed by the number of pending tasks, laid out "
-                 + "horizontally. For example: [green] 1  [yellow] 3  [blue] 5  [red] 0")
-    }
+        Label {
+            Layout.fillWidth: true
+            Layout.preferredWidth: 360
+            wrapMode: Text.WordWrap
+            opacity: 0.65
+            text: i18n("The panel representation always shows a colored square per "
+                     + "category followed by the number of pending tasks, laid out "
+                     + "horizontally. For example: [green] 1  [yellow] 3  [blue] 5  [red] 0")
+        }
 
-    Item { Layout.fillHeight: true }
+        Item { Layout.fillHeight: true }
+    }
 }

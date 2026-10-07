@@ -12,10 +12,11 @@
  * it and how to back it up.
  */
 
-import QtQuick 2.15
+import QtQuick
 // 2.0 is the stable URI; LocalStorage doesn't bump its version with Qt
 // releases, so this import is the most portable across distros.
-import QtQuick.LocalStorage 2.0 as LS
+import QtQuick.LocalStorage as LS
+import org.kde.plasma.plasmoid
 
 QtObject {
     id: db

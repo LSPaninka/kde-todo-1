@@ -8,11 +8,11 @@
  * Emits picked(taskId, key); an empty key unlinks.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Controls 2.15 as QQC2
-import org.kde.plasma.core 2.0 as PlasmaCore
-import org.kde.plasma.components 3.0 as PlasmaComponents3
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls as QQC2
+import org.kde.plasma.components as PlasmaComponents3
+import org.kde.kirigami as Kirigami
 
 QQC2.Dialog {
     id: picker
@@ -60,14 +60,14 @@ QQC2.Dialog {
     contentItem: Item {
       ColumnLayout {
         anchors.fill: parent
-        spacing: PlasmaCore.Units.smallSpacing
+        spacing: Kirigami.Units.smallSpacing
 
         // Search + refresh.
         RowLayout {
             Layout.fillWidth: true
-            spacing: PlasmaCore.Units.smallSpacing
+            spacing: Kirigami.Units.smallSpacing
 
-            PlasmaCore.IconItem {
+            Kirigami.Icon {
                 source: "search"
                 Layout.preferredWidth: 16
                 Layout.preferredHeight: 16
@@ -109,12 +109,12 @@ QQC2.Dialog {
 
                 delegate: Rectangle {
                     width: list.width
-                    implicitHeight: rowLay.implicitHeight + PlasmaCore.Units.smallSpacing * 2
+                    implicitHeight: rowLay.implicitHeight + Kirigami.Units.smallSpacing * 2
                     radius: 4
                     color: rowMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(1, 1, 1, 0.04)
                     border.width: 1
                     border.color: (modelData && modelData.key === picker.currentKey)
-                                  ? PlasmaCore.Theme.highlightColor
+                                  ? Kirigami.Theme.highlightColor
                                   : Qt.rgba(1, 1, 1, 0.08)
 
                     MouseArea {
@@ -133,9 +133,9 @@ QQC2.Dialog {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
-                        anchors.leftMargin: PlasmaCore.Units.smallSpacing
-                        anchors.rightMargin: PlasmaCore.Units.smallSpacing
-                        spacing: PlasmaCore.Units.smallSpacing
+                        anchors.leftMargin: Kirigami.Units.smallSpacing
+                        anchors.rightMargin: Kirigami.Units.smallSpacing
+                        spacing: Kirigami.Units.smallSpacing
 
                         PlasmaComponents3.Label {
                             text: modelData ? modelData.key : ""
@@ -152,7 +152,7 @@ QQC2.Dialog {
                             visible: modelData && modelData.statusName
                             text: modelData ? modelData.statusName : ""
                             opacity: 0.6
-                            font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                            font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                         }
                     }
                 }
@@ -186,7 +186,7 @@ QQC2.Dialog {
                 Layout.fillWidth: true
                 text: i18n("Se buscan tus issues de Jira (según el JQL configurado).")
                 opacity: 0.55
-                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                 elide: Text.ElideRight
             }
             PlasmaComponents3.Button {

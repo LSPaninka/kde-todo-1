@@ -6,9 +6,9 @@
  * currentIndex follows the configuration change immediately.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import org.kde.plasma.plasmoid 2.0
+import QtQuick
+import QtQuick.Layouts
+import org.kde.plasma.plasmoid
 
 Item {
     id: full
@@ -19,8 +19,10 @@ Item {
     property var gh
     property var notion
     property var notionSync
+    // The PlasmoidItem root (main.qml); views use it to react to `expanded`.
+    property var plasmoidItem
 
-    readonly property string mode: plasmoid.configuration.mode || "todo"
+    readonly property string mode: Plasmoid.configuration.mode || "todo"
 
     function _modeIndex() {
         if (full.mode === "jira")   return 1;
@@ -38,11 +40,13 @@ Item {
             store: full.store
             notionSync: full.notionSync
             jira: full.jira
+            plasmoidItem: full.plasmoidItem
         }
 
         JiraView {
             jira: full.jira
             cfgPrefix: "jira"
+            plasmoidItem: full.plasmoidItem
         }
 
         GhView {
@@ -56,6 +60,7 @@ Item {
         JiraView {
             jira: full.jira2
             cfgPrefix: "jira2"
+            plasmoidItem: full.plasmoidItem
         }
     }
 }

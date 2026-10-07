@@ -8,43 +8,45 @@
  *   - "gh":     read-only view of a GitHub Projects (V2) project.
  *   - "notion": pages from Notion via the `ntn` CLI (read + inline edit).
  *
- * Persistence: SQLite via QtQuick.LocalStorage 2.15. See
+ * Persistence: SQLite via QtQuick.LocalStorage. See
  * docs/PERSISTENCE.md for the storage path and layout.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import org.kde.plasma.plasmoid 2.0
-import org.kde.plasma.core 2.0 as PlasmaCore
+import QtQuick
+import QtQuick.Layouts
+import org.kde.plasma.plasmoid
+import org.kde.kirigami as Kirigami
 
-Item {
+PlasmoidItem {
     id: root
 
-    Plasmoid.switchWidth: PlasmaCore.Units.gridUnit * 10
-    Plasmoid.switchHeight: PlasmaCore.Units.gridUnit * 8
+    switchWidth: Kirigami.Units.gridUnit * 10
+    switchHeight: Kirigami.Units.gridUnit * 8
 
-    readonly property string mode: plasmoid.configuration.mode || "todo"
+    readonly property string mode: Plasmoid.configuration.mode || "todo"
 
     // Set by the CompactRepresentation's hover signal so the native Plasma
-    // tooltip (Plasmoid.toolTipMainText/SubText) can show per-square detail
+    // tooltip (toolTipMainText/toolTipSubText) can show per-square detail
     // instead of always showing the widget-wide summary. Empty = use default.
     property string compactHoverMain: ""
     property string compactHoverSub: ""
 
-    Plasmoid.fullRepresentation: FullRepresentation {
+    fullRepresentation: FullRepresentation {
+        plasmoidItem: root
         store: _store
         jira: _jira
         jira2: _jira2
         gh: _gh
         notion: _notion
         notionSync: _notionSync
-        Layout.minimumWidth: plasmoid.configuration.popupWidth
-        Layout.minimumHeight: plasmoid.configuration.popupHeight
-        Layout.preferredWidth: plasmoid.configuration.popupWidth
-        Layout.preferredHeight: plasmoid.configuration.popupHeight
+        Layout.minimumWidth: Plasmoid.configuration.popupWidth
+        Layout.minimumHeight: Plasmoid.configuration.popupHeight
+        Layout.preferredWidth: Plasmoid.configuration.popupWidth
+        Layout.preferredHeight: Plasmoid.configuration.popupHeight
     }
 
-    Plasmoid.compactRepresentation: CompactRepresentation {
+    compactRepresentation: CompactRepresentation {
+        plasmoidItem: root
         store: _store
         jira: _jira
         jira2: _jira2
@@ -56,7 +58,7 @@ Item {
         }
     }
 
-    Plasmoid.toolTipMainText: {
+    toolTipMainText: {
         // Per-square hover wins over the widget-wide summary.
         if (root.compactHoverMain.length > 0) return root.compactHoverMain;
         if (root.mode === "jira")   return i18n("Jira 1 — assigned issues");
@@ -66,7 +68,7 @@ Item {
         return i18n("Categorized ToDo");
     }
 
-    Plasmoid.toolTipSubText: {
+    toolTipSubText: {
         if (root.compactHoverSub.length > 0) return root.compactHoverSub;
         if (root.mode === "jira") {
             if (!_jira) return "";
@@ -97,14 +99,14 @@ Item {
 
     TaskStore {
         id: _store
-        plasmoid: plasmoid
+        plasmoid: Plasmoid
         database: _db
     }
 
     JiraStore {
         id: _jira
         cfgPrefix: "jira"
-        plasmoidApi: plasmoid
+        plasmoidApi: Plasmoid
         database: _db
     }
 
@@ -112,26 +114,26 @@ Item {
     JiraStore {
         id: _jira2
         cfgPrefix: "jira2"
-        plasmoidApi: plasmoid
+        plasmoidApi: Plasmoid
         database: _db
     }
 
     GhStore {
         id: _gh
-        plasmoidApi: plasmoid
+        plasmoidApi: Plasmoid
         database: _db
     }
 
     NotionStore {
         id: _notion
-        plasmoidApi: plasmoid
+        plasmoidApi: Plasmoid
     }
 
     // HTTP Notion API sync for the ToDo mode (two-way). Distinct from the
     // legacy `ntn` CLI NotionStore above (whose "notion" mode is disabled).
     NotionSyncStore {
         id: _notionSync
-        plasmoidApi: plasmoid
+        plasmoidApi: Plasmoid
         database: _db
         tasks: _store
     }
@@ -139,7 +141,7 @@ Item {
     // Sync the local ToDo list with Notion if it's configured. Called on
     // startup and whenever the popup is opened (see below).
     function _maybeNotionSync() {
-        if (!plasmoid.configuration.notionSyncOnOpen) return;
+        if (!Plasmoid.configuration.notionSyncOnOpen) return;
         if (!_notionSync.isConfigured()) return;
         if (_notionSync.loading) return;
         _notionSync.sync(null);
@@ -148,11 +150,11 @@ Item {
     Component.onCompleted: {
         // Belt-and-suspenders: re-assign plasmoidApi explicitly in case the
         // declarative binding above didn't fire for some reason.
-        _jira.plasmoidApi       = plasmoid;
-        _jira2.plasmoidApi      = plasmoid;
-        _gh.plasmoidApi         = plasmoid;
-        _notion.plasmoidApi     = plasmoid;
-        _notionSync.plasmoidApi = plasmoid;
+        _jira.plasmoidApi       = Plasmoid;
+        _jira2.plasmoidApi      = Plasmoid;
+        _gh.plasmoidApi         = Plasmoid;
+        _notion.plasmoidApi     = Plasmoid;
+        _notionSync.plasmoidApi = Plasmoid;
         _notionSync.database    = _db;
         _notionSync.tasks       = _store;
 
@@ -166,8 +168,8 @@ Item {
 
         // The `ntn` CLI Notion mode is disabled for now; migrate anyone who
         // was left in it back to the ToDo list.
-        if (plasmoid.configuration.mode === "notion") {
-            plasmoid.configuration.mode = "todo";
+        if (Plasmoid.configuration.mode === "notion") {
+            Plasmoid.configuration.mode = "todo";
         }
 
         // The init() above may have written restored credentials back
@@ -193,19 +195,16 @@ Item {
     }
 
     // Also sync each time the popup is opened.
-    Connections {
-        target: plasmoid
-        function onExpandedChanged() {
-            if (plasmoid.expanded) root._maybeNotionSync();
-        }
+    onExpandedChanged: {
+        if (root.expanded) root._maybeNotionSync();
     }
 
     // React to category changes (todo mode) and Jira config changes.
     Connections {
-        target: plasmoid.configuration
+        target: Plasmoid.configuration
 
         function onCategoryCountChanged() {
-            var n = Math.min(7, Math.max(1, plasmoid.configuration.categoryCount || 4));
+            var n = Math.min(7, Math.max(1, Plasmoid.configuration.categoryCount || 4));
             _store.reassignOutOfRangeCategories(n);
         }
         function onCategoryNamesChanged() {

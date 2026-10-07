@@ -16,10 +16,11 @@
  * longer collapses the open cards.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import org.kde.plasma.core 2.0 as PlasmaCore
-import org.kde.plasma.components 3.0 as PlasmaComponents3
+import QtQuick
+import QtQuick.Layouts
+import org.kde.plasma.components as PlasmaComponents3
+import org.kde.kirigami as Kirigami
+import org.kde.plasma.plasmoid
 
 Rectangle {
     id: item
@@ -51,12 +52,12 @@ Rectangle {
     readonly property bool _hasDetail: _hasSubtasks || _hasDescription
 
     signal editRequested(var task)
-    // Jira-link feature (only used when plasmoid.configuration.todoJiraLink).
+    // Jira-link feature (only used when Plasmoid.configuration.todoJiraLink).
     signal linkJiraRequested(var task)
     signal openJiraRequested(var task)
 
     width: parent ? parent.width : 0
-    implicitHeight: col.implicitHeight + PlasmaCore.Units.smallSpacing * 2
+    implicitHeight: col.implicitHeight + Kirigami.Units.smallSpacing * 2
     radius: 4
     color: Qt.rgba(1, 1, 1, 0.04)
     border.width: 1
@@ -78,15 +79,15 @@ Rectangle {
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.leftMargin: 10
-        anchors.rightMargin: PlasmaCore.Units.smallSpacing
-        anchors.topMargin: PlasmaCore.Units.smallSpacing
-        anchors.bottomMargin: PlasmaCore.Units.smallSpacing
-        spacing: PlasmaCore.Units.smallSpacing
+        anchors.rightMargin: Kirigami.Units.smallSpacing
+        anchors.topMargin: Kirigami.Units.smallSpacing
+        anchors.bottomMargin: Kirigami.Units.smallSpacing
+        spacing: Kirigami.Units.smallSpacing
 
         // -------- Header row --------
         RowLayout {
             Layout.fillWidth: true
-            spacing: PlasmaCore.Units.smallSpacing
+            spacing: Kirigami.Units.smallSpacing
 
             PlasmaComponents3.CheckBox {
                 checked: item.task ? item.task.done : false
@@ -108,7 +109,7 @@ Rectangle {
             // as the "New…" button so it stands out; "–" when unlinked, the
             // issue key (e.g. CP-123) once linked. Normal (non-bold) weight.
             PlasmaComponents3.Button {
-                visible: plasmoid.configuration.todoJiraLink && item.task
+                visible: Plasmoid.configuration.todoJiraLink && item.task
                 text: (item.task && item.task.jiraKey) ? item.task.jiraKey : "–"
                 onClicked: {
                     if (item.task && item.task.jiraKey) item.openJiraRequested(item.task);
@@ -122,7 +123,7 @@ Rectangle {
             }
 
             PriorityBadge {
-                visible: plasmoid.configuration.showPriorityIcons && item.task
+                visible: Plasmoid.configuration.showPriorityIcons && item.task
                 level: item.task ? item.task.priority : "M"
             }
 
@@ -156,7 +157,7 @@ Rectangle {
         // -------- Description --------
         PlasmaComponents3.Label {
             Layout.fillWidth: true
-            Layout.leftMargin: PlasmaCore.Units.iconSizes.small
+            Layout.leftMargin: Kirigami.Units.iconSizes.small
             text: item.task ? item.task.description : ""
             wrapMode: Text.WordWrap
             visible: item.expanded && item._hasDescription
@@ -168,7 +169,7 @@ Rectangle {
         // -------- Subtasks (read-only; edited in the task modal) --------
         ColumnLayout {
             Layout.fillWidth: true
-            Layout.leftMargin: PlasmaCore.Units.iconSizes.small
+            Layout.leftMargin: Kirigami.Units.iconSizes.small
             spacing: 2
             visible: item.expanded && item._hasSubtasks
 
@@ -176,7 +177,7 @@ Rectangle {
                 model: item._hasSubtasks ? item.task.subtasks.length : 0
                 delegate: RowLayout {
                     Layout.fillWidth: true
-                    spacing: PlasmaCore.Units.smallSpacing
+                    spacing: Kirigami.Units.smallSpacing
                     property var sub: item.task.subtasks[index]
 
                     PlasmaComponents3.CheckBox {
@@ -191,7 +192,7 @@ Rectangle {
                         opacity: sub.done ? 0.55 : 1.0
                     }
                     PriorityBadge {
-                        visible: plasmoid.configuration.showPriorityIcons
+                        visible: Plasmoid.configuration.showPriorityIcons
                         level: sub.priority
                     }
                 }

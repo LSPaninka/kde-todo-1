@@ -1,15 +1,14 @@
 /*
  * ModeMenuButton.qml - hamburger button + popup menu to switch operating
  * mode. Lives in the footer row of every mode-specific view next to
- * "Configure…". Selecting an item writes plasmoid.configuration.mode and
+ * "Configure…". Selecting an item writes Plasmoid.configuration.mode and
  * the FullRepresentation StackLayout reacts immediately.
  */
 
-import QtQuick 2.15
-import QtQuick.Controls 2.15 as QQC2
-import org.kde.plasma.plasmoid 2.0
-import org.kde.plasma.core 2.0 as PlasmaCore
-import org.kde.plasma.components 3.0 as PlasmaComponents3
+import QtQuick
+import QtQuick.Controls as QQC2
+import org.kde.plasma.plasmoid
+import org.kde.plasma.components as PlasmaComponents3
 
 PlasmaComponents3.ToolButton {
     id: btn
@@ -29,29 +28,29 @@ PlasmaComponents3.ToolButton {
             text: i18n("ToDo")
             icon.name: "view-task"
             checkable: true
-            checked: plasmoid.configuration.mode === "todo"
-            onTriggered: plasmoid.configuration.mode = "todo"
+            checked: Plasmoid.configuration.mode === "todo"
+            onTriggered: Plasmoid.configuration.mode = "todo"
         }
         QQC2.MenuItem {
             text: i18n("Jira 1")
             icon.name: "go-bottom"
             checkable: true
-            checked: plasmoid.configuration.mode === "jira"
-            onTriggered: plasmoid.configuration.mode = "jira"
+            checked: Plasmoid.configuration.mode === "jira"
+            onTriggered: Plasmoid.configuration.mode = "jira"
         }
         QQC2.MenuItem {
             text: i18n("Jira 2")
             icon.name: "go-bottom"
             checkable: true
-            checked: plasmoid.configuration.mode === "jira2"
-            onTriggered: plasmoid.configuration.mode = "jira2"
+            checked: Plasmoid.configuration.mode === "jira2"
+            onTriggered: Plasmoid.configuration.mode = "jira2"
         }
         QQC2.MenuItem {
             text: i18n("GitHub Projects")
             icon.name: "applications-development"
             checkable: true
-            checked: plasmoid.configuration.mode === "gh"
-            onTriggered: plasmoid.configuration.mode = "gh"
+            checked: Plasmoid.configuration.mode === "gh"
+            onTriggered: Plasmoid.configuration.mode = "gh"
         }
         // The standalone Notion (ntn CLI) mode is disabled for now; Notion is
         // integrated into the ToDo mode as a two-way sync instead.

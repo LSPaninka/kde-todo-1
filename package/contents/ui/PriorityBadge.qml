@@ -2,9 +2,9 @@
  * PriorityBadge.qml - small "XS/S/M/L/XL" chip used next to task titles.
  */
 
-import QtQuick 2.15
-import org.kde.plasma.core 2.0 as PlasmaCore
-import org.kde.plasma.components 3.0 as PlasmaComponents3
+import QtQuick
+import org.kde.plasma.components as PlasmaComponents3
+import org.kde.kirigami as Kirigami
 
 Rectangle {
     id: badge
@@ -13,7 +13,7 @@ Rectangle {
     // Colors come from the configurable priority scheme.
     CategoryHelper { id: _prio }
 
-    implicitWidth: label.implicitWidth + PlasmaCore.Units.smallSpacing * 2
+    implicitWidth: label.implicitWidth + Kirigami.Units.smallSpacing * 2
     implicitHeight: label.implicitHeight + 2
     radius: 3
     color: _prio.priorityColor(level)
@@ -26,6 +26,6 @@ Rectangle {
         text: badge.level
         color: "white"
         font.bold: true
-        font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+        font.pixelSize: Kirigami.Theme.smallFont.pixelSize
     }
 }

@@ -1,0 +1,23 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Claude (Anthropic) for LSPaninka",
+                "Email": ""
+            }
+        ],
+        "Category": "Utilities",
+        "Description": "A categorized to-do list with priorities, subtasks and archive",
+        "Description[es]": "Lista de tareas por categorías con prioridades, subtareas y archivo",
+        "EnabledByDefault": true,
+        "Icon": "view-task",
+        "Id": "org.kde.plasma.categorizedtodo",
+        "License": "MIT",
+        "Name": "Categorized ToDo",
+        "Name[es]": "Lista de tareas por categorías",
+        "Version": "2.0.0",
+        "Website": "https://github.com/lspaninka/kde-todo-1"
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

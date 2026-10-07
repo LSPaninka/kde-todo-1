@@ -7,10 +7,10 @@
  * no URL so the click is a no-op.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import org.kde.plasma.core 2.0 as PlasmaCore
-import org.kde.plasma.components 3.0 as PlasmaComponents3
+import QtQuick
+import QtQuick.Layouts
+import org.kde.plasma.components as PlasmaComponents3
+import org.kde.kirigami as Kirigami
 
 Rectangle {
     id: item
@@ -18,7 +18,7 @@ Rectangle {
     property var entry        // normalized item from GhStore
 
     width: parent ? parent.width : 0
-    implicitHeight: col.implicitHeight + PlasmaCore.Units.smallSpacing * 2
+    implicitHeight: col.implicitHeight + Kirigami.Units.smallSpacing * 2
     radius: 4
     color: mouse.containsMouse ? Qt.rgba(1, 1, 1, 0.07) : Qt.rgba(1, 1, 1, 0.04)
     border.width: 1
@@ -67,15 +67,15 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        anchors.leftMargin: PlasmaCore.Units.smallSpacing
-        anchors.rightMargin: PlasmaCore.Units.smallSpacing
-        anchors.topMargin: PlasmaCore.Units.smallSpacing
-        anchors.bottomMargin: PlasmaCore.Units.smallSpacing
+        anchors.leftMargin: Kirigami.Units.smallSpacing
+        anchors.rightMargin: Kirigami.Units.smallSpacing
+        anchors.topMargin: Kirigami.Units.smallSpacing
+        anchors.bottomMargin: Kirigami.Units.smallSpacing
         spacing: 2
 
         RowLayout {
             Layout.fillWidth: true
-            spacing: PlasmaCore.Units.smallSpacing
+            spacing: Kirigami.Units.smallSpacing
 
             // Type badge.
             Rectangle {
@@ -126,7 +126,7 @@ Rectangle {
                     text: entry ? entry.state : ""
                     color: "white"
                     font.bold: true
-                    font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                    font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                 }
             }
 
@@ -143,7 +143,7 @@ Rectangle {
                     text: entry ? entry.statusName : ""
                     color: "white"
                     font.bold: true
-                    font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                    font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                 }
             }
         }

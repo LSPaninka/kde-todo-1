@@ -23,7 +23,7 @@
  *   Subtasks (rich_text = JSON), LocalId (number).
  */
 
-import QtQuick 2.15
+import QtQuick
 
 QtObject {
     id: store

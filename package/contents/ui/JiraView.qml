@@ -6,35 +6,36 @@
  * priority). See configJiraCategories.qml.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Controls 2.15 as QQC2
-import org.kde.plasma.plasmoid 2.0
-import org.kde.plasma.core 2.0 as PlasmaCore
-import org.kde.plasma.components 3.0 as PlasmaComponents3
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls as QQC2
+import org.kde.plasma.plasmoid
+import org.kde.plasma.components as PlasmaComponents3
+import org.kde.kirigami as Kirigami
 
 Item {
     id: view
     property var jira
     // Config key prefix for this instance ("jira" or "jira2").
     property string cfgPrefix: "jira"
+    property var plasmoidItem
 
     readonly property int _v: jira ? jira.version : 0
     readonly property int categoryCount:
-        Math.min(10, Math.max(1, plasmoid.configuration[cfgPrefix+"CategoryCount"] | 0 || 3))
+        Math.min(10, Math.max(1, Plasmoid.configuration[cfgPrefix+"CategoryCount"] | 0 || 3))
 
     // Optional "HU" tab (user stories) shown first; fixed narrow width.
-    readonly property bool _showHu: plasmoid.configuration[cfgPrefix+"ShowHuTab"] !== false
+    readonly property bool _showHu: Plasmoid.configuration[cfgPrefix+"ShowHuTab"] !== false
     readonly property int _huW: 46
     readonly property int _huOffset: _showHu ? 1 : 0
 
     // Optional "Hechas" tab (my finished sub-tasks) shown last; fixed width.
-    readonly property bool _showHechas: plasmoid.configuration[cfgPrefix+"ShowHechasTab"] !== false
+    readonly property bool _showHechas: Plasmoid.configuration[cfgPrefix+"ShowHechasTab"] !== false
     readonly property int _hechasW: 68
 
     // Each category tab gets a 1/N share of the remaining bar width.
     readonly property real _tabWidth:
-        (tabs.width - (_showHu ? _huW : 0) - (_showHechas ? _hechasW : 0)) / Math.max(1, categoryCount)
+        ((view.width - 2 * Kirigami.Units.smallSpacing) - (_showHu ? _huW : 0) - (_showHechas ? _hechasW : 0)) / Math.max(1, categoryCount)
 
     // Per-tab client-side search (filters the current tab's list).
     property string searchText: ""
@@ -63,14 +64,14 @@ Item {
 
     function _formatDate(ms) {
         if (!ms) return "";
-        return Qt.formatDateTime(new Date(ms), Qt.DefaultLocaleShortDate);
+        return Qt.formatDateTime(new Date(ms), Locale.ShortFormat);
     }
     function _categoryName(i) {
-        var arr = plasmoid.configuration[cfgPrefix+"CategoryNames"] || [];
+        var arr = Plasmoid.configuration[cfgPrefix+"CategoryNames"] || [];
         return arr[i] || qsTr("Cat. %1").arg(i + 1);
     }
     function _categoryColor(i) {
-        var arr = plasmoid.configuration[cfgPrefix+"CategoryColors"] || [];
+        var arr = Plasmoid.configuration[cfgPrefix+"CategoryColors"] || [];
         return arr[i] || "#7f8c8d";
     }
 
@@ -123,15 +124,15 @@ Item {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: PlasmaCore.Units.smallSpacing
-        spacing: PlasmaCore.Units.smallSpacing
+        anchors.margins: Kirigami.Units.smallSpacing
+        spacing: Kirigami.Units.smallSpacing
 
         // -------- Header --------
         RowLayout {
             Layout.fillWidth: true
-            spacing: PlasmaCore.Units.smallSpacing
+            spacing: Kirigami.Units.smallSpacing
 
-            PlasmaCore.IconItem {
+            Kirigami.Icon {
                 source: "view-task"
                 Layout.preferredWidth: 18
                 Layout.preferredHeight: 18
@@ -155,8 +156,8 @@ Item {
                 elide: Text.ElideRight
                 opacity: 0.7
                 color: jira && jira.lastError
-                       ? PlasmaCore.Theme.negativeTextColor
-                       : PlasmaCore.Theme.textColor
+                       ? Kirigami.Theme.negativeTextColor
+                       : Kirigami.Theme.textColor
             }
             PlasmaComponents3.ToolButton {
                 icon.name: "view-refresh"
@@ -284,7 +285,7 @@ Item {
                             model: (view._v, view.searchText, jira ? view._filterParents(jira.parentsFromIssues()) : [])
                             delegate: Rectangle {
                                 width: huList.width
-                                implicitHeight: huRow.implicitHeight + PlasmaCore.Units.smallSpacing * 2
+                                implicitHeight: huRow.implicitHeight + Kirigami.Units.smallSpacing * 2
                                 radius: 4
                                 color: huMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(1, 1, 1, 0.04)
                                 border.width: 1
@@ -296,7 +297,7 @@ Item {
                                     hoverEnabled: true
                                     acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
+                                    onClicked: (mouse) => {
                                         if (mouse.button === Qt.MiddleButton) {
                                             var u = jira ? jira.browseUrl(modelData.key) : "";
                                             if (u) Qt.openUrlExternally(u);
@@ -311,9 +312,9 @@ Item {
                                     anchors.left: parent.left
                                     anchors.right: parent.right
                                     anchors.verticalCenter: parent.verticalCenter
-                                    anchors.leftMargin: PlasmaCore.Units.smallSpacing
-                                    anchors.rightMargin: PlasmaCore.Units.smallSpacing
-                                    spacing: PlasmaCore.Units.smallSpacing
+                                    anchors.leftMargin: Kirigami.Units.smallSpacing
+                                    anchors.rightMargin: Kirigami.Units.smallSpacing
+                                    spacing: Kirigami.Units.smallSpacing
 
                                     PlasmaComponents3.Label {
                                         text: modelData ? modelData.key : ""
@@ -329,7 +330,7 @@ Item {
                                     TabCountBadge {
                                         visible: modelData && modelData.count > 0
                                         count: modelData ? modelData.count : 0
-                                        badgeColor: PlasmaCore.Theme.highlightColor
+                                        badgeColor: Kirigami.Theme.highlightColor
                                         Layout.alignment: Qt.AlignVCenter
                                     }
                                 }
@@ -444,9 +445,9 @@ Item {
 
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: PlasmaCore.Units.smallSpacing
+                    spacing: Kirigami.Units.smallSpacing
 
-                    PlasmaCore.IconItem {
+                    Kirigami.Icon {
                         source: "chronometer"
                         Layout.preferredWidth: 16
                         Layout.preferredHeight: 16
@@ -483,7 +484,7 @@ Item {
                     Layout.fillWidth: true
                     horizontalAlignment: Text.AlignHCenter
                     opacity: 0.75
-                    font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                    font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                     text: {
                         if (!jira) return "";
                         var c = (view._v, jira.hoursConsumedSec());
@@ -502,9 +503,9 @@ Item {
 
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: PlasmaCore.Units.smallSpacing
+                    spacing: Kirigami.Units.smallSpacing
 
-                    PlasmaCore.IconItem {
+                    Kirigami.Icon {
                         source: "view-calendar"
                         Layout.preferredWidth: 16
                         Layout.preferredHeight: 16
@@ -538,7 +539,7 @@ Item {
                     Layout.fillWidth: true
                     horizontalAlignment: Text.AlignHCenter
                     opacity: 0.75
-                    font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                    font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                     text: {
                         var p = (view._v, view._sprintProgress());
                         return p >= 0 ? Math.round(p * 100) + "%" : "";
@@ -550,7 +551,7 @@ Item {
                     horizontalAlignment: Text.AlignHCenter
                     elide: Text.ElideRight
                     opacity: 0.6
-                    font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                    font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                     text: (jira && jira.currentSprint)
                           ? i18n("%1  →  %2",
                                  view._fmtSprintDate(jira.currentSprint.startDate),
@@ -570,14 +571,14 @@ Item {
                                    "%1 incidencias en total",
                                    (view._v, jira.totalCount())) : ""
                 opacity: 0.6
-                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
             }
 
             ModeMenuButton {}
             PlasmaComponents3.ToolButton {
                 icon.name: "configure"
                 text: i18n("Configurar…")
-                onClicked: plasmoid.action("configure").trigger()
+                onClicked: Plasmoid.internalAction("configure").trigger()
             }
         }
     }
@@ -598,9 +599,9 @@ Item {
 
     // Close the modals if the plasmoid popup is collapsed.
     Connections {
-        target: plasmoid
+        target: view.plasmoidItem || null
         function onExpandedChanged() {
-            if (!plasmoid.expanded) {
+            if (!view.plasmoidItem.expanded) {
                 if (issueDialog.opened) issueDialog.close();
                 if (huDialog.opened) huDialog.close();
             }
@@ -628,8 +629,8 @@ Item {
             anchors.centerIn: parent
             width: Math.max(300, parent.width - 20)
             height: Math.max(220, parent.height - 30)
-            color: PlasmaCore.Theme.backgroundColor
-            border.color: PlasmaCore.Theme.textColor
+            color: Kirigami.Theme.backgroundColor
+            border.color: Kirigami.Theme.textColor
             border.width: 1
             radius: 4
 
@@ -691,7 +692,7 @@ Item {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     opacity: 0.6
-                    font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                    font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                     text: i18n("Cada fetch reemplaza este log. Los warnings aparecen con [!].")
                 }
             }

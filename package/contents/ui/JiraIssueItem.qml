@@ -10,12 +10,12 @@
  * transitions) or open it in Jira.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Controls 2.15 as QQC2
-import org.kde.plasma.plasmoid 2.0
-import org.kde.plasma.core 2.0 as PlasmaCore
-import org.kde.plasma.components 3.0 as PlasmaComponents3
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls as QQC2
+import org.kde.plasma.plasmoid
+import org.kde.plasma.components as PlasmaComponents3
+import org.kde.kirigami as Kirigami
 
 Rectangle {
     id: item
@@ -32,7 +32,7 @@ Rectangle {
     property bool _transitionsLoading: false
 
     width: parent ? parent.width : 0
-    implicitHeight: col.implicitHeight + PlasmaCore.Units.smallSpacing * 2
+    implicitHeight: col.implicitHeight + Kirigami.Units.smallSpacing * 2
     radius: 4
     color: cardMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.07) : Qt.rgba(1, 1, 1, 0.04)
     border.width: 1
@@ -66,8 +66,8 @@ Rectangle {
     function _configuredStatusColor(statusName) {
         var s = (statusName || "").trim().toLowerCase();
         if (!s) return "";
-        var names  = plasmoid.configuration[cfgPrefix+"StatusNames"]  || [];
-        var colors = plasmoid.configuration[cfgPrefix+"StatusColors"] || [];
+        var names  = Plasmoid.configuration[cfgPrefix+"StatusNames"]  || [];
+        var colors = Plasmoid.configuration[cfgPrefix+"StatusColors"] || [];
         for (var i = 0; i < names.length; i++) {
             if ((names[i] || "").trim().toLowerCase() === s) {
                 var c = (colors[i] || "").trim();
@@ -152,7 +152,7 @@ Rectangle {
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
         cursorShape: Qt.PointingHandCursor
-        onClicked: {
+        onClicked: (mouse) => {
             if (mouse.button === Qt.MiddleButton) {
                 // Middle click opens the issue directly in the browser.
                 if (issue && issue.url) Qt.openUrlExternally(issue.url);
@@ -220,16 +220,16 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        anchors.leftMargin: PlasmaCore.Units.smallSpacing
-        anchors.rightMargin: PlasmaCore.Units.smallSpacing
-        anchors.topMargin: PlasmaCore.Units.smallSpacing
-        anchors.bottomMargin: PlasmaCore.Units.smallSpacing
+        anchors.leftMargin: Kirigami.Units.smallSpacing
+        anchors.rightMargin: Kirigami.Units.smallSpacing
+        anchors.topMargin: Kirigami.Units.smallSpacing
+        anchors.bottomMargin: Kirigami.Units.smallSpacing
         spacing: 2
 
         // -------- Header row --------
         RowLayout {
             Layout.fillWidth: true
-            spacing: PlasmaCore.Units.smallSpacing
+            spacing: Kirigami.Units.smallSpacing
 
             // Issuetype badge
             Rectangle {
@@ -274,7 +274,7 @@ Rectangle {
                     id: prioLbl
                     anchors.centerIn: parent
                     text: issue ? issue.priority : ""
-                    font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                    font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                     opacity: 0.9
                 }
             }
@@ -291,7 +291,7 @@ Rectangle {
                     text: issue ? issue.statusName : ""
                     color: "white"
                     font.bold: true
-                    font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                    font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                 }
             }
         }
@@ -306,7 +306,7 @@ Rectangle {
                   : ""
             elide: Text.ElideRight
             opacity: 0.6
-            font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+            font.pixelSize: Kirigami.Theme.smallFont.pixelSize
             font.italic: true
         }
 
@@ -316,7 +316,7 @@ Rectangle {
             Layout.leftMargin: 28
             Layout.topMargin: 2
             visible: item._hasEstimate
-            spacing: PlasmaCore.Units.smallSpacing
+            spacing: Kirigami.Units.smallSpacing
 
             Rectangle {
                 id: barTrack
@@ -335,7 +335,7 @@ Rectangle {
 
             PlasmaComponents3.Label {
                 text: item._fmtH(item._spentSec) + " / " + item._fmtH(item._origSec)
-                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                 opacity: 0.7
             }
         }

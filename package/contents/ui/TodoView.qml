@@ -6,12 +6,12 @@
  * root of this Item so they overlay the entire popup.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Controls 2.15 as QQC2
-import org.kde.plasma.plasmoid 2.0
-import org.kde.plasma.core 2.0 as PlasmaCore
-import org.kde.plasma.components 3.0 as PlasmaComponents3
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls as QQC2
+import org.kde.plasma.plasmoid
+import org.kde.plasma.components as PlasmaComponents3
+import org.kde.kirigami as Kirigami
 
 Item {
     id: todoView
@@ -19,6 +19,7 @@ Item {
     property var store
     property var notionSync
     property var jira
+    property var plasmoidItem
 
     readonly property int _nv: notionSync ? notionSync.version : 0
 
@@ -29,10 +30,10 @@ Item {
         function onSyncFinished(ok, pulled, pushed) {
             if (ok) {
                 notionStatus.text = i18n("Notion: %1 ↓ / %2 ↑", pulled, pushed);
-                notionStatus.color = PlasmaCore.Theme.positiveTextColor;
+                notionStatus.color = Kirigami.Theme.positiveTextColor;
             } else {
                 notionStatus.text = notionSync.lastError || i18n("Error de sincronización");
-                notionStatus.color = PlasmaCore.Theme.negativeTextColor;
+                notionStatus.color = Kirigami.Theme.negativeTextColor;
             }
         }
     }
@@ -40,7 +41,7 @@ Item {
     // Global + N category tabs + Archive. Each tab is sized to a 1/N share
     // of the bar so they always fill the popup width.
     readonly property int _tabCount: 2 + cats.count()
-    readonly property real _tabWidth: tabs.width / Math.max(1, _tabCount)
+    readonly property real _tabWidth: (todoView.width - 2 * Kirigami.Units.smallSpacing) / Math.max(1, _tabCount)
 
     // Jump to the tab requested from a panel swatch click. Category `index`
     // lives at tab index `index + 1` (tab 0 is the always-on Global tab).
@@ -58,8 +59,8 @@ Item {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: PlasmaCore.Units.smallSpacing
-        spacing: PlasmaCore.Units.smallSpacing
+        anchors.margins: Kirigami.Units.smallSpacing
+        spacing: Kirigami.Units.smallSpacing
 
         // -------- Tab bar --------
         QQC2.TabBar {
@@ -75,7 +76,7 @@ Item {
                 property int pending: (store.version, store.totalPending())
                 contentItem: RowLayout {
                     spacing: 6
-                    PlasmaCore.IconItem {
+                    Kirigami.Icon {
                         source: "view-list-tree"
                         Layout.preferredWidth: 12
                         Layout.preferredHeight: 12
@@ -91,7 +92,7 @@ Item {
                     TabCountBadge {
                         visible: globalTab.pending > 0
                         count: globalTab.pending
-                        badgeColor: PlasmaCore.Theme.highlightColor
+                        badgeColor: Kirigami.Theme.highlightColor
                         Layout.alignment: Qt.AlignVCenter
                     }
                 }
@@ -138,7 +139,7 @@ Item {
                 rightPadding: 6
                 contentItem: RowLayout {
                     spacing: 6
-                    PlasmaCore.IconItem {
+                    Kirigami.Icon {
                         source: "archive-insert"
                         Layout.preferredWidth: 14
                         Layout.preferredHeight: 14
@@ -154,7 +155,7 @@ Item {
                     TabCountBadge {
                         visible: (store.version, store.archived.length > 0)
                         count: (store.version, store.archived.length)
-                        badgeColor: PlasmaCore.Theme.disabledTextColor
+                        badgeColor: Kirigami.Theme.disabledTextColor
                         Layout.alignment: Qt.AlignVCenter
                     }
                 }
@@ -171,9 +172,9 @@ Item {
             // Index 0: Global view (matches the position of globalTab above).
             GlobalView {
                 store: todoView.store
-                onEditTaskRequested: taskDialog.openEdit(task)
-                onLinkJiraRequested: jiraPicker.openFor(task)
-                onOpenJiraRequested: todoView._openLinkedJira(task)
+                onEditTaskRequested: (task) => taskDialog.openEdit(task)
+                onLinkJiraRequested: (task) => jiraPicker.openFor(task)
+                onOpenJiraRequested: (task) => todoView._openLinkedJira(task)
             }
 
             Repeater {
@@ -181,16 +182,16 @@ Item {
                 CategoryView {
                     store: todoView.store
                     catIndex: index
-                    onNewTaskRequested: taskDialog.openNew(catIndex)
-                    onEditTaskRequested: taskDialog.openEdit(task)
-                    onLinkJiraRequested: jiraPicker.openFor(task)
-                    onOpenJiraRequested: todoView._openLinkedJira(task)
+                    onNewTaskRequested: (catIndex) => taskDialog.openNew(catIndex)
+                    onEditTaskRequested: (task) => taskDialog.openEdit(task)
+                    onLinkJiraRequested: (task) => jiraPicker.openFor(task)
+                    onOpenJiraRequested: (task) => todoView._openLinkedJira(task)
                 }
             }
 
             ArchiveView {
                 store: todoView.store
-                onConfirmDelete: { confirmDeleteDlg.pendingId = id; confirmDeleteDlg.open(); }
+                onConfirmDelete: (id) => { confirmDeleteDlg.pendingId = id; confirmDeleteDlg.open(); }
                 onConfirmEmpty: confirmEmptyDlg.open()
             }
         }
@@ -203,7 +204,7 @@ Item {
                                              "%1 pending tasks in total",
                                              store.totalPending()))
                 opacity: 0.6
-                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
             }
 
             PlasmaComponents3.Label {
@@ -212,7 +213,7 @@ Item {
                 horizontalAlignment: Text.AlignRight
                 elide: Text.ElideRight
                 opacity: 0.7
-                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                 text: {
                     if (!todoView.notionSync) return "";
                     if ((todoView._nv, todoView.notionSync.loading)) return i18n("Sincronizando con Notion…");
@@ -228,7 +229,7 @@ Item {
                 enabled: todoView.notionSync && !(todoView._nv, todoView.notionSync.loading)
                 onClicked: {
                     notionStatus.text = i18n("Sincronizando con Notion…");
-                    notionStatus.color = PlasmaCore.Theme.textColor;
+                    notionStatus.color = Kirigami.Theme.textColor;
                     todoView.notionSync.sync(null);
                 }
                 PlasmaComponents3.ToolTip.text: i18n("Sincronizar la lista con Notion")
@@ -240,7 +241,7 @@ Item {
             PlasmaComponents3.ToolButton {
                 icon.name: "configure"
                 text: i18n("Configure…")
-                onClicked: plasmoid.action("configure").trigger()
+                onClicked: Plasmoid.internalAction("configure").trigger()
             }
         }
     }
@@ -277,9 +278,9 @@ Item {
 
     // Close the Jira detail modal if the plasmoid popup is collapsed.
     Connections {
-        target: plasmoid
+        target: todoView.plasmoidItem || null
         function onExpandedChanged() {
-            if (!plasmoid.expanded && jiraDetail.opened) jiraDetail.close();
+            if (!todoView.plasmoidItem.expanded && jiraDetail.opened) jiraDetail.close();
         }
     }
 
@@ -290,6 +291,9 @@ Item {
         modal: true
         standardButtons: QQC2.Dialog.Yes | QQC2.Dialog.No
         anchors.centerIn: parent
+        // Fixed implicit width: a wrapping Label as contentItem otherwise makes
+        // Dialog.implicitWidth depend on itself (binding loop in Qt 6).
+        implicitWidth: Math.min(Kirigami.Units.gridUnit * 22, todoView.width - 2 * Kirigami.Units.largeSpacing)
         onAccepted: if (pendingId) store.deleteArchived(pendingId)
         contentItem: PlasmaComponents3.Label {
             text: i18n("This will permanently remove the task from the archive.")
@@ -303,6 +307,7 @@ Item {
         modal: true
         standardButtons: QQC2.Dialog.Yes | QQC2.Dialog.No
         anchors.centerIn: parent
+        implicitWidth: Math.min(Kirigami.Units.gridUnit * 22, todoView.width - 2 * Kirigami.Units.largeSpacing)
         onAccepted: store.clearArchive()
         contentItem: PlasmaComponents3.Label {
             text: i18n("This will permanently delete all archived tasks.")

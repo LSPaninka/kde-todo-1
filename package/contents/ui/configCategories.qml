@@ -9,15 +9,19 @@
  * values under the hood). We bind them as whole arrays via the cfg_ alias.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Controls 2.15
-import QtQuick.Dialogs 1.3 as Dialogs
-import org.kde.kirigami 2.5 as Kirigami
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls
+import QtQuick.Dialogs as Dialogs
+import org.kde.kirigami as Kirigami
+import org.kde.kcmutils as KCM
 
-ColumnLayout {
+KCM.SimpleKCM {
     id: page
-    spacing: Kirigami.Units.largeSpacing
+
+    // Plasma 6 also assigns cfg_<key>Default; declare them to avoid warnings.
+    property var cfg_categoryNamesDefault
+    property var cfg_categoryColorsDefault
 
     // These are auto-synced with categoryNames/categoryColors in main.xml.
     property var cfg_categoryNames: []
@@ -44,68 +48,73 @@ ColumnLayout {
         cfg_categoryColors = arr;
     }
 
-    Label {
-        Layout.fillWidth: true
-        wrapMode: Text.WordWrap
-        text: i18n("Configure up to 7 categories. Each category has a name and a color. "
-                 + "The number of active categories is set in the General tab.")
-        opacity: 0.75
-    }
-
-    Repeater {
-        model: 7
-        delegate: RowLayout {
-            Layout.fillWidth: true
-            spacing: Kirigami.Units.smallSpacing
-
-            Label {
-                text: i18n("#%1", index + 1)
-                Layout.preferredWidth: 24
-            }
-
-            TextField {
-                id: nameField
-                Layout.fillWidth: true
-                text: page._name(index)
-                onEditingFinished: page._setName(index, text)
-            }
-
-            Rectangle {
-                id: swatch
-                width: 28
-                height: 28
-                radius: 4
-                border.color: Qt.darker(color, 1.5)
-                border.width: 1
-                color: page._color(index)
-
-                MouseArea {
-                    anchors.fill: parent
-                    onClicked: {
-                        colorDlg.targetIndex = index;
-                        colorDlg.color = swatch.color;
-                        colorDlg.open();
-                    }
-                }
-            }
-
-            Button {
-                text: i18n("Pick…")
-                onClicked: {
-                    colorDlg.targetIndex = index;
-                    colorDlg.color = swatch.color;
-                    colorDlg.open();
-                }
-            }
-        }
-    }
-
-    Item { Layout.fillHeight: true }
-
     Dialogs.ColorDialog {
         id: colorDlg
         property int targetIndex: 0
         title: i18n("Pick a color")
-        onAccepted: page._setColor(targetIndex, color.toString())
+        onAccepted: page._setColor(targetIndex, selectedColor.toString())
+    }
+
+    ColumnLayout {
+        spacing: Kirigami.Units.largeSpacing
+
+        Label {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            text: i18n("Configure up to 7 categories. Each category has a name and a color. "
+                     + "The number of active categories is set in the General tab.")
+            opacity: 0.75
+        }
+
+        Repeater {
+            model: 7
+            delegate: RowLayout {
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
+
+                Label {
+                    text: i18n("#%1", index + 1)
+                    Layout.preferredWidth: 24
+                }
+
+                TextField {
+                    id: nameField
+                    Layout.fillWidth: true
+                    text: page._name(index)
+                    onEditingFinished: page._setName(index, text)
+                }
+
+                Rectangle {
+                    id: swatch
+                    Layout.preferredWidth: 28
+                    Layout.preferredHeight: 28
+                    radius: 4
+                    border.color: Qt.darker(color, 1.5)
+                    border.width: 1
+                    color: page._color(index)
+
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: {
+                            colorDlg.targetIndex = index;
+                            colorDlg.selectedColor = swatch.color;
+                            colorDlg.open();
+                        }
+                    }
+                }
+
+                Button {
+                    text: i18n("Pick…")
+                    onClicked: {
+                        colorDlg.targetIndex = index;
+                        colorDlg.selectedColor = swatch.color;
+                        colorDlg.open();
+                    }
+                }
+            }
+        }
+
+        Item { Layout.fillHeight: true }
+
     }
 }

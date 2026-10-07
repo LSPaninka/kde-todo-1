@@ -14,20 +14,21 @@
  * slots are kept in storage so changing the count doesn't lose data.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Controls 2.15
-import QtQuick.Dialogs 1.3 as Dialogs
-import org.kde.kirigami 2.5 as Kirigami
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls
+import QtQuick.Dialogs as Dialogs
+import org.kde.kirigami as Kirigami
+import org.kde.kcmutils as KCM
+import org.kde.plasma.plasmoid
 
-ColumnLayout {
+KCM.SimpleKCM {
     id: page
-    spacing: Kirigami.Units.largeSpacing
 
     // NOTE: we deliberately do NOT use `cfg_<key>` properties for these
     // StringLists. Reassigning a standalone `var` StringList on a config page
     // does not reliably persist through the Apply button (a well-known Plasma
-    // quirk). Instead we read from and write to plasmoid.configuration
+    // quirk). Instead we read from and write to Plasmoid.configuration
     // directly, which saves immediately and reliably.
 
     readonly property int _slots: 10
@@ -43,10 +44,10 @@ ColumnLayout {
         return arr;
     }
 
-    // Persist a StringList straight to plasmoid.configuration.
+    // Persist a StringList straight to Plasmoid.configuration.
     function _persist(key, fallback, i, value) {
-        var arr = _buildList(plasmoid.configuration[key], fallback, i, value);
-        plasmoid.configuration[key] = arr;
+        var arr = _buildList(Plasmoid.configuration[key], fallback, i, value);
+        Plasmoid.configuration[key] = arr;
         page._rev++;
     }
 
@@ -66,11 +67,11 @@ ColumnLayout {
         { value: "priority",       label: i18n("Prioridad") }
     ]
 
-    function _name(i)          { var v = (page._rev, plasmoid.configuration.jiraCategoryNames        || [])[i]; return v !== undefined ? v : _defaultNames[i]; }
-    function _color(i)         { var v = (page._rev, plasmoid.configuration.jiraCategoryColors       || [])[i]; return v !== undefined ? v : _defaultColors[i]; }
-    function _textColor(i)     { var v = (page._rev, plasmoid.configuration.jiraCategoryTextColors   || [])[i]; return v !== undefined ? v : _defaultTextColors[i]; }
-    function _filterField(i)   { var v = (page._rev, plasmoid.configuration.jiraCategoryFilterFields || [])[i]; return v !== undefined ? v : _defaultFilterFields[i]; }
-    function _filterValue(i)   { var v = (page._rev, plasmoid.configuration.jiraCategoryFilterValues || [])[i]; return v !== undefined ? v : _defaultFilterValues[i]; }
+    function _name(i)          { var v = (page._rev, Plasmoid.configuration.jiraCategoryNames        || [])[i]; return v !== undefined ? v : _defaultNames[i]; }
+    function _color(i)         { var v = (page._rev, Plasmoid.configuration.jiraCategoryColors       || [])[i]; return v !== undefined ? v : _defaultColors[i]; }
+    function _textColor(i)     { var v = (page._rev, Plasmoid.configuration.jiraCategoryTextColors   || [])[i]; return v !== undefined ? v : _defaultTextColors[i]; }
+    function _filterField(i)   { var v = (page._rev, Plasmoid.configuration.jiraCategoryFilterFields || [])[i]; return v !== undefined ? v : _defaultFilterFields[i]; }
+    function _filterValue(i)   { var v = (page._rev, Plasmoid.configuration.jiraCategoryFilterValues || [])[i]; return v !== undefined ? v : _defaultFilterValues[i]; }
 
     function _optionIndexForField(f) {
         for (var k = 0; k < _filterFieldOptions.length; k++) {
@@ -79,131 +80,136 @@ ColumnLayout {
         return 0;
     }
 
-    Label {
-        Layout.fillWidth: true
-        Layout.preferredWidth: 600
-        wrapMode: Text.WordWrap
-        opacity: 0.75
-        text: i18n("Cada categoría representa una pestaña en el popup y un cuadrado en el panel cuando "
-                 + "el modo es «Jira». La cantidad activa se ajusta en la pestaña «General». Para que "
-                 + "una categoría haga match con varias opciones, separá los valores con punto y coma "
-                 + "(por ejemplo «In Progress; Code Review»).")
-    }
-
-    Repeater {
-        model: page._slots
-        delegate: GroupBox {
-            Layout.fillWidth: true
-            title: i18n("Categoría #%1", index + 1)
-
-            ColumnLayout {
-                anchors.fill: parent
-                spacing: Kirigami.Units.smallSpacing
-
-                // Row 1: name + color + text color
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Label { text: i18n("Nombre:") }
-                    TextField {
-                        id: nameField
-                        Layout.fillWidth: true
-                        text: page._name(index)
-                        onEditingFinished: page._persist("jiraCategoryNames", page._defaultNames, index, text)
-                    }
-
-                    Rectangle {
-                        id: swatch
-                        width: 28
-                        height: 22
-                        radius: 3
-                        color: page._color(index)
-                        border.color: Qt.darker(color, 1.5)
-                        border.width: 1
-                        Text {
-                            anchors.centerIn: parent
-                            text: "9"
-                            color: page._textColor(index)
-                            font.bold: true
-                            font.pixelSize: 14
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: { colorDlg.targetIndex = index; colorDlg.color = swatch.color; colorDlg.open(); }
-                        }
-                    }
-
-                    Button {
-                        text: i18n("Color…")
-                        onClicked: { colorDlg.targetIndex = index; colorDlg.color = swatch.color; colorDlg.open(); }
-                    }
-
-                    ButtonGroup { id: textGroup }
-                    RadioButton {
-                        ButtonGroup.group: textGroup
-                        text: i18n("Letra blanca")
-                        checked: page._textColor(index) !== "black"
-                        onToggled: if (checked) page._persist("jiraCategoryTextColors", page._defaultTextColors, index, "white")
-                    }
-                    RadioButton {
-                        ButtonGroup.group: textGroup
-                        text: i18n("Negra")
-                        checked: page._textColor(index) === "black"
-                        onToggled: if (checked) page._persist("jiraCategoryTextColors", page._defaultTextColors, index, "black")
-                    }
-                }
-
-                // Row 2: filter field + filter value
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Label { text: i18n("Filtrar por:") }
-                    ComboBox {
-                        id: fieldCombo
-                        Layout.preferredWidth: 320
-                        textRole: "label"
-                        valueRole: "value"
-                        model: page._filterFieldOptions
-                        // Initialise once from config; do NOT keep a reactive
-                        // binding on currentIndex — that would fight the user's
-                        // selection (onActivated writes config, which would then
-                        // recompute the binding and snap the combo back).
-                        Component.onCompleted: currentIndex = page._optionIndexForField(page._filterField(index))
-                        onActivated: {
-                            var v = page._filterFieldOptions[currentIndex].value;
-                            page._persist("jiraCategoryFilterFields", page._defaultFilterFields, index, v);
-                        }
-                    }
-
-                    Label { text: i18n("Valor:") }
-                    TextField {
-                        Layout.fillWidth: true
-                        enabled: fieldCombo.currentIndex !== 0
-                        text: page._filterValue(index)
-                        placeholderText: {
-                            switch (page._filterField(index)) {
-                                case "statusCategory": return i18n("new ; indeterminate ; done");
-                                case "status":         return i18n("To Do ; In Progress ; Code Review");
-                                case "issuetype":      return i18n("Story ; Sub-task ; Bug");
-                                case "priority":       return i18n("Highest ; High ; Medium");
-                            }
-                            return i18n("(separá con ; para OR)");
-                        }
-                        onEditingFinished: page._persist("jiraCategoryFilterValues", page._defaultFilterValues, index, text)
-                    }
-                }
-            }
-        }
-    }
-
-    Item { Layout.fillHeight: true }
-
     Dialogs.ColorDialog {
         id: colorDlg
         property int targetIndex: 0
         title: i18n("Pick a color")
-        onAccepted: page._persist("jiraCategoryColors", page._defaultColors, targetIndex, color.toString())
+        onAccepted: page._persist("jiraCategoryColors", page._defaultColors, targetIndex, selectedColor.toString())
+    }
+
+    ColumnLayout {
+        spacing: Kirigami.Units.largeSpacing
+
+        Label {
+            Layout.fillWidth: true
+            Layout.preferredWidth: 600
+            wrapMode: Text.WordWrap
+            opacity: 0.75
+            text: i18n("Cada categoría representa una pestaña en el popup y un cuadrado en el panel cuando "
+                     + "el modo es «Jira». La cantidad activa se ajusta en la pestaña «General». Para que "
+                     + "una categoría haga match con varias opciones, separá los valores con punto y coma "
+                     + "(por ejemplo «In Progress; Code Review»).")
+        }
+
+        Repeater {
+            model: page._slots
+            delegate: GroupBox {
+                Layout.fillWidth: true
+                title: i18n("Categoría #%1", index + 1)
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    spacing: Kirigami.Units.smallSpacing
+
+                    // Row 1: name + color + text color
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Label { text: i18n("Nombre:") }
+                        TextField {
+                            id: nameField
+                            Layout.fillWidth: true
+                            text: page._name(index)
+                            onEditingFinished: page._persist("jiraCategoryNames", page._defaultNames, index, text)
+                        }
+
+                        Rectangle {
+                            id: swatch
+                            Layout.preferredWidth: 28
+                            Layout.preferredHeight: 22
+                            radius: 3
+                            color: page._color(index)
+                            border.color: Qt.darker(color, 1.5)
+                            border.width: 1
+                            Text {
+                                anchors.centerIn: parent
+                                text: "9"
+                                color: page._textColor(index)
+                                font.bold: true
+                                font.pixelSize: 14
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: { colorDlg.targetIndex = index; colorDlg.selectedColor = swatch.color; colorDlg.open(); }
+                            }
+                        }
+
+                        Button {
+                            text: i18n("Color…")
+                            onClicked: { colorDlg.targetIndex = index; colorDlg.selectedColor = swatch.color; colorDlg.open(); }
+                        }
+
+                        ButtonGroup { id: textGroup }
+                        RadioButton {
+                            ButtonGroup.group: textGroup
+                            text: i18n("Letra blanca")
+                            checked: page._textColor(index) !== "black"
+                            onToggled: if (checked) page._persist("jiraCategoryTextColors", page._defaultTextColors, index, "white")
+                        }
+                        RadioButton {
+                            ButtonGroup.group: textGroup
+                            text: i18n("Negra")
+                            checked: page._textColor(index) === "black"
+                            onToggled: if (checked) page._persist("jiraCategoryTextColors", page._defaultTextColors, index, "black")
+                        }
+                    }
+
+                    // Row 2: filter field + filter value
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Label { text: i18n("Filtrar por:") }
+                        ComboBox {
+                            id: fieldCombo
+                            Layout.preferredWidth: 320
+                            textRole: "label"
+                            valueRole: "value"
+                            model: page._filterFieldOptions
+                            // Initialise once from config; do NOT keep a reactive
+                            // binding on currentIndex — that would fight the user's
+                            // selection (onActivated writes config, which would then
+                            // recompute the binding and snap the combo back).
+                            Component.onCompleted: currentIndex = page._optionIndexForField(page._filterField(index))
+                            onActivated: (activatedIndex) => {
+                                var v = page._filterFieldOptions[currentIndex].value;
+                                page._persist("jiraCategoryFilterFields", page._defaultFilterFields, index, v);
+                            }
+                        }
+
+                        Label { text: i18n("Valor:") }
+                        TextField {
+                            Layout.fillWidth: true
+                            enabled: fieldCombo.currentIndex !== 0
+                            text: page._filterValue(index)
+                            placeholderText: {
+                                switch (page._filterField(index)) {
+                                    case "statusCategory": return i18n("new ; indeterminate ; done");
+                                    case "status":         return i18n("To Do ; In Progress ; Code Review");
+                                    case "issuetype":      return i18n("Story ; Sub-task ; Bug");
+                                    case "priority":       return i18n("Highest ; High ; Medium");
+                                }
+                                return i18n("(separá con ; para OR)");
+                            }
+                            onEditingFinished: page._persist("jiraCategoryFilterValues", page._defaultFilterValues, index, text)
+                        }
+                    }
+                }
+            }
+        }
+
+        Item { Layout.fillHeight: true }
+
     }
 }
