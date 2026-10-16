@@ -2,26 +2,29 @@
  * CompactRepresentation.qml - panel view. Just the calendar icon.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import org.kde.plasma.plasmoid 2.0
-import org.kde.plasma.core 2.0 as PlasmaCore
+import QtQuick
+import QtQuick.Layouts
+import org.kde.plasma.plasmoid
+import org.kde.kirigami as Kirigami
 
 Item {
     id: compact
 
-    Layout.minimumWidth: PlasmaCore.Units.iconSizes.small
-    Layout.minimumHeight: PlasmaCore.Units.iconSizes.small
-    Layout.preferredWidth: PlasmaCore.Units.iconSizes.medium
-    Layout.preferredHeight: PlasmaCore.Units.iconSizes.medium
+    // The PlasmoidItem root (main.qml); owns `expanded`.
+    property var plasmoidItem
 
-    PlasmaCore.IconItem {
+    Layout.minimumWidth: Kirigami.Units.iconSizes.small
+    Layout.minimumHeight: Kirigami.Units.iconSizes.small
+    Layout.preferredWidth: Kirigami.Units.iconSizes.medium
+    Layout.preferredHeight: Kirigami.Units.iconSizes.medium
+
+    Kirigami.Icon {
         anchors.fill: parent
         source: "view-calendar-week"
     }
 
     MouseArea {
         anchors.fill: parent
-        onClicked: plasmoid.expanded = !plasmoid.expanded
+        onClicked: compact.plasmoidItem.expanded = !compact.plasmoidItem.expanded
     }
 }

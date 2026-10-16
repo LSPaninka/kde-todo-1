@@ -10,12 +10,12 @@
  *            Configure… button.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Controls 2.15 as QQC2
-import org.kde.plasma.plasmoid 2.0
-import org.kde.plasma.core 2.0 as PlasmaCore
-import org.kde.plasma.components 3.0 as PlasmaComponents3
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls as QQC2
+import org.kde.plasma.plasmoid
+import org.kde.plasma.components as PlasmaComponents3
+import org.kde.kirigami as Kirigami
 
 Item {
     id: full
@@ -24,6 +24,8 @@ Item {
     property var jira2Store
     property var clockifyStore
     property var googleStore
+    // The PlasmoidItem root (main.qml); used to react to `expanded`.
+    property var plasmoidItem
 
     property date currentWeekStart: _sundayOf(new Date())
     readonly property int _vJira: jiraStore ? jiraStore.version : 0
@@ -34,13 +36,13 @@ Item {
     // Second Jira instance is active only when enabled and we're in a mode
     // that shows Jira.
     readonly property bool _showJira2:
-        plasmoid.configuration.jira2Enabled === true && _showJira && !!jira2Store
+        Plasmoid.configuration.jira2Enabled === true && _showJira && !!jira2Store
 
     // Whether Google Calendar event blocks are shown on the grid.
     readonly property bool _showGoogleEvents:
-        plasmoid.configuration.googleCalEnabled === true
+        Plasmoid.configuration.googleCalEnabled === true
 
-    readonly property string source: plasmoid.configuration.worklogSource || "jira"
+    readonly property string source: Plasmoid.configuration.worklogSource || "jira"
     readonly property bool _isCombined: source === "jira-clockify"
     readonly property bool _showJira: source === "jira" || source === "jira-clockify"
     readonly property bool _showClockify: source === "clockify" || source === "jira-clockify"
@@ -50,7 +52,7 @@ Item {
     // (doing so would clobber the binding, which is what made the message
     // stick previously).
     property string _statusOverride: ""
-    property color  _statusOverrideColor: PlasmaCore.Theme.textColor
+    property color  _statusOverrideColor: Kirigami.Theme.textColor
     property bool   _statusOverrideHoldsError: false
 
     Timer {
@@ -63,8 +65,8 @@ Item {
     }
     function _setStatus(text, isError) {
         _statusOverride = text;
-        _statusOverrideColor = isError ? PlasmaCore.Theme.negativeTextColor
-                                        : PlasmaCore.Theme.positiveTextColor;
+        _statusOverrideColor = isError ? Kirigami.Theme.negativeTextColor
+                                        : Kirigami.Theme.positiveTextColor;
         _statusOverrideHoldsError = !!isError;
         _clearStatusTimer.restart();
     }
@@ -90,9 +92,9 @@ Item {
     // gated by worklogShowSubtaskTable so users who don't want it get the
     // old two-way behaviour.
     readonly property bool _showBottomPanel:
-        plasmoid.configuration.worklogShowSprintGauges !== false
+        Plasmoid.configuration.worklogShowSprintGauges !== false
     readonly property bool _showSubtaskTable:
-        plasmoid.configuration.worklogShowSubtaskTable !== false
+        Plasmoid.configuration.worklogShowSubtaskTable !== false
 
     // Available views, in switch order. "subtasks" only appears when the
     // master toggle is on.
@@ -106,7 +108,7 @@ Item {
     // Effective view. Fall back to "rings" if the saved value is no
     // longer available (e.g. user disabled the subtask table).
     readonly property string _rawBottomView:
-        plasmoid.configuration.worklogBottomView || "rings"
+        Plasmoid.configuration.worklogBottomView || "rings"
     readonly property string _bottomView:
         _bottomViews.indexOf(_rawBottomView) >= 0 ? _rawBottomView : "rings"
     readonly property bool _bottomIsRings:    _bottomView === "rings"
@@ -135,7 +137,7 @@ Item {
         var next = idx + (delta > 0 ? 1 : -1);
         if (next < 0) next = 0;
         if (next >= _bottomViews.length) next = _bottomViews.length - 1;
-        if (next !== idx) plasmoid.configuration.worklogBottomView = _bottomViews[next];
+        if (next !== idx) Plasmoid.configuration.worklogBottomView = _bottomViews[next];
     }
 
     function _refreshCurrentBottomView() {
@@ -166,15 +168,15 @@ Item {
         if (!clockifyStore) return;
         full._setStatus(i18n("Copiando Jira → Clockify…"), false);
         _clearStatusTimer.stop();
-        var billable = plasmoid.configuration.clockifyBillableDefault !== false;
+        var billable = Plasmoid.configuration.clockifyBillableDefault !== false;
 
         var jobs = [];
         if (jiraStore)
             jobs.push({ store: jiraStore, label: i18n("Jira 1"),
-                        project: plasmoid.configuration.jira1ClockifyProjectId || "" });
+                        project: Plasmoid.configuration.jira1ClockifyProjectId || "" });
         if (full._showJira2 && jira2Store)
             jobs.push({ store: jira2Store, label: i18n("Jira 2"),
-                        project: plasmoid.configuration.jira2ClockifyProjectId || "" });
+                        project: Plasmoid.configuration.jira2ClockifyProjectId || "" });
 
         var totCreated = 0, totSkipped = 0, totFailed = 0;
         var runJob = function(idx) {
@@ -198,15 +200,15 @@ Item {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: PlasmaCore.Units.smallSpacing
-        spacing: PlasmaCore.Units.smallSpacing
+        anchors.margins: Kirigami.Units.smallSpacing
+        spacing: Kirigami.Units.smallSpacing
 
         // -------- Header --------
         RowLayout {
             Layout.fillWidth: true
-            spacing: PlasmaCore.Units.smallSpacing
+            spacing: Kirigami.Units.smallSpacing
 
-            PlasmaCore.IconItem {
+            Kirigami.Icon {
                 source: "view-calendar-week"
                 Layout.preferredWidth: 18
                 Layout.preferredHeight: 18
@@ -254,10 +256,10 @@ Item {
             }
 
             PlasmaComponents3.Button {
-                text: plasmoid.configuration.worklogViewMode === "9h" ? i18n("Modo 9h") : i18n("Modo 24h")
+                text: Plasmoid.configuration.worklogViewMode === "9h" ? i18n("Modo 9h") : i18n("Modo 24h")
                 onClicked: {
-                    plasmoid.configuration.worklogViewMode =
-                        plasmoid.configuration.worklogViewMode === "9h" ? "24h" : "9h";
+                    Plasmoid.configuration.worklogViewMode =
+                        Plasmoid.configuration.worklogViewMode === "9h" ? "24h" : "9h";
                 }
                 PlasmaComponents3.ToolTip.text: i18n("Cambiar entre vista 09:00–18:00 y 00:00–24:00")
                 PlasmaComponents3.ToolTip.visible: hovered
@@ -285,7 +287,7 @@ Item {
                 icon.name: "view-calendar"
                 checkable: true
                 checked: full._showGoogleEvents
-                onClicked: plasmoid.configuration.googleCalEnabled = !plasmoid.configuration.googleCalEnabled
+                onClicked: Plasmoid.configuration.googleCalEnabled = !Plasmoid.configuration.googleCalEnabled
                 PlasmaComponents3.ToolTip.text: i18n("Mostrar / ocultar eventos de Google Calendar")
                 PlasmaComponents3.ToolTip.visible: hovered
                 PlasmaComponents3.ToolTip.delay: 500
@@ -293,13 +295,13 @@ Item {
             // Pin button — keeps the popup open until toggled off.
             PlasmaComponents3.ToolButton {
                 id: pinBtn
-                icon.name: plasmoid.configuration.worklogPinned ? "window-pin" : "window-unpin"
+                icon.name: Plasmoid.configuration.worklogPinned ? "window-pin" : "window-unpin"
                 checkable: true
-                checked: plasmoid.configuration.worklogPinned === true
+                checked: Plasmoid.configuration.worklogPinned === true
                 onClicked: {
-                    plasmoid.configuration.worklogPinned = !plasmoid.configuration.worklogPinned;
+                    Plasmoid.configuration.worklogPinned = !Plasmoid.configuration.worklogPinned;
                 }
-                PlasmaComponents3.ToolTip.text: plasmoid.configuration.worklogPinned
+                PlasmaComponents3.ToolTip.text: Plasmoid.configuration.worklogPinned
                                                 ? i18n("Despinear (cerrar al perder foco)")
                                                 : i18n("Pinear (mantener abierto)")
                 PlasmaComponents3.ToolTip.visible: hovered
@@ -332,12 +334,12 @@ Item {
                 if (full._statusOverride.length > 0) return full._statusOverrideColor;
                 if ((jiraStore && jiraStore.lastError.length > 0) ||
                     (clockifyStore && clockifyStore.lastError.length > 0)) {
-                    return PlasmaCore.Theme.negativeTextColor;
+                    return Kirigami.Theme.negativeTextColor;
                 }
-                return PlasmaCore.Theme.textColor;
+                return Kirigami.Theme.textColor;
             }
             opacity: text === " " ? 0 : 0.8
-            font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+            font.pixelSize: Kirigami.Theme.smallFont.pixelSize
         }
 
         // -------- Calendar --------
@@ -351,11 +353,11 @@ Item {
             googleStore: full.googleStore
             weekStart: full.currentWeekStart
             source: full.source
-            onCreateJiraRequested:     jiraEditDialog.openCreate(dayMs, startMs, endMs)
-            onCreateClockifyRequested: clockifyEditDialog.openCreate(startMs, endMs)
-            onEditJiraRequested:       jiraEditDialog.openEdit(entry, 0)
-            onEditJira2Requested:      jiraEditDialog.openEdit(entry, 1)
-            onEditClockifyRequested:   clockifyEditDialog.openEdit(entry)
+            onCreateJiraRequested:     (dayMs, startMs, endMs) => jiraEditDialog.openCreate(dayMs, startMs, endMs)
+            onCreateClockifyRequested: (dayMs, startMs, endMs) => clockifyEditDialog.openCreate(startMs, endMs)
+            onEditJiraRequested:       (entry) => jiraEditDialog.openEdit(entry, 0)
+            onEditJira2Requested:      (entry) => jiraEditDialog.openEdit(entry, 1)
+            onEditClockifyRequested:   (entry) => clockifyEditDialog.openEdit(entry)
             // One handler covers cross-day move, top resize and bottom
             // resize — all three end up as a Jira/Clockify update with
             // a new (start, duration) pair.
@@ -492,7 +494,7 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             visible: full._showBottomPanel
-            spacing: PlasmaCore.Units.smallSpacing
+            spacing: Kirigami.Units.smallSpacing
 
             // Content area — both views exist; only the displayed one shows.
             // A short slide+fade plays on switch (down for heatmap, up for
@@ -579,7 +581,7 @@ Item {
                     icon.name: "office-chart-ring"
                     checkable: true
                     checked: full._bottomIsRings
-                    onClicked: plasmoid.configuration.worklogBottomView = "rings"
+                    onClicked: Plasmoid.configuration.worklogBottomView = "rings"
                     PlasmaComponents3.ToolTip.text: i18n("Ver anillos (Sprint / Horas)")
                     PlasmaComponents3.ToolTip.visible: hovered
                     PlasmaComponents3.ToolTip.delay: 500
@@ -589,7 +591,7 @@ Item {
                     checkable: true
                     checked: full._bottomIsSubtasks
                     visible: full._showSubtaskTable
-                    onClicked: plasmoid.configuration.worklogBottomView = "subtasks"
+                    onClicked: Plasmoid.configuration.worklogBottomView = "subtasks"
                     PlasmaComponents3.ToolTip.text: i18n("Ver tabla de subtareas")
                     PlasmaComponents3.ToolTip.visible: hovered
                     PlasmaComponents3.ToolTip.delay: 500
@@ -598,7 +600,7 @@ Item {
                     icon.name: "view-calendar-month"
                     checkable: true
                     checked: full._bottomIsHeatmap
-                    onClicked: plasmoid.configuration.worklogBottomView = "heatmap"
+                    onClicked: Plasmoid.configuration.worklogBottomView = "heatmap"
                     PlasmaComponents3.ToolTip.text: i18n("Ver heatmap mensual")
                     PlasmaComponents3.ToolTip.visible: hovered
                     PlasmaComponents3.ToolTip.delay: 500
@@ -653,7 +655,7 @@ Item {
                     return parts.join("  ·  ");
                 }
                 opacity: 0.7
-                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
             }
 
             // Combined-mode-only: copy Jira worklogs into Clockify entries.
@@ -700,7 +702,7 @@ Item {
                             text: i18n("Jira")
                             checked: full.source === "jira"
                             onClicked: if (checked && full.source !== "jira") {
-                                plasmoid.configuration.worklogSource = "jira";
+                                Plasmoid.configuration.worklogSource = "jira";
                                 full.syncNow();
                                 modePopup.close();
                             }
@@ -710,7 +712,7 @@ Item {
                             text: i18n("Jira / Clockify")
                             checked: full.source === "jira-clockify"
                             onClicked: if (checked && full.source !== "jira-clockify") {
-                                plasmoid.configuration.worklogSource = "jira-clockify";
+                                Plasmoid.configuration.worklogSource = "jira-clockify";
                                 full.syncNow();
                                 modePopup.close();
                             }
@@ -720,7 +722,7 @@ Item {
                             text: i18n("Clockify")
                             checked: full.source === "clockify"
                             onClicked: if (checked && full.source !== "clockify") {
-                                plasmoid.configuration.worklogSource = "clockify";
+                                Plasmoid.configuration.worklogSource = "clockify";
                                 full.syncNow();
                                 modePopup.close();
                             }
@@ -732,7 +734,7 @@ Item {
             PlasmaComponents3.ToolButton {
                 icon.name: "configure"
                 text: i18n("Configurar…")
-                onClicked: plasmoid.action("configure").trigger()
+                onClicked: Plasmoid.internalAction("configure").trigger()
             }
         }
     }
@@ -776,8 +778,8 @@ Item {
             anchors.centerIn: parent
             width: Math.max(400, parent.width - 16)
             height: Math.max(300, parent.height - 30)
-            color: PlasmaCore.Theme.backgroundColor
-            border.color: PlasmaCore.Theme.textColor
+            color: Kirigami.Theme.backgroundColor
+            border.color: Kirigami.Theme.textColor
             border.width: 1
             radius: 4
 
@@ -786,7 +788,7 @@ Item {
             ColumnLayout {
                 anchors.fill: parent
                 anchors.margins: 8
-                spacing: PlasmaCore.Units.smallSpacing
+                spacing: Kirigami.Units.smallSpacing
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -853,7 +855,7 @@ Item {
     // Fetch (or clear-and-fetch) Google events when the toggle flips on,
     // and refetch when the chosen calendar changes while enabled.
     Connections {
-        target: plasmoid.configuration
+        target: Plasmoid.configuration
         function onGoogleCalEnabledChanged() {
             if (full._showGoogleEvents && googleStore) googleStore.fetchWeek(full.currentWeekStart);
         }
@@ -877,7 +879,7 @@ Item {
     // vertical switch buttons, the mouse wheel, or the config dialog) and
     // refresh the newly-shown view.
     Connections {
-        target: plasmoid.configuration
+        target: Plasmoid.configuration
         function onWorklogBottomViewChanged() {
             full._animateBottomSwitch();
             full._refreshCurrentBottomView();
@@ -886,7 +888,7 @@ Item {
             // If the user disables the subtask table while it's the
             // visible view, fall back to rings.
             if (!full._showSubtaskTable && full._rawBottomView === "subtasks") {
-                plasmoid.configuration.worklogBottomView = "rings";
+                Plasmoid.configuration.worklogBottomView = "rings";
             }
         }
         function onWorklogSubtaskJqlChanged() {
@@ -902,9 +904,9 @@ Item {
     // reuses the same FullRepresentation instance so Component.onCompleted
     // only fires once on first open). Also re-fetch the visible bottom view.
     Connections {
-        target: plasmoid
+        target: full.plasmoidItem || null
         function onExpandedChanged() {
-            if (!plasmoid.expanded) return;
+            if (!full.plasmoidItem.expanded) return;
             full._refreshCurrentBottomView();
         }
     }
@@ -913,7 +915,7 @@ Item {
     // — strategy / field / board / remaining mode — so the gauges update
     // without a manual sync click.
     Connections {
-        target: plasmoid.configuration
+        target: Plasmoid.configuration
         function _refetchRings() {
             if (full._showBottomPanel && full._bottomIsRings && jiraStore)
                 jiraStore.fetchSprintInfo();

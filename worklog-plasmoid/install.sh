@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # install.sh - install / update / uninstall the Jira Worklog Calendar
-# plasmoid for the current user on Kubuntu 24.04 (KDE Plasma 5.27 + Qt 5.15).
+# plasmoid for the current user on Kubuntu 26.04 (KDE Plasma 6 + Qt 6).
 #
 # Usage:
 #   ./install.sh             # install (or upgrade if already installed)
@@ -28,15 +28,12 @@ for arg in "$@"; do
     esac
 done
 
-if command -v kpackagetool5 >/dev/null 2>&1; then
-    PKG_TOOL=kpackagetool5
-    PKG_TYPE_ARG="--type Plasma/Applet"
-elif command -v plasmapkg2 >/dev/null 2>&1; then
-    PKG_TOOL=plasmapkg2
+if command -v kpackagetool6 >/dev/null 2>&1; then
+    PKG_TOOL=kpackagetool6
     PKG_TYPE_ARG="--type Plasma/Applet"
 else
-    echo "Error: neither kpackagetool5 nor plasmapkg2 found." >&2
-    echo "Install plasma-framework / plasma-workspace and try again." >&2
+    echo "Error: kpackagetool6 not found." >&2
+    echo "Install libkf6package-bin / plasma-workspace and try again." >&2
     exit 1
 fi
 
@@ -79,4 +76,4 @@ esac
 
 echo
 echo "Done. Reload Plasma to pick up the change:"
-echo "    kquitapp5 plasmashell && kstart5 plasmashell"
+echo "    systemctl --user restart plasma-plasmashell"

@@ -8,14 +8,25 @@
  * values currently in the form (not necessarily saved yet).
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Controls 2.15
-import org.kde.kirigami 2.5 as Kirigami
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls
+import org.kde.kirigami as Kirigami
+import org.kde.kcmutils as KCM
 
-ColumnLayout {
+KCM.SimpleKCM {
     id: page
-    spacing: Kirigami.Units.largeSpacing
+
+    // Plasma 6 also assigns cfg_<key>Default; declare them to avoid warnings.
+    property var cfg_jiraSiteDefault
+    property var cfg_jiraEmailDefault
+    property var cfg_jiraTokenDefault
+    property var cfg_jira2EnabledDefault
+    property var cfg_jira2SiteDefault
+    property var cfg_jira2EmailDefault
+    property var cfg_jira2TokenDefault
+    property var cfg_jira1BlockColorDefault
+    property var cfg_jira2BlockColorDefault
 
     property alias cfg_jiraSite:  siteField.text
     property alias cfg_jiraEmail: emailField.text
@@ -37,234 +48,19 @@ ColumnLayout {
                                      "#26a69a", "#66bb6a", "#ef5350", "#ec407a",
                                      "#ffa726", "#8d6e63", "#78909c"]
 
-    Label {
-        Layout.fillWidth: true
-        wrapMode: Text.WordWrap
-        opacity: 0.75
-        text: i18n("Estas credenciales están compartidas con el plasmoide «Categorized ToDo». "
-                 + "Si ya las configuraste allá, no hace falta volver a escribirlas. El token "
-                 + "se guarda en plain text en ~/.config/categorizedtodorc (permisos 0600).")
-    }
-
-    Kirigami.FormLayout {
-        Layout.fillWidth: true
-
-        TextField {
-            id: siteField
-            Kirigami.FormData.label: i18n("Sitio Jira:")
-            Layout.fillWidth: true
-            placeholderText: "https://your-company.atlassian.net"
-            inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoPredictiveText
+    // Basic-auth header value. Base64 of the UTF-8 bytes of "user:pass"
+    // (Qt 6 deprecates Qt.btoa(string), so it's done by hand).
+    function _basicAuth(user, pass) {
+        var s = unescape(encodeURIComponent(user + ":" + pass));
+        var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        var out = "";
+        for (var i = 0; i < s.length; i += 3) {
+            var n = (s.charCodeAt(i) << 16) | ((s.charCodeAt(i + 1) || 0) << 8) | (s.charCodeAt(i + 2) || 0);
+            out += chars[(n >> 18) & 63] + chars[(n >> 12) & 63]
+                 + (i + 1 < s.length ? chars[(n >> 6) & 63] : "=")
+                 + (i + 2 < s.length ? chars[n & 63] : "=");
         }
-
-        TextField {
-            id: emailField
-            Kirigami.FormData.label: i18n("Email:")
-            Layout.fillWidth: true
-            placeholderText: "you@example.com"
-            inputMethodHints: Qt.ImhEmailCharactersOnly | Qt.ImhNoPredictiveText
-        }
-
-        RowLayout {
-            Kirigami.FormData.label: i18n("API token:")
-            spacing: Kirigami.Units.smallSpacing
-            TextField {
-                id: tokenField
-                Layout.fillWidth: true
-                echoMode: showTokenCheck.checked ? TextInput.Normal : TextInput.Password
-                placeholderText: i18n("Generado en id.atlassian.com")
-                inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhSensitiveData
-            }
-            CheckBox {
-                id: showTokenCheck
-                text: i18n("Ver")
-            }
-        }
-    }
-
-    GroupBox {
-        Layout.fillWidth: true
-        title: i18n("Probar conexión")
-
-        ColumnLayout {
-            anchors.fill: parent
-            spacing: Kirigami.Units.smallSpacing
-
-            RowLayout {
-                Layout.fillWidth: true
-                Button {
-                    text: i18n("Probar")
-                    icon.name: "network-connect"
-                    onClicked: {
-                        statusLabel.text = i18n("Conectando…");
-                        statusLabel.color = palette.text;
-                        page._test(siteField.text, emailField.text, tokenField.text, statusLabel);
-                    }
-                }
-                Item { Layout.fillWidth: true }
-            }
-
-            Label {
-                id: statusLabel
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                text: ""
-            }
-        }
-    }
-
-    // -------- Block colors --------
-    GroupBox {
-        Layout.fillWidth: true
-        title: i18n("Colores de bloque")
-
-        ColumnLayout {
-            anchors.fill: parent
-            spacing: Kirigami.Units.smallSpacing
-
-            Label {
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                opacity: 0.75
-                text: i18n("Color de los bloques de cada Jira en los modos Jira y Jira/Clockify "
-                         + "(se dibujan translúcidos). Sirve para distinguir las dos instancias.")
-            }
-            RowLayout {
-                spacing: Kirigami.Units.smallSpacing
-                Label { text: i18n("Jira 1:") }
-                Rectangle {
-                    Layout.preferredWidth: 40; Layout.preferredHeight: 22
-                    radius: 3; color: page.cfg_jira1BlockColor
-                    border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.4)
-                    MouseArea {
-                        anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                        onClicked: { page._colorTarget = 1; colorPopup.open(); }
-                    }
-                }
-                Item { Layout.preferredWidth: Kirigami.Units.largeSpacing }
-                Label { text: i18n("Jira 2:") }
-                Rectangle {
-                    Layout.preferredWidth: 40; Layout.preferredHeight: 22
-                    radius: 3; color: page.cfg_jira2BlockColor
-                    border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.4)
-                    MouseArea {
-                        anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                        onClicked: { page._colorTarget = 2; colorPopup.open(); }
-                    }
-                }
-                Item { Layout.fillWidth: true }
-            }
-        }
-    }
-
-    // -------- Second Jira instance --------
-    GroupBox {
-        Layout.fillWidth: true
-        title: i18n("Segundo Jira")
-
-        ColumnLayout {
-            anchors.fill: parent
-            spacing: Kirigami.Units.smallSpacing
-
-            CheckBox {
-                id: jira2EnabledCheck
-                text: i18n("Habilitar una segunda instancia de Jira")
-            }
-            Label {
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                opacity: 0.7
-                text: i18n("Credenciales independientes (NO se comparten con el plasmoide ToDo). "
-                         + "El panel inferior (anillos / subtareas / heatmap) sigue atado al primer Jira.")
-            }
-
-            Kirigami.FormLayout {
-                Layout.fillWidth: true
-                enabled: jira2EnabledCheck.checked
-
-                TextField {
-                    id: site2Field
-                    Kirigami.FormData.label: i18n("Sitio Jira:")
-                    Layout.fillWidth: true
-                    placeholderText: "https://other.atlassian.net"
-                    inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoPredictiveText
-                }
-                TextField {
-                    id: email2Field
-                    Kirigami.FormData.label: i18n("Email:")
-                    Layout.fillWidth: true
-                    placeholderText: "you@example.com"
-                    inputMethodHints: Qt.ImhEmailCharactersOnly | Qt.ImhNoPredictiveText
-                }
-                RowLayout {
-                    Kirigami.FormData.label: i18n("API token:")
-                    spacing: Kirigami.Units.smallSpacing
-                    TextField {
-                        id: token2Field
-                        Layout.fillWidth: true
-                        echoMode: showToken2Check.checked ? TextInput.Normal : TextInput.Password
-                        placeholderText: i18n("Generado en id.atlassian.com")
-                        inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhSensitiveData
-                    }
-                    CheckBox { id: showToken2Check; text: i18n("Ver") }
-                }
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                enabled: jira2EnabledCheck.checked
-                Button {
-                    text: i18n("Probar")
-                    icon.name: "network-connect"
-                    onClicked: {
-                        status2Label.text = i18n("Conectando…");
-                        status2Label.color = palette.text;
-                        page._test(site2Field.text, email2Field.text, token2Field.text, status2Label);
-                    }
-                }
-                Item { Layout.fillWidth: true }
-            }
-            Label {
-                id: status2Label
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                text: ""
-            }
-        }
-    }
-
-    Item { Layout.fillHeight: true }
-
-    // Shared palette popup for the block-color swatches.
-    Popup {
-        id: colorPopup
-        modal: true
-        focus: true
-        padding: 8
-        Grid {
-            columns: 6
-            spacing: 6
-            Repeater {
-                model: page._palette
-                delegate: Rectangle {
-                    width: 28; height: 28; radius: 4
-                    color: modelData
-                    property string _cur: page._colorTarget === 2 ? page.cfg_jira2BlockColor
-                                                                   : page.cfg_jira1BlockColor
-                    border.width: _cur === modelData ? 2 : 1
-                    border.color: _cur === modelData ? Kirigami.Theme.highlightColor
-                                                     : Qt.rgba(1, 1, 1, 0.4)
-                    MouseArea {
-                        anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (page._colorTarget === 2) page.cfg_jira2BlockColor = modelData;
-                            else                         page.cfg_jira1BlockColor = modelData;
-                            colorPopup.close();
-                        }
-                    }
-                }
-            }
-        }
+        return "Basic " + out;
     }
 
     function _test(site, email, token, lbl) {
@@ -276,7 +72,7 @@ ColumnLayout {
         }
         var xhr = new XMLHttpRequest();
         xhr.open("GET", site + "/rest/api/3/myself", true);
-        xhr.setRequestHeader("Authorization", "Basic " + Qt.btoa(email + ":" + token));
+        xhr.setRequestHeader("Authorization", _basicAuth(email, token));
         xhr.setRequestHeader("Accept", "application/json");
         xhr.onreadystatechange = function() {
             if (xhr.readyState !== XMLHttpRequest.DONE) return;
@@ -306,5 +102,240 @@ ColumnLayout {
             lbl.text = i18n("Error de red: %1", e);
             lbl.color = "#e74c3c";
         }
+    }
+
+    ColumnLayout {
+        spacing: Kirigami.Units.largeSpacing
+
+        Label {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            opacity: 0.75
+            text: i18n("Estas credenciales están compartidas con el plasmoide «Categorized ToDo». "
+                     + "Si ya las configuraste allá, no hace falta volver a escribirlas. El token "
+                     + "se guarda en plain text en ~/.config/categorizedtodorc (permisos 0600).")
+        }
+
+        Kirigami.FormLayout {
+            Layout.fillWidth: true
+
+            TextField {
+                id: siteField
+                Kirigami.FormData.label: i18n("Sitio Jira:")
+                Layout.fillWidth: true
+                placeholderText: "https://your-company.atlassian.net"
+                inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoPredictiveText
+            }
+
+            TextField {
+                id: emailField
+                Kirigami.FormData.label: i18n("Email:")
+                Layout.fillWidth: true
+                placeholderText: "you@example.com"
+                inputMethodHints: Qt.ImhEmailCharactersOnly | Qt.ImhNoPredictiveText
+            }
+
+            RowLayout {
+                Kirigami.FormData.label: i18n("API token:")
+                spacing: Kirigami.Units.smallSpacing
+                TextField {
+                    id: tokenField
+                    Layout.fillWidth: true
+                    echoMode: showTokenCheck.checked ? TextInput.Normal : TextInput.Password
+                    placeholderText: i18n("Generado en id.atlassian.com")
+                    inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhSensitiveData
+                }
+                CheckBox {
+                    id: showTokenCheck
+                    text: i18n("Ver")
+                }
+            }
+        }
+
+        GroupBox {
+            Layout.fillWidth: true
+            title: i18n("Probar conexión")
+
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: Kirigami.Units.smallSpacing
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Button {
+                        text: i18n("Probar")
+                        icon.name: "network-connect"
+                        onClicked: {
+                            statusLabel.text = i18n("Conectando…");
+                            statusLabel.color = palette.text;
+                            page._test(siteField.text, emailField.text, tokenField.text, statusLabel);
+                        }
+                    }
+                    Item { Layout.fillWidth: true }
+                }
+
+                Label {
+                    id: statusLabel
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: ""
+                }
+            }
+        }
+
+        // -------- Block colors --------
+        GroupBox {
+            Layout.fillWidth: true
+            title: i18n("Colores de bloque")
+
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: Kirigami.Units.smallSpacing
+
+                Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    opacity: 0.75
+                    text: i18n("Color de los bloques de cada Jira en los modos Jira y Jira/Clockify "
+                             + "(se dibujan translúcidos). Sirve para distinguir las dos instancias.")
+                }
+                RowLayout {
+                    spacing: Kirigami.Units.smallSpacing
+                    Label { text: i18n("Jira 1:") }
+                    Rectangle {
+                        Layout.preferredWidth: 40; Layout.preferredHeight: 22
+                        radius: 3; color: page.cfg_jira1BlockColor
+                        border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.4)
+                        MouseArea {
+                            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                            onClicked: { page._colorTarget = 1; colorPopup.open(); }
+                        }
+                    }
+                    Item { Layout.preferredWidth: Kirigami.Units.largeSpacing }
+                    Label { text: i18n("Jira 2:") }
+                    Rectangle {
+                        Layout.preferredWidth: 40; Layout.preferredHeight: 22
+                        radius: 3; color: page.cfg_jira2BlockColor
+                        border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.4)
+                        MouseArea {
+                            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                            onClicked: { page._colorTarget = 2; colorPopup.open(); }
+                        }
+                    }
+                    Item { Layout.fillWidth: true }
+                }
+            }
+        }
+
+        // -------- Second Jira instance --------
+        GroupBox {
+            Layout.fillWidth: true
+            title: i18n("Segundo Jira")
+
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: Kirigami.Units.smallSpacing
+
+                CheckBox {
+                    id: jira2EnabledCheck
+                    text: i18n("Habilitar una segunda instancia de Jira")
+                }
+                Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    opacity: 0.7
+                    text: i18n("Credenciales independientes (NO se comparten con el plasmoide ToDo). "
+                             + "El panel inferior (anillos / subtareas / heatmap) sigue atado al primer Jira.")
+                }
+
+                Kirigami.FormLayout {
+                    Layout.fillWidth: true
+                    enabled: jira2EnabledCheck.checked
+
+                    TextField {
+                        id: site2Field
+                        Kirigami.FormData.label: i18n("Sitio Jira:")
+                        Layout.fillWidth: true
+                        placeholderText: "https://other.atlassian.net"
+                        inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoPredictiveText
+                    }
+                    TextField {
+                        id: email2Field
+                        Kirigami.FormData.label: i18n("Email:")
+                        Layout.fillWidth: true
+                        placeholderText: "you@example.com"
+                        inputMethodHints: Qt.ImhEmailCharactersOnly | Qt.ImhNoPredictiveText
+                    }
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("API token:")
+                        spacing: Kirigami.Units.smallSpacing
+                        TextField {
+                            id: token2Field
+                            Layout.fillWidth: true
+                            echoMode: showToken2Check.checked ? TextInput.Normal : TextInput.Password
+                            placeholderText: i18n("Generado en id.atlassian.com")
+                            inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhSensitiveData
+                        }
+                        CheckBox { id: showToken2Check; text: i18n("Ver") }
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    enabled: jira2EnabledCheck.checked
+                    Button {
+                        text: i18n("Probar")
+                        icon.name: "network-connect"
+                        onClicked: {
+                            status2Label.text = i18n("Conectando…");
+                            status2Label.color = palette.text;
+                            page._test(site2Field.text, email2Field.text, token2Field.text, status2Label);
+                        }
+                    }
+                    Item { Layout.fillWidth: true }
+                }
+                Label {
+                    id: status2Label
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: ""
+                }
+            }
+        }
+
+        Item { Layout.fillHeight: true }
+
+        // Shared palette popup for the block-color swatches.
+        Popup {
+            id: colorPopup
+            modal: true
+            focus: true
+            padding: 8
+            Grid {
+                columns: 6
+                spacing: 6
+                Repeater {
+                    model: page._palette
+                    delegate: Rectangle {
+                        width: 28; height: 28; radius: 4
+                        color: modelData
+                        property string _cur: page._colorTarget === 2 ? page.cfg_jira2BlockColor
+                                                                       : page.cfg_jira1BlockColor
+                        border.width: _cur === modelData ? 2 : 1
+                        border.color: _cur === modelData ? Kirigami.Theme.highlightColor
+                                                         : Qt.rgba(1, 1, 1, 0.4)
+                        MouseArea {
+                            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (page._colorTarget === 2) page.cfg_jira2BlockColor = modelData;
+                                else                         page.cfg_jira1BlockColor = modelData;
+                                colorPopup.close();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
     }
 }

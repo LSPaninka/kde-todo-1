@@ -19,11 +19,11 @@
  * which the FullRepresentation calls every time the popup is opened.
  */
 
-import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import QtQuick.Controls 2.15 as QQC2
-import org.kde.plasma.core 2.0 as PlasmaCore
-import org.kde.plasma.components 3.0 as PlasmaComponents3
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls as QQC2
+import org.kde.plasma.components as PlasmaComponents3
+import org.kde.kirigami as Kirigami
 
 Item {
     id: gauges
@@ -125,7 +125,7 @@ Item {
     RowLayout {
         id: layout
         anchors.fill: parent
-        spacing: PlasmaCore.Units.smallSpacing * 2
+        spacing: Kirigami.Units.smallSpacing * 2
 
         // Left decorative line.
         Rectangle {
@@ -143,7 +143,7 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
                 text: i18n("Sprint")
                 font.bold: true
-                font.pixelSize: PlasmaCore.Theme.defaultFont.pixelSize + 1
+                font.pixelSize: Kirigami.Theme.defaultFont.pixelSize + 1
             }
             RingGauge {
                 id: sprintRing
@@ -163,7 +163,7 @@ Item {
                              gauges._fmtDate(jiraStore.currentSprint.endDate))
                       : i18n("Sin sprint activo")
                 opacity: 0.75
-                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
             }
         }
 
@@ -183,7 +183,7 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
                 text: i18n("Horas")
                 font.bold: true
-                font.pixelSize: PlasmaCore.Theme.defaultFont.pixelSize + 1
+                font.pixelSize: Kirigami.Theme.defaultFont.pixelSize + 1
             }
             RingGauge {
                 id: hoursRing
@@ -206,7 +206,7 @@ Item {
                       ? i18n("Disponible: %1", gauges._fmtHours(jiraStore.sprintAvailableSec))
                       : ""
                 opacity: 0.75
-                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
 
                 MouseArea {
                     id: dispHover
@@ -224,7 +224,7 @@ Item {
                       ? i18n("Quemadas: %1", gauges._fmtHours(jiraStore.sprintConsumedSec))
                       : ""
                 opacity: 0.75
-                font.pixelSize: PlasmaCore.Theme.smallestFont.pixelSize
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
             }
         }
 

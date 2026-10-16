@@ -20,7 +20,7 @@
  * with the same math.
  */
 
-import QtQuick 2.15
+import QtQuick
 
 QtObject {
     id: store
