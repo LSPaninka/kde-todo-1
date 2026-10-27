@@ -6,6 +6,7 @@
  *   - "todo":   local task list (TaskStore + SQLite).
  *   - "jira":   read-only view of Jira issues assigned to the user.
  *   - "gh":     read-only view of a GitHub Projects (V2) project.
+ *   - "trello": cards of a Trello board (one tab per list; read + edit).
  *   - "notion": pages from Notion via the `ntn` CLI (read + inline edit).
  *
  * Persistence: SQLite via QtQuick.LocalStorage. See
@@ -37,6 +38,7 @@ PlasmoidItem {
         jira: _jira
         jira2: _jira2
         gh: _gh
+        trello: _trello
         notion: _notion
         notionSync: _notionSync
         Layout.minimumWidth: Plasmoid.configuration.popupWidth
@@ -51,6 +53,7 @@ PlasmoidItem {
         jira: _jira
         jira2: _jira2
         gh: _gh
+        trello: _trello
         notion: _notion
         onHoverChanged: function(isHov, mainText, subText) {
             root.compactHoverMain = isHov ? mainText : "";
@@ -64,6 +67,10 @@ PlasmoidItem {
         if (root.mode === "jira")   return i18n("Jira 1 — assigned issues");
         if (root.mode === "jira2")  return i18n("Jira 2 — assigned issues");
         if (root.mode === "gh")     return i18n("GitHub Projects");
+        if (root.mode === "trello") {
+            var b = _trello && _trello.board ? _trello.board.name : "";
+            return b ? i18n("Trello — %1", b) : i18n("Trello");
+        }
         if (root.mode === "notion") return i18n("Notion pages");
         return i18n("Categorized ToDo");
     }
@@ -84,6 +91,11 @@ PlasmoidItem {
             if (!_gh) return "";
             if (_gh.lastError) return _gh.lastError;
             return i18np("%1 item", "%1 items", _gh.totalCount());
+        }
+        if (root.mode === "trello") {
+            if (!_trello) return "";
+            if (_trello.lastError) return _trello.lastError;
+            return i18np("%1 tarjeta", "%1 tarjetas", (_trello.version, _trello.totalCount()));
         }
         if (root.mode === "notion") {
             if (!_notion) return "";
@@ -124,6 +136,12 @@ PlasmoidItem {
         database: _db
     }
 
+    TrelloStore {
+        id: _trello
+        plasmoidApi: Plasmoid
+        database: _db
+    }
+
     NotionStore {
         id: _notion
         plasmoidApi: Plasmoid
@@ -153,6 +171,8 @@ PlasmoidItem {
         _jira.plasmoidApi       = Plasmoid;
         _jira2.plasmoidApi      = Plasmoid;
         _gh.plasmoidApi         = Plasmoid;
+        _trello.plasmoidApi     = Plasmoid;
+        _trello.database        = _db;
         _notion.plasmoidApi     = Plasmoid;
         _notionSync.plasmoidApi = Plasmoid;
         _notionSync.database    = _db;
@@ -163,6 +183,7 @@ PlasmoidItem {
         _jira.init();
         _jira2.init();
         _gh.init();
+        _trello.init();
         _notion.init();
         _notionSync.init();
 
@@ -178,8 +199,14 @@ PlasmoidItem {
         _jira.persistCredentials();
         _jira2.persistCredentials();
         _gh.persistCredentials();
+        _trello.persistCredentials();
         _notionSync.persistCredentials();
 
+        // Trello is editable, so always refresh on startup (the cache only
+        // bridges the gap until the fetch lands).
+        if (root.mode === "trello" && _trello.isConfigured()) {
+            _trello.fetch();
+        }
         if (root.mode === "jira" && _jira.lastFetchedAt === 0) {
             _jira.fetch();
         }
@@ -232,6 +259,15 @@ PlasmoidItem {
         function onGhOwnerChanged() { _gh.persistCredentials(); }
         function onGhRefreshMinutesChanged() { _gh.applyRefreshSchedule(); }
 
+        // Trello: mirror credentials; a new board means a full reload.
+        function onTrelloApiKeyChanged() { _trello.persistCredentials(); }
+        function onTrelloTokenChanged()  { _trello.persistCredentials(); }
+        function onTrelloBoardChanged() {
+            _trello.persistCredentials();
+            if (root.mode === "trello" && _trello.isConfigured() && !_trello.loading) _trello.fetch();
+        }
+        function onTrelloRefreshMinutesChanged() { _trello.applyRefreshSchedule(); }
+
         // Legacy CLI Notion mode has no credentials in config.
         function onNotionRefreshMinutesChanged() {
             _notion.applyRefreshSchedule();
@@ -257,6 +293,9 @@ PlasmoidItem {
             }
             if (root.mode === "gh" && _gh.lastFetchedAt === 0 && !_gh.loading) {
                 _gh.fetch();
+            }
+            if (root.mode === "trello" && _trello.isConfigured() && !_trello.loading) {
+                _trello.fetch();
             }
             if (root.mode === "notion" && _notion.lastFetchedAt === 0 && !_notion.loading) {
                 _notion.fetch();

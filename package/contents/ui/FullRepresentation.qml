@@ -17,6 +17,7 @@ Item {
     property var jira
     property var jira2
     property var gh
+    property var trello
     property var notion
     property var notionSync
     // The PlasmoidItem root (main.qml); views use it to react to `expanded`.
@@ -29,6 +30,7 @@ Item {
         if (full.mode === "gh")     return 2;
         if (full.mode === "notion") return 3;
         if (full.mode === "jira2")  return 4;
+        if (full.mode === "trello") return 5;
         return 0;
     }
 
@@ -60,6 +62,11 @@ Item {
         JiraView {
             jira: full.jira2
             cfgPrefix: "jira2"
+            plasmoidItem: full.plasmoidItem
+        }
+
+        TrelloView {
+            trello: full.trello
             plasmoidItem: full.plasmoidItem
         }
     }

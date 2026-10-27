@@ -1,17 +1,18 @@
 /*
  * CompactRepresentation.qml - panel / system-tray view.
  *
- * Four operating modes:
+ * Operating modes:
  *   - "todo":   one swatch + count per ToDo category. Hover shows the
  *               pending tasks for that category as a tooltip.
- *   - "jira":   one swatch + count per Jira category (configurable).
+ *   - "jira" / "jira2": one swatch + count per Jira category (configurable).
  *   - "gh":     one swatch + count per GitHub Projects category.
+ *   - "trello": one swatch + count per visible list of the board.
  *   - "notion": a single Notion-colored swatch + total page count.
  *
  * Inside each mode, the layout follows panelCounterStyle ("right" or
  * "inside") and panelCounterColors (white | black per swatch).
  *
- * Mouse wheel over the compact view cycles through the four modes.
+ * Mouse wheel over the compact view cycles through the modes (_modeOrder).
  */
 
 import QtQuick
@@ -26,6 +27,7 @@ Item {
     property var jira
     property var jira2
     property var gh
+    property var trello
     property var notion
     // The PlasmoidItem root (main.qml); owns `expanded`.
     property var plasmoidItem
@@ -35,11 +37,18 @@ Item {
     readonly property int _vJira:   jira   ? jira.version   : 0
     readonly property int _vJira2:  jira2  ? jira2.version  : 0
     readonly property int _vGh:     gh     ? gh.version     : 0
+    readonly property int _vTrello: trello ? trello.version : 0
     readonly property int _vNotion: notion ? notion.version : 0
 
+    // Trello swatches: one per visible list of the board.
+    readonly property var _trelloLists:
+        (mode === "trello" && trello)
+        ? (_vTrello, Plasmoid.configuration.trelloHiddenLists, trello.visibleLists())
+        : []
+
     // The "notion" CLI mode is disabled for now, so the wheel cycles
-    // todo → jira → jira2 → gh. (Notion is a ToDo-mode sync, not a mode.)
-    readonly property var _modeOrder: ["todo", "jira", "jira2", "gh"]
+    // todo → jira → jira2 → gh → trello. (Notion is a ToDo-mode sync.)
+    readonly property var _modeOrder: ["todo", "jira", "jira2", "gh", "trello"]
 
     // Emitted whenever a swatch gains or loses hover. main.qml uses this
     // to swap toolTipMainText / toolTipSubText so the *native*
@@ -270,6 +279,62 @@ Item {
                 onHoverChanged: function(isHov, m, s) { compact.hoverChanged(isHov, m, s); }
                 onClicked: compact.plasmoidItem.expanded = !compact.plasmoidItem.expanded
             }
+        }
+
+        // -------- TRELLO mode --------
+        Repeater {
+            model: compact._trelloLists
+            delegate: SwatchBadge {
+                catIndex: index
+                color: (Plasmoid.configuration.trelloListColors, trello.listColor(modelData.id))
+                count: (compact._vTrello, Plasmoid.configuration.trelloOnlyMine,
+                        trello.countForList(modelData.id))
+                showZero: Plasmoid.configuration.panelShowZero
+                label: modelData.name
+                showLabel: Plasmoid.configuration.panelShowLabels
+                textColor: (Plasmoid.configuration.trelloListTextColors, trello.listTextColor(modelData.id))
+                insideMode: Plasmoid.configuration.panelCounterStyle === "inside"
+                scalePercent: compact._scalePct
+                smallSwatch: compact._smallSwatch
+                bigSwatch: compact._bigSwatch
+                tooltipTitle: modelData.name
+                tooltipBody: (compact._vTrello, trello.cardTitlesForList(modelData.id))
+                onHoverChanged: function(isHov, m, s) { compact.hoverChanged(isHov, m, s); }
+                onClicked: {
+                    if (compact.plasmoidItem.expanded) {
+                        compact.plasmoidItem.expanded = false;
+                    } else {
+                        trello.requestList(index);
+                        compact.plasmoidItem.expanded = true;
+                    }
+                }
+            }
+        }
+
+        // Placeholder while the board isn't configured / loaded yet, so the
+        // widget keeps a clickable footprint in the panel.
+        SwatchBadge {
+            visible: compact.mode === "trello" && compact._trelloLists.length === 0
+            catIndex: 0
+            color: "#0079bf"   // Trello blue
+            count: 0
+            showZero: true
+            label: i18n("Trello")
+            showLabel: Plasmoid.configuration.panelShowLabels
+            textColor: "white"
+            insideMode: Plasmoid.configuration.panelCounterStyle === "inside"
+            scalePercent: compact._scalePct
+            smallSwatch: compact._smallSwatch
+            bigSwatch: compact._bigSwatch
+            tooltipTitle: i18n("Trello")
+            tooltipBody: {
+                if (!trello) return "";
+                if (trello.loading) return i18n("Cargando…");
+                if (trello.lastError) return trello.lastError;
+                return i18n("Configurá el tablero en la pestaña «Trello» de la configuración.");
+            }
+            onHoverChanged: function(isHov, m, s) { compact.hoverChanged(isHov, m, s); }
+            onClicked: compact.plasmoidItem.expanded = !compact.plasmoidItem.expanded
         }
 
         // -------- NOTION mode --------

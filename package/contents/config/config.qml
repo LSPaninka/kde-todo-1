@@ -68,6 +68,16 @@ ConfigModel {
         source: "configGhCategories.qml"
     }
     ConfigCategory {
+        name: i18n("Trello")
+        icon: "view-list-details"
+        source: "configTrello.qml"
+    }
+    ConfigCategory {
+        name: i18n("Listas Trello")
+        icon: "preferences-desktop-color"
+        source: "configTrelloLists.qml"
+    }
+    ConfigCategory {
         name: i18n("Notion")
         icon: "notes"
         source: "configNotion.qml"

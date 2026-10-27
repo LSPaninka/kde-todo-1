@@ -16,7 +16,7 @@ que vienen con Plasma 6 y Qt 6 (`org.kde.plasma.*`, `org.kde.kirigami`,
 
 ## Modos
 
-El plasmoide soporta tres modos (configurable en la pestaña *General*
+El plasmoide soporta varios modos (configurable en la pestaña *General*
 del diálogo de configuración):
 
 - **ToDo** (por defecto): la lista local con hasta **7 categorías**,
@@ -38,14 +38,20 @@ del diálogo de configuración):
   Personal Access Token + el owner + el número de proyecto. Cada
   categoría filtra por *Status*, *Type*, *State* o *Repo*. Detalles en
   [`docs/GH_PROJECTS.md`](docs/GH_PROJECTS.md).
+- **Trello**: las tarjetas de **un tablero**, con **una pestaña por lista**
+  (ocultables y con color propio). Por defecto solo tus tarjetas. Podés
+  **crear** (rápida o con modal), **editar** (título, descripción, lista,
+  etiquetas, miembros, vencimiento), **mover** entre listas (click derecho),
+  manejar **checklists** y **comentarios**. Click central abre la tarjeta en
+  trello.com. Detalles en [`docs/TRELLO.md`](docs/TRELLO.md).
 
 > El modo **Notion por CLI** (`ntn`) quedó **deshabilitado momentáneamente**;
 > Notion ahora se integra como sincronización dentro del modo ToDo.
 
 > Desde la **vista compacta** (panel), la **rueda del mouse** cambia de
-> modo: ToDo → Jira → GitHub Projects → ToDo. **Click en un cuadrado de
-> color** abre el popup (en Jira, directamente en esa categoría); al pasar
-> el mouse por encima se ven los códigos y nombres de las incidencias.
+> modo: ToDo → Jira 1 → Jira 2 → GitHub Projects → Trello → ToDo. **Click en
+> un cuadrado de color** abre el popup (en Jira y Trello, directamente en esa
+> categoría / lista); al pasar el mouse por encima se ven los títulos.
 
 ---
 
@@ -235,12 +241,19 @@ package/
 │       ├── GhView.qml            # popup contents en modo GitHub Projects
 │       ├── GhItemDelegate.qml    # delegate de un ítem (Issue / PR / Draft)
 │       ├── configGh.qml          # pestaña GitHub (token, owner, project #)
-│       └── configGhCategories.qml # pestaña Categorías GH (filtros + colores)
+│       ├── configGhCategories.qml # pestaña Categorías GH (filtros + colores)
+│       ├── TrelloStore.qml       # cliente REST de Trello (lectura + escritura) + cache
+│       ├── TrelloView.qml        # popup contents en modo Trello (una pestaña por lista)
+│       ├── TrelloCardItem.qml    # delegate de una tarjeta
+│       ├── TrelloCardDialog.qml  # modal de detalle / edición / creación
+│       ├── configTrello.qml      # pestaña Trello (key, token, tablero)
+│       └── configTrelloLists.qml # pestaña Listas Trello (mostrar/ocultar + colores)
 ├── install.sh
 ├── docs/
 │   ├── PERSISTENCE.md            # cómo persiste el modo ToDo
 │   ├── JIRA.md                   # cómo configurar el modo Jira
-│   └── GH_PROJECTS.md            # cómo configurar el modo GitHub Projects
+│   ├── GH_PROJECTS.md            # cómo configurar el modo GitHub Projects
+│   └── TRELLO.md                 # cómo configurar el modo Trello
 └── README.md
 ```
 

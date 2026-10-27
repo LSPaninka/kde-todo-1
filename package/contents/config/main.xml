@@ -9,7 +9,7 @@
 
     <group name="General">
         <entry name="mode" type="String">
-            <label>Operating mode: "todo" (local task list), "jira" (Jira issues), "gh" (GitHub Projects) or "notion" (Notion pages via the ntn CLI).</label>
+            <label>Operating mode: "todo" (local task list), "jira"/"jira2" (Jira issues), "gh" (GitHub Projects), "trello" (Trello board) or "notion" (Notion pages via the ntn CLI).</label>
             <default>todo</default>
         </entry>
 
@@ -374,6 +374,47 @@
         <entry name="ghCategoryFilterValues" type="StringList">
             <label>Value to match for each GitHub category (use ';' for OR)</label>
             <default>Todo,In Progress,Done,</default>
+        </entry>
+
+        <!-- Trello integration (REST API, key + token). One board; one tab per
+             open list. See docs/TRELLO.md. -->
+        <entry name="trelloApiKey" type="String">
+            <label>Trello API key (from https://trello.com/power-ups/admin)</label>
+            <default></default>
+        </entry>
+        <entry name="trelloToken" type="String">
+            <label>Trello user token (read,write scope). Stored in plain text under ~/.config.</label>
+            <default></default>
+        </entry>
+        <entry name="trelloBoard" type="String">
+            <label>Board URL (https://trello.com/b/xxxx/name), short link or id</label>
+            <default></default>
+        </entry>
+        <entry name="trelloOnlyMine" type="Bool">
+            <label>Only show cards where I am a member</label>
+            <default>true</default>
+        </entry>
+        <entry name="trelloRefreshMinutes" type="Int">
+            <label>Auto-refresh interval in minutes (0 = manual only)</label>
+            <default>10</default>
+            <min>0</min>
+            <max>1440</max>
+        </entry>
+        <entry name="trelloHiddenLists" type="StringList">
+            <label>Ids of the board lists that are hidden (no tab / no panel swatch)</label>
+            <default></default>
+        </entry>
+        <entry name="trelloListColors" type="StringList">
+            <label>Per-list color as "listId=#rrggbb" entries</label>
+            <default></default>
+        </entry>
+        <entry name="trelloListTextColors" type="StringList">
+            <label>Per-list panel counter text color as "listId=white|black" entries</label>
+            <default></default>
+        </entry>
+        <entry name="trelloDebug" type="Bool">
+            <label>Log Trello fetch / write details to plasmashell stdout</label>
+            <default>true</default>
         </entry>
 
         <!-- Notion integration via the `ntn` CLI. Auth is delegated entirely

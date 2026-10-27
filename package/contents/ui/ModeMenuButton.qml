@@ -52,6 +52,13 @@ PlasmaComponents3.ToolButton {
             checked: Plasmoid.configuration.mode === "gh"
             onTriggered: Plasmoid.configuration.mode = "gh"
         }
+        QQC2.MenuItem {
+            text: i18n("Trello")
+            icon.name: "view-list-details"
+            checkable: true
+            checked: Plasmoid.configuration.mode === "trello"
+            onTriggered: Plasmoid.configuration.mode = "trello"
+        }
         // The standalone Notion (ntn CLI) mode is disabled for now; Notion is
         // integrated into the ToDo mode as a two-way sync instead.
     }

@@ -63,6 +63,12 @@ KCM.SimpleKCM {
                 checked: page.cfg_mode === "gh"
                 onToggled: if (checked) page.cfg_mode = "gh"
             }
+            RadioButton {
+                ButtonGroup.group: modeGroup
+                text: i18n("Trello")
+                checked: page.cfg_mode === "trello"
+                onToggled: if (checked) page.cfg_mode = "trello"
+            }
         }
 
         Label {
@@ -72,7 +78,8 @@ KCM.SimpleKCM {
             opacity: 0.65
             text: i18n("ToDo: lista de tareas local (con sincronización opcional a Notion, "
                      + "pestaña «Notion»). Jira: incidencias asignadas en Jira Cloud. "
-                     + "GitHub Projects: ítems de un proyecto V2 (pestaña «GitHub»). Desde la vista "
+                     + "GitHub Projects: ítems de un proyecto V2 (pestaña «GitHub»). Trello: tarjetas "
+                     + "de un tablero, una pestaña por lista (pestaña «Trello»). Desde la vista "
                      + "minimalista podés cambiar de modo con la rueda del mouse.")
         }
 
